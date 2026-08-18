@@ -1,38 +1,113 @@
 # PHANTOM PROTOCOL
 
-A build-free, static browser survival-action roguelite set in an original near-future military espionage universe.
+A build-free, static browser survival-action roguelite set in an original near-future
+military espionage universe. No npm, no bundler, no framework — native ES modules and
+canvas, served straight from the repository root.
 
-## Current playable release
-- 4 unlocked operatives + 1 classified operative
-- 17 weapon definitions
-- 13 passives
-- 11 evolution records
-- 12 normal enemy archetypes
-- 5 elite archetypes
-- 3 boss signatures
-- 3 maps
-- 5/10/15/20/25/30 minute contracts
-- XP level-up loop with in-run upgrades
-- persistent JP and operative development
-- 64 milestones and 72 achievement definitions
-- local persistent save, export/import/reset
-- keyboard + mobile virtual joystick controls
-- extraction phase, results and failure flow
+## Playing
+
+Serve the folder as a static site, or publish the repository root through GitHub Pages.
+`index.html` uses only repository-relative paths and native ES modules.
+
+```
+python3 -m http.server 8080     # then open http://localhost:8080
+```
 
 ## Controls
-Desktop: WASD or arrow keys. Mobile: virtual joystick. Pause with the HUD button.
 
-## XP vs JP
-XP is collected from battlefield pickups and resets each mission. JP is awarded from elites, bosses and mission performance, then persists for permanent development purchases.
+| Action | Keyboard / Mouse | Gamepad | Touch |
+| --- | --- | --- | --- |
+| Move | `WASD` / arrows | Left stick | Left half of screen (dynamic stick) |
+| Aim | Mouse pointer | Right stick | Right stick |
+| Dash | `Shift` / `Space` | A / LB | On-screen button |
+| Ability | `E` / `Q` | X / RT | On-screen button |
+| Pause | `Esc` / `P` | Start | HUD button |
+| Select adaptation | `1`–`4` | — | Tap card |
+| Reroll adaptation | `R` | — | Tap button |
 
-## Running
-Serve the folder as a static site or publish the repository root through GitHub Pages. `index.html` uses only repository-relative paths and native ES modules; no npm, Vite, Webpack, Bun, React, or compilation step is required.
+Weapons fire automatically at acquired targets. Aiming manually biases targeting and
+camera lead; auto-target can be disabled in settings.
+
+## Content
+
+- **8 operatives**, each with distinct stats, a starting weapon, an always-on trait and
+  an activated ability with its own implementation.
+- **18 weapons** across 17 distinct firing behaviours — projectile, burst, shotgun,
+  railshot, piercing bolt, lobbed explosive, proximity mine, orbiting drones, damage
+  aura, shockwave pulse, melee arc, homing missiles, sustained beam, chain lightning,
+  deployable turrets, designated orbital strikes and phantom summons.
+- **16 support systems (passives)** that feed a single derived stat block.
+- **12 weapon evolutions**, each fusing a maxed weapon with a maxed support system into
+  a new weapon with its own behaviour.
+- **15 hostile archetypes** and **6 elite signatures**, each bound to one of 15 AI
+  behaviour profiles.
+- **4 multi-phase command signatures (bosses)** with 12 distinct attack patterns.
+- **5 theatres**, each with its own palette, procedural layout generator, hazard set and
+  hostile weighting.
+- **6 contract lengths × 6 threat levels**, with unlock gating.
+- **20 command directives**, **61 achievements** and **12 intelligence files**, all with
+  real, evaluable conditions tied to tracked statistics.
+
+## Systems
+
+**Simulation.** A single fixed-timestep engine (`src/game/engine.js`) running at 60 Hz
+with an accumulator, so behaviour is identical at 30, 60 and 144 Hz. Entities live in
+true world coordinates with a real camera.
+
+**AI.** Three cooperating layers (`src/game/ai.js`): squads that share a tactical
+objective and a morale pool, a per-archetype finite state machine (search, engage, flank,
+take cover, suppress, charge, retreat, regroup, ambush), and steering behaviours
+(seek / arrive / strafe / separate / obstacle avoidance) blended into one movement
+vector. Hostiles use precomputed cover points, share contacts across a squad, telegraph
+their heavy attacks, and lose track of a target they cannot see.
+
+**World.** Finite bounded arenas generated per run (`src/game/world.js`) from one of five
+layout generators, populated with destructible cover, line-of-sight-blocking geometry,
+environmental hazards and precomputed AI cover points.
+
+**Director.** A pacing controller (`src/game/director.js`) that alternates lull, deploy,
+sustain and surge states, deploys hostiles as coherent squads from one or two bearings,
+schedules minibosses and set-piece events across the contract, and adjusts pressure based
+on how comfortable the player currently is.
+
+**Rendering.** A ten-stage layered pipeline (`src/render/renderer.js`): tiled floor,
+persistent decals, hazards, geometry with height offsets, ground effects, y-sorted
+entities with shadows, projectiles, beams, pooled particles, an additive half-resolution
+lighting pass, then post (vignette, flash, minimap, off-screen threat markers). All
+sprites are drawn procedurally as animated vector figures — the repository ships no
+image assets.
+
+**Audio.** Fully synthesized at runtime from oscillators and shaped noise
+(`src/core/audio.js`) — a sound library plus an adaptive music bed whose tempo, layering
+and filtering follow combat intensity. No audio assets are shipped.
+
+**Progression.** Versioned save with migration from earlier formats
+(`src/save/storage.js`), a 20-node development tree with prerequisites and respec,
+per-operative mastery ranks, account levels, and an evaluation engine
+(`src/save/progression.js`) that resolves achievement, directive and unlock conditions
+against tracked run telemetry.
 
 ## Structure
-`data/` contains content registries. `src/core/` handles input. `src/systems/` contains gameplay simulation. `src/ui/` contains menu screens. `src/save/` contains persistence. CSS is split by general, HUD, and responsive presentation.
 
-## Roadmap
-Add authored sprite/portrait packs, additional maps and environmental geometry, richer weapon-specific behaviors, true multi-weapon loadouts, hidden rooms, dynamic events, deterministic daily seeds, synthesized/original audio assets, deeper job grids, lore unlock gating and performance profiling on real mobile hardware.
+```
+data/     content registries (operatives, weapons, passives, enemies, bosses, maps, meta)
+src/core/ rng, math + spatial hash, camera, input, synthesized audio
+src/game/ engine, world generation, AI, weapons, abilities, boss, director, fx
+src/render/ layered renderer and procedural sprite library
+src/ui/   menus, HUD, adaptation screen, pause menu, animated menu background
+src/save/ persistence and progression evaluation
+css/      general, HUD, responsive
+```
+
+## XP vs JP vs Credits
+
+XP is collected from battlefield pickups and drives in-run levels and adaptations; it
+resets each operation. JP (job points) is awarded from elites, command signatures and
+mission performance, and persists for permanent development purchases. Credits accumulate
+within and across runs as a secondary currency.
 
 ## Originality
-All characters, organizations, terminology, lore and gameplay presentation in this repository are original to Phantom Protocol. No copyrighted franchise assets or lore are included.
+
+All characters, organizations, terminology, lore and gameplay presentation in this
+repository are original to Phantom Protocol. No copyrighted franchise assets or lore are
+included, and no third-party art, audio or code is bundled.
