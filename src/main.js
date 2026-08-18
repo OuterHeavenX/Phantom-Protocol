@@ -1,5 +1,5 @@
 import {loadSave,saveGame} from './save/storage.js';
-import {commitRun,completeRecruitments} from './save/progression.js';
+import {commitRun,completeRecruitments,undiscoveredOperatives} from './save/progression.js';
 import {Screens} from './ui/screens.js';
 import {Hud} from './ui/hud.js';
 import {LevelUpScreen} from './ui/levelup.js';
@@ -80,6 +80,8 @@ function startRun(config){
     audio,
     devRanks:save.dev,
     masteryXp:operativeRecord.masteryXp||0,
+    // Files a personnel cache can turn up in this run.
+    discoverable:undiscoveredOperatives(save).map(op=>({id:op.id,codename:op.codename})),
     seed:Math.floor(Math.random()*1e9)
   };
 

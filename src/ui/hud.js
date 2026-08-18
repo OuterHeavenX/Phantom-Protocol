@@ -9,6 +9,7 @@ const template=(operative,ability)=>`
 <canvas id="gameCanvas"></canvas>
 <div class="hud" id="hud">
   <div class="hud-top">
+    <div class="hud-column">
     <div class="hud-panel vitals">
       <div class="vital-head">
         <span class="op-tag" style="--op:${operative.color}">${operative.codename}</span>
@@ -20,6 +21,12 @@ const template=(operative,ability)=>`
         <div class="bar xp"><i id="xpBar"></i></div>
         <span class="xp-text" id="xpText">0/22</span>
       </div>
+    </div>
+
+    <div class="hud-panel objectives" id="objectivePanel">
+      <span class="objectives-head">FIELD OBJECTIVES <b id="objectivesCleared">0</b></span>
+      <ul class="objective-list" id="objectiveList"></ul>
+    </div>
     </div>
 
     <div class="hud-panel mission">
@@ -84,6 +91,7 @@ export class Hud{
       levelValue:$('levelValue'),xpBar:$('xpBar'),xpText:$('xpText'),
       mapName:$('mapName'),timerValue:$('timerValue'),extractionTimer:$('extractionTimer'),phaseValue:$('phaseValue'),
       missionBar:$('missionBar'),
+      objectiveList:$('objectiveList'),objectivesCleared:$('objectivesCleared'),
       killsValue:$('killsValue'),creditsValue:$('creditsValue'),jpValue:$('jpValue'),
       comboValue:$('comboValue'),
       bossBar:$('bossBar'),bossName:$('bossName'),bossPhase:$('bossPhase'),bossHp:$('bossHp'),
@@ -175,8 +183,29 @@ export class Hud{
     el.dashFill.style.transform=`scaleX(${dashRatio})`;
     el.dashBtn.classList.toggle('ready',player.dashCooldown<=0);
 
+    this.updateObjectives();
     this.updateLoadout();
     this.updateStatuses();
+  }
+
+  // The checklist only redraws when a tracked count actually ticks over,
+  // which the objective set flags for us.
+  updateObjectives(){
+    const objectives=this.engine.objectives;
+    if(!objectives?.dirty)return;
+    objectives.dirty=false;
+
+    this.set('objCleared',this.el.objectivesCleared,String(objectives.completed));
+    this.el.objectiveList.innerHTML=objectives.list().map(entry=>{
+      const pct=clamp(entry.value/entry.target,0,1)*100;
+      const value=entry.unit==='s'?Math.floor(entry.value):Math.floor(entry.value);
+      return `<li class="objective${entry.done?' done':''}">
+        <span class="objective-mark">${entry.done?'✔':'▢'}</span>
+        <span class="objective-text">${entry.label}</span>
+        <span class="objective-count">${value}/${entry.target}${entry.unit}</span>
+        <i class="objective-fill" style="width:${pct}%"></i>
+      </li>`;
+    }).join('');
   }
 
   updateLoadout(){

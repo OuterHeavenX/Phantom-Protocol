@@ -143,6 +143,10 @@ export class AudioEngine{
   // ---- Sound library -----------------------------------------------------
 
   play(name,options={}){
+    // The context only exists after the unlock gesture resolves, and unlock is
+    // async — a click handler firing on that same first gesture would
+    // otherwise reach the oscillator helpers with no context at all.
+    if(!this.ready||!this.ctx)return;
     const volume=clamp(options.volume??1,0,1.5);
     switch(name){
       case 'shoot':

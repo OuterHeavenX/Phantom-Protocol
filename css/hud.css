@@ -65,6 +65,35 @@
 .xp-row .bar>i{background:linear-gradient(90deg,#7db2ff,#cfe3ff)}
 .xp-text{color:var(--muted);white-space:nowrap;font-size:9px}
 
+/* ---- Field objectives --------------------------------------------------- */
+
+.hud-column{display:flex;flex-direction:column;gap:8px;min-width:0}
+.objectives{max-width:400px;padding:8px 10px}
+.objectives-head{
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:8.5px;letter-spacing:.2em;color:var(--muted);margin-bottom:6px;
+}
+.objectives-head b{color:var(--gold);font-size:10px}
+.objective-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.objective{
+  position:relative;display:grid;
+  grid-template-columns:12px 1fr auto;align-items:center;gap:6px;
+  padding:3px 5px;font-size:9.5px;overflow:hidden;
+  background:rgba(118,231,212,.05);
+  border-left:2px solid rgba(118,231,212,.3);
+}
+.objective-mark{color:var(--muted);font-size:9px;line-height:1}
+.objective-text{color:#cfe3e2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.objective-count{color:var(--muted);font-variant-numeric:tabular-nums;font-size:9px}
+.objective-fill{
+  position:absolute;left:0;bottom:0;height:1.5px;
+  background:var(--accent);opacity:.65;transition:width .3s linear;
+}
+.objective.done{border-left-color:#8bff9b;background:rgba(139,255,155,.1)}
+.objective.done .objective-mark{color:#8bff9b}
+.objective.done .objective-text{color:#8bff9b;text-decoration:line-through;opacity:.8}
+.objective.done .objective-fill{background:#8bff9b;opacity:1}
+
 /* ---- Mission ------------------------------------------------------------ */
 
 .mission{text-align:center;justify-self:center;min-width:230px}

@@ -262,7 +262,7 @@ p{margin:0}
 }
 .card:hover{border-color:var(--line-strong);transform:translateY(-2px)}
 .card.locked{opacity:.55;filter:saturate(.35)}
-.card.locked.recruitment{opacity:.75;filter:saturate(.65);border-color:var(--gold)}
+.card.locked.recruiting,.card.locked.discovered{opacity:.9;filter:saturate(.85)}
 .card h3{font-size:16px}
 .card h4{font-size:13px}
 .card p{font-size:11px}
@@ -292,6 +292,39 @@ p{margin:0}
 .tag-row{display:flex;flex-wrap:wrap;gap:2px}
 
 .real-name{font-size:11px;color:var(--muted);letter-spacing:.1em}
+
+/* ---- Operative portraits ------------------------------------------------ */
+
+.portrait{
+  align-self:flex-start;line-height:0;
+  border:1px solid var(--line);
+  background:#050b0d;
+}
+.portrait svg{display:block;width:100%;height:auto}
+.operative-card .portrait{width:100%;max-width:132px;margin-bottom:2px}
+.portrait.small{width:84px;flex:0 0 84px}
+.brief-identity{display:flex;gap:12px;align-items:center}
+.brief-identity h3{margin-bottom:2px}
+
+/* Recovered-but-unscheduled and mid-counseling roster cards read as live
+   leads rather than dead locked slots. */
+.operative-card.discovered,.operative-card.recruiting{
+  opacity:.9;filter:none;border-color:var(--c,var(--gold));
+}
+.operative-card.discovered h3,.operative-card.recruiting h3{color:var(--c,var(--gold))}
+.counsel-btn{margin-top:auto;align-self:stretch;border-color:var(--gold);color:var(--gold)}
+.counsel-btn:hover{background:rgba(245,210,122,.12)}
+
+.recovered{margin-top:24px}
+.recovered-list{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(320px,1fr))}
+.recovered-card{
+  display:flex;gap:12px;align-items:center;
+  padding:10px;border:1px solid var(--c,var(--gold));
+  background:linear-gradient(120deg,rgba(245,210,122,.08),rgba(3,10,14,.6));
+}
+.recovered-card .portrait{width:96px;flex:0 0 96px}
+.recovered-body{display:flex;flex-direction:column;gap:6px;min-width:0}
+.recovered-body p{font-size:10.5px}
 
 .stat-bars{display:grid;gap:5px;margin:4px 0}
 .stat-bar{display:grid;grid-template-columns:38px 1fr 34px;align-items:center;gap:8px;font-size:9px;color:var(--muted)}

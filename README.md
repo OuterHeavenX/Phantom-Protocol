@@ -47,6 +47,9 @@ camera lead; auto-target can be disabled in settings.
 - **6 contract lengths × 6 threat levels**, with unlock gating.
 - **20 command directives**, **61 achievements** and **12 intelligence files**, all with
   real, evaluable conditions tied to tracked statistics.
+- **11 field objective types** rolled three at a time into a live in-run checklist.
+- **Procedural operative portraits**, drawn as deterministic SVG busts from the
+  operative id — and as black silhouettes for personnel who have not been identified.
 
 ## Systems
 
@@ -80,6 +83,17 @@ image assets.
 **Audio.** Fully synthesized at runtime from oscillators and shaped noise
 (`src/core/audio.js`) — a sound library plus an adaptive music bed whose tempo, layering
 and filtering follow combat intensity. No audio assets are shipped.
+
+**Field objectives.** Three objectives are always live (`src/game/objectives.js`),
+drawn from eleven templates and scaled to the operative's current level. Clearing one
+pays credits and job points, checks it off the HUD list and rolls a replacement; every
+third clearance drops a personnel cache.
+
+**Personnel recovery.** Locked operatives can be found in the field rather than only
+unlocked by statistics. A personnel cache identifies one operative whose file is still
+missing; recovering it opens a real-time counseling session (2, 4, 8 or 12 hours,
+declared per operative) that runs while the game is closed. The operative joins the
+roster when the session closes.
 
 **Progression.** Versioned save with migration from earlier formats
 (`src/save/storage.js`), a 20-node development tree with prerequisites and respec,

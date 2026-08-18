@@ -836,6 +836,27 @@ export function drawPickup(ctx,pickup,time){
       ctx.lineWidth=1.5;
       ctx.beginPath();ctx.moveTo(3,-5);ctx.lineTo(7,-9);ctx.stroke();
       break;
+    case 'dossier':{
+      // A sealed personnel folder, pulsing hard enough to be spotted in a fight.
+      const glow=.5+Math.sin(time*6)*.3;
+      ctx.fillStyle=withAlpha('#f5d27a',glow*.35);
+      ctx.beginPath();ctx.arc(0,0,24,0,TAU);ctx.fill();
+      ctx.strokeStyle=withAlpha('#f5d27a',glow);
+      ctx.lineWidth=1.2;
+      ctx.beginPath();ctx.arc(0,0,16+Math.sin(time*3)*2,0,TAU);ctx.stroke();
+      ctx.rotate(Math.sin(time*2)*.12);
+      ctx.fillStyle='#2b2417';
+      ctx.strokeStyle='#f5d27a';
+      ctx.lineWidth=1.6;
+      ctx.beginPath();roundedRect(ctx,-8,-10,16,20,1.5);ctx.fill();ctx.stroke();
+      ctx.fillStyle='#f5d27a';
+      ctx.fillRect(-5,-6,10,1.4);
+      ctx.fillRect(-5,-3,7,1.4);
+      // Silhouetted head-and-shoulders stamp on the cover.
+      ctx.beginPath();ctx.arc(0,2,2.4,0,TAU);ctx.fill();
+      ctx.beginPath();ctx.moveTo(-4.5,8);ctx.quadraticCurveTo(0,3.2,4.5,8);ctx.closePath();ctx.fill();
+      break;
+    }
     case 'chest':{
       const glow=.4+Math.sin(time*5)*.25;
       ctx.fillStyle=withAlpha('#ffd166',glow*.4);

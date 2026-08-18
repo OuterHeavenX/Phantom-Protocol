@@ -8,11 +8,12 @@ import {
   DEV_TREE,devNodeCost,devRequirementsMet,devBonuses,accountLevel,
   ACHIEVEMENTS,ACHIEVEMENT_CATEGORIES,MILESTONES,INTEL_FILES
 } from '../../data/meta.js';
-import {recruitmentProgress} from '../save/progression.js';
 import {
   readMetric,achievementProgress,milestoneProgress,purchaseDevNode,respecDev,
-  unlockedOperatives,unlockedMaps,unlockedDifficulties
+  unlockedOperatives,unlockedMaps,unlockedDifficulties,
+  recruitmentProgress,startRecruitment,counselHours
 } from '../save/progression.js';
+import {portraitSvg} from '../render/portraits.js';
 import {saveGame,exportSave,importSave,resetSave,defaultSettings} from '../save/storage.js';
 import {formatDuration,formatNumber,formatTime,clamp} from '../core/math.js';
 import {MenuBackground} from './menuBackground.js';
@@ -357,7 +358,13 @@ export class Screens{
     root().querySelector('#deployBrief').innerHTML=`
       <div class="brief-block">
         <span class="eyebrow">OPERATIVE</span>
-        <h3 style="color:${operative.color}">${operative.codename}</h3>
+        <div class="brief-identity">
+          <div class="portrait small">${portraitSvg(operative,{size:84})}</div>
+          <div>
+            <h3 style="color:${operative.color}">${operative.codename}</h3>
+            <span class="real-name">${escape(operative.name)}</span>
+          </div>
+        </div>
         <p class="muted">${escape(operative.desc)}</p>
         <div class="stat-bars">
           ${statBar('HEALTH',operative.hp,160)}
@@ -408,20 +415,34 @@ export class Screens{
           const rank=masteryRank(record?.masteryXp||0);
           const nextBonus=MASTERY_RANKS.find(r=>r.rank===rank.rank+1)?.bonus;
           if(!unlocked){
+            // Counseling running: the file is in hand, the clock is not.
             if(recruitment){
-              const hoursRemaining=Math.ceil(recruitment.remaining/1000/60/60);
-              return `<article class="card locked operative-card recruitment">
-                <span class="eyebrow">RECRUITMENT IN PROGRESS</span>
-                <h3>COUNSELING SESSION</h3>
-                <p class="muted">Personnel integration underway.</p>
+              return `<article class="card locked operative-card recruiting" style="--c:${op.color}">
+                <div class="portrait">${portraitSvg(op,{silhouette:true})}</div>
+                <span class="eyebrow">COUNSELING IN SESSION</span>
+                <h3>${op.codename}</h3>
+                <p class="muted">Psychological clearance underway. The operative deploys when the session closes.</p>
                 <div class="bar mini"><i style="width:${recruitment.progress*100}%"></i></div>
-                <span class="progress-text">${hoursRemaining}h remaining</span>
+                <span class="progress-text">${formatDuration(recruitment.remaining/1000)} remaining</span>
+              </article>`;
+            }
+            // File recovered in the field, counseling not yet scheduled.
+            if(record?.discovered){
+              return `<article class="card locked operative-card discovered" style="--c:${op.color}">
+                <div class="portrait">${portraitSvg(op,{silhouette:true})}</div>
+                <span class="eyebrow">FILE RECOVERED</span>
+                <h3>${op.codename}</h3>
+                <p class="muted">${escape(op.role)} — cleared for counseling. ${counselHours(op.id)} hours to field readiness.</p>
+                <button class="btn small counsel-btn" data-counsel="${op.id}">
+                  BEGIN COUNSELING // ${counselHours(op.id)}H
+                </button>
               </article>`;
             }
             return `<article class="card locked operative-card">
+              <div class="portrait">${portraitSvg(op,{silhouette:true,tint:'#9fb6b8'})}</div>
               <span class="eyebrow">ACCESS DENIED</span>
               <h3>CLASSIFIED</h3>
-              <p class="muted">Identity compartmentalized.</p>
+              <p class="muted">Identity compartmentalized. Recover the personnel file in the field, or satisfy the standing condition.</p>
               <div class="unlock-req"><b>REQUIREMENT</b><span>${escape(op.unlock?.label||'Unknown')}</span></div>
               ${op.unlock?`<div class="bar mini"><i style="width:${
                 clamp(readMetric(save,op.unlock.stat)/op.unlock.value,0,1)*100}%"></i></div>
@@ -429,6 +450,7 @@ export class Screens{
             </article>`;
           }
           return `<article class="card operative-card" style="--c:${op.color}">
+            <div class="portrait">${portraitSvg(op)}</div>
             <span class="eyebrow">${escape(op.role)}</span>
             <h3 style="color:${op.color}">${op.codename}</h3>
             <span class="real-name">${escape(op.name)}</span>
@@ -454,6 +476,21 @@ export class Screens{
         }).join('')}
       </div>`,{eyebrow:'PERSONNEL',wide:true}));
     this.wireBack();
+    this.wireCounselButtons(()=>this.operatives());
+  }
+
+  // Shared by the roster screen and the debrief: any [data-counsel] button
+  // schedules that operative's counseling session and re-renders in place.
+  wireCounselButtons(rerender){
+    root().querySelectorAll('[data-counsel]').forEach(button=>{
+      button.addEventListener('click',()=>{
+        const id=button.dataset.counsel;
+        if(!startRecruitment(this.save,id))return;
+        this.audio?.play('confirm');
+        this.persist();
+        rerender();
+      });
+    });
   }
 
   // ---- armory ------------------------------------------------------------
@@ -987,11 +1024,21 @@ export class Screens{
     const save=this.save;
     const awards=payout.awards||[];
     const account=accountLevel(save.profile.accountXp||0);
+    // Files recovered this run that still need a counseling session booked.
+    // An operative whose standing unlock condition also landed this run is
+    // already on the roster, so no session is owed.
+    const recovered=(payout.recovered||[])
+      .map(id=>OPERATIVES.find(op=>op.id===id))
+      .filter(op=>{
+        const record=op&&save.operatives[op.id];
+        return record&&!record.unlocked&&!record.recruitment;
+      });
 
     const breakdown=[
       ['SURVIVAL TIME',formatTime(summary.elapsed)],
       ['ELIMINATIONS',formatNumber(summary.kills)],
       ['ELITE KILLS',summary.eliteKills],
+      ['OBJECTIVES CLEARED',summary.objectivesCleared||0],
       ['COMMAND SIGNATURES',summary.bossesDefeated.length],
       ['LEVEL REACHED',summary.level],
       ['BEST COMBO',summary.maxCombo],
@@ -1040,6 +1087,24 @@ export class Screens{
             </section>
           </div>
 
+          ${recovered.length?`
+          <section class="recovered">
+            <h3 class="section-title">PERSONNEL RECOVERED</h3>
+            <div class="recovered-list">
+              ${recovered.map(op=>`
+                <article class="recovered-card" style="--c:${op.color}">
+                  <div class="portrait">${portraitSvg(op,{silhouette:true,size:96})}</div>
+                  <div class="recovered-body">
+                    <span class="eyebrow">FILE ${op.codename}</span>
+                    <p class="muted">Counseling clears this operative for deployment in ${counselHours(op.id)} hours.</p>
+                    <button class="btn small counsel-btn" data-counsel="${op.id}">
+                      BEGIN COUNSELING // ${counselHours(op.id)}H
+                    </button>
+                  </div>
+                </article>`).join('')}
+            </div>
+          </section>`:''}
+
           ${awards.length?`
           <section class="awards">
             <h3 class="section-title">EARNED THIS OPERATION</h3>
@@ -1060,6 +1125,7 @@ export class Screens{
         </div>
       </div>`,{scan:false});
 
+    this.wireCounselButtons(()=>this.results(summary,payout,config));
     document.getElementById('commandBtn').addEventListener('click',()=>{
       this.click();
       this.menu();

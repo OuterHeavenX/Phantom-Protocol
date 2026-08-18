@@ -1,6 +1,10 @@
 // Operative roster. Every operative carries a distinct stat profile, a
 // starting weapon, an always-on trait and an activated ability with its own
 // implementation in src/game/abilities.js.
+//
+// `counselHours` is the real-time counseling window that runs after a
+// personnel file is recovered in the field, before the operative is cleared
+// for deployment. Deeper assets take longer to clear.
 
 export const OPERATIVES=[
   {
@@ -13,6 +17,7 @@ export const OPERATIVES=[
     ability:{id:'scramble',name:'Scramble Beacon',desc:'Blinds and disorients every hostile in a wide radius.',cooldown:18},
     stats:{damage:1,fireRate:1.05,area:1,moveSpeed:1.04,magnet:1.15},
     unlocked:true,unlock:null,
+    counselHours:2,
     color:'#76e7d4'
   },
   {
@@ -25,6 +30,7 @@ export const OPERATIVES=[
     ability:{id:'bulwarkShield',name:'Bulwark Field',desc:'Projects a directional shield that absorbs incoming fire and reflects it.',cooldown:22},
     stats:{damage:1.12,fireRate:.94,area:1.05,moveSpeed:.94,maxHp:20},
     unlocked:true,unlock:null,
+    counselHours:2,
     color:'#ffb35c'
   },
   {
@@ -37,6 +43,7 @@ export const OPERATIVES=[
     ability:{id:'droneSwarm',name:'Interceptor Swarm',desc:'Releases a swarm of attack drones that hunt independently for 12 seconds.',cooldown:24},
     stats:{cooldown:.88,fireRate:1.08,duration:1.15,moveSpeed:1.02},
     unlocked:true,unlock:null,
+    counselHours:2,
     color:'#7db2ff'
   },
   {
@@ -49,6 +56,7 @@ export const OPERATIVES=[
     ability:{id:'phaseStrike',name:'Phase Strike',desc:'Blinks through the nearest cluster of hostiles, cutting everything on the path.',cooldown:14},
     stats:{damage:1.08,moveSpeed:1.1,critChance:.08,area:.95},
     unlocked:true,unlock:null,
+    counselHours:2,
     color:'#c79bff'
   },
   {
@@ -62,6 +70,7 @@ export const OPERATIVES=[
     stats:{damage:1.15,critChance:.18,critDamage:2.2,fireRate:.92},
     unlocked:false,
     unlock:{type:'stat',stat:'bosses',value:3,label:'Defeat 3 command signatures'},
+    counselHours:4,
     color:'#ff8d82'
   },
   {
@@ -75,6 +84,7 @@ export const OPERATIVES=[
     stats:{area:1.35,damage:1.1,moveSpeed:.96,fireRate:.9},
     unlocked:false,
     unlock:{type:'stat',stat:'kills',value:2500,label:'Eliminate 2,500 hostiles'},
+    counselHours:8,
     color:'#ff7068'
   },
   {
@@ -88,6 +98,7 @@ export const OPERATIVES=[
     stats:{damage:1.05,duration:1.25,luck:1.2,maxHp:-6},
     unlocked:false,
     unlock:{type:'stat',stat:'evolutionsForged',value:5,label:'Forge 5 weapon evolutions'},
+    counselHours:8,
     color:'#9bffb8'
   },
   {
@@ -101,6 +112,7 @@ export const OPERATIVES=[
     stats:{damage:1.4,fireRate:1.1,moveSpeed:1.06,maxHp:-20},
     unlocked:false,
     unlock:{type:'stat',stat:'wins',value:10,label:'Complete 10 operations'},
+    counselHours:12,
     color:'#e0e6ea'
   }
 ];

@@ -224,6 +224,13 @@ export function commitRun(save,run){
   stats.bosses+=run.bossesDefeated?.length||0;
   for(const bossId of run.bossesDefeated||[])bump(stats.bossKills,bossId);
 
+  // Personnel files recovered in the field persist whether or not counseling
+  // is scheduled from the debrief — the roster screen can start it later.
+  const recovered=[];
+  for(const operativeId of run.discovered||[]){
+    if(recordDiscovery(save,operativeId))recovered.push(operativeId);
+  }
+
   save.profile.lastOperative=run.operativeId;
   save.profile.lastMap=run.mapId;
   save.profile.lastDuration=run.duration;
@@ -239,7 +246,7 @@ export function commitRun(save,run){
 
   const awards=evaluateProgression(save);
   saveGame(save);
-  return{jp,credits,accountXp,awards};
+  return{jp,credits,accountXp,awards,recovered};
 }
 
 // Purchase a development node; returns true when the transaction went through.
@@ -301,15 +308,39 @@ export function evolutionsDiscovered(save){
   return EVOLUTIONS.filter(e=>save.statistics.uniqueEvolutions?.[e.id]);
 }
 
+// Counseling hours are declared per operative; harder assets take longer to
+// clear for field duty.
+export function counselHours(operativeId){
+  return OPERATIVES.find(o=>o.id===operativeId)?.counselHours||4;
+}
+
+// Recovering a personnel file in the field. Idempotent — a second recovery of
+// the same operative is a no-op rather than a reset.
+export function recordDiscovery(save,operativeId){
+  const record=save.operatives[operativeId];
+  if(!record||record.unlocked||record.discovered)return false;
+  record.discovered=true;
+  return true;
+}
+
 export function startRecruitment(save,operativeId,durationHours){
   const record=save.operatives[operativeId];
   if(!record)return false;
-  if(record.unlocked||record.recruitment)return false;
+  // Counseling can only be scheduled for an operative whose file is in hand.
+  if(record.unlocked||record.recruitment||!record.discovered)return false;
   record.recruitment={
     startedAt:Date.now(),
-    durationMs:durationHours*60*60*1000
+    durationMs:(durationHours||counselHours(operativeId))*60*60*1000
   };
   return true;
+}
+
+// Operatives whose file is still missing — the pool a run can draw from.
+export function undiscoveredOperatives(save){
+  return OPERATIVES.filter(op=>{
+    const record=save.operatives[op.id];
+    return record&&!record.unlocked&&!record.discovered&&!record.recruitment;
+  });
 }
 
 export function recruitmentProgress(save,operativeId){

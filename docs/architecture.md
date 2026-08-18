@@ -11,7 +11,8 @@ data/        pure content registries — no behaviour, no imports from src/
   ↓
 src/core/    engine-agnostic primitives (rng, math, camera, input, audio)
   ↓
-src/game/    simulation: engine, world, ai, weapons, abilities, boss, director, fx
+src/game/    simulation: engine, world, ai, weapons, abilities, boss, director,
+             objectives, fx
   ↓
 src/render/  reads simulation state, never mutates it
 src/ui/      DOM screens and HUD; talks to the engine through a small surface
@@ -63,7 +64,12 @@ gradients into a half-resolution offscreen canvas which is composited with
 `globalCompositeOperation = 'lighter'`; it is skipped entirely in performance mode.
 
 All sprites are procedural vector drawings (`src/render/sprites.js`) with animated limbs
-and directional weapons. No image or audio assets are shipped.
+and directional weapons. Operative portraits are the same idea in SVG for the DOM UI
+(`src/render/portraits.js`): a hash of the operative id selects skin, hair, crown, optic
+and insignia variants, so a face is stable across sessions without shipping an image.
+Passing `silhouette` renders the identical geometry as a flat black bust, which is what
+an unidentified operative looks like on the roster. No image or audio assets are
+shipped.
 
 ## Save format
 

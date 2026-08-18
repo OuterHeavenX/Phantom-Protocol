@@ -6,6 +6,7 @@ import {Director} from './director.js';
 import {EnemyBrain,AI_STATES} from './ai.js';
 import {Loadout} from './weapons.js';
 import {Boss} from './boss.js';
+import {Objectives} from './objectives.js';
 import {Fx} from './fx.js';
 import {ABILITIES,TRAITS,distanceToSegment} from './abilities.js';
 import {ENEMIES_BY_ID,STATUS_EFFECTS} from '../../data/enemies.js';
@@ -112,11 +113,20 @@ export class Engine{
     this.flatArmor=false;
     this.manualAim=false;
 
+    // ---- Personnel recovery ------------------------------------------------
+    // Operatives whose file has not been recovered yet. A run can surface at
+    // most `maxDossiers` of them, and only through personnel caches.
+    this.discoverable=[...(config.discoverable||[])];
+    this.discovered=[];
+    this.maxDossiers=2;
+    this.dossiersSpawned=0;
+
     this.setupPlayer();
     this.setupLoadout();
     this.director=new Director(this,{
       difficulty:this.difficulty,duration:config.duration,map:this.map
     });
+    this.objectives=new Objectives(this);
     this.applyTrait('onInit');
 
     this.camera.x=this.player.x;
@@ -274,6 +284,7 @@ export class Engine{
     this.updateScheduled(dt);
     this.updateEffects(dt);
     this.updateStatuses(dt);
+    this.objectives.update(dt);
 
     this.cullEntities();
     this.checkRunState();
@@ -1056,6 +1067,8 @@ export class Engine{
     }
     this.spawnPickup('chest',boss.x,boss.y,0);
     this.spawnPickup('health',boss.x+40,boss.y,0);
+    // A command signature always carries personnel records worth taking.
+    this.spawnDossier(boss.x-40,boss.y);
   }
 
   dropLoot(enemy){
@@ -1068,6 +1081,7 @@ export class Engine{
     if(enemy.elite){
       this.jp+=enemy.jpValue||2;
       if(this.rng.next()<.3*luck)this.spawnPickup('chest',enemy.x,enemy.y,0);
+      if(this.rng.next()<.03*luck)this.spawnDossier(enemy.x,enemy.y);
     }
   }
 
@@ -1742,6 +1756,19 @@ export class Engine{
   // Pickups and XP
   // -------------------------------------------------------------------------
 
+  // Drops a personnel cache near the operative. Silently does nothing when
+  // there is no unrecovered file left to find, or the run has already had its
+  // share, so the caller never has to check first.
+  spawnDossier(x=this.player.x,y=this.player.y){
+    if(!this.discoverable.length)return false;
+    if(this.dossiersSpawned>=this.maxDossiers)return false;
+    this.dossiersSpawned++;
+    this.spawnPickup('dossier',x+this.rng.range(-24,24),y+this.rng.range(-24,24),0);
+    this.announce('PERSONNEL CACHE DETECTED','#f5d27a',2.4);
+    this.audio.play('alarm',{volume:.45});
+    return true;
+  }
+
   spawnPickup(kind,x,y,value){
     this.pickups.push({
       kind,x,y,value,
@@ -1822,6 +1849,20 @@ export class Engine{
         this.camera.addShake(.5);
         this.announce('AREA DENIAL','#ff7068',1.2);
         this.audio.play('explode',{volume:1});
+        break;
+      }
+      case 'dossier':{
+        // Recovering a file identifies exactly one operative. Counseling is
+        // scheduled later, from the debrief or the roster screen.
+        const index=this.rng.int(0,this.discoverable.length-1);
+        const found=this.discoverable.splice(index,1)[0];
+        if(!found)break;
+        this.discovered.push(found.id);
+        this.jp+=5;
+        this.fx.ring(pickup.x,pickup.y,10,240,.8,'#f5d27a',3);
+        this.fx.flash('#f5d27a',.25);
+        this.announce(`PERSONNEL FILE RECOVERED // ${found.codename}`,'#f5d27a',4);
+        this.audio.play('unlock',{volume:1});
         break;
       }
       case 'chest':
@@ -1999,6 +2040,8 @@ export class Engine{
       abilitiesUsed:this.telemetry.abilitiesUsed,
       maxCombo:this.maxCombo,maxAlive:this.telemetry.maxAlive,
       credits:Math.round(this.credits),jp:jpEarned,
+      discovered:[...this.discovered],
+      objectivesCleared:this.objectives.completed,
       evolutions:this.telemetry.evolutions,
       bossesDefeated:this.bossesDefeated,
       weapons:this.loadout.weapons.map(w=>({
