@@ -26,6 +26,7 @@ export class Input{
     this.consumed=new Set();
     this.enabled=true;
     this._bound=[];
+    this._stickResets=[];
     this.attach();
   }
 
@@ -64,8 +65,16 @@ export class Input{
   releaseAll(){
     this.keys.clear();
     this.firing=false;
-    this.stickMove={x:0,y:0,active:false};
-    this.stickAim={x:0,y:0,active:false};
+    this.releaseSticks();
+  }
+
+  // Drop any held virtual stick. Called when an overlay opens so the operative
+  // does not keep moving under a paused simulation, and the knob does not
+  // linger on screen.
+  releaseSticks(){
+    for(const reset of this._stickResets)reset();
+    this.stickMove.x=this.stickMove.y=0;this.stickMove.active=false;
+    this.stickAim.x=this.stickAim.y=0;this.stickAim.active=false;
   }
 
   // Called once per frame before the simulation reads input.
@@ -159,6 +168,7 @@ export class Input{
     const state=which==='move'?this.stickMove:this.stickAim;
     const radius=options.radius||46;
     const dynamic=options.dynamic!==false;
+    const ignoreSelector=options.ignore||null;
     let touchId=null,originX=0,originY=0;
 
     const reset=()=>{
@@ -196,6 +206,14 @@ export class Input{
 
     const start=e=>{
       if(touchId!==null)return;
+      // A stick bound to a large zone (the whole game screen) receives
+      // bubbled touches from every control inside it. Calling preventDefault
+      // on those suppresses the browser's synthesized click, which silently
+      // kills every button and overlay card in the zone — so only claim a
+      // touch that did not begin on interactive UI.
+      const target=e.target;
+      if(ignoreSelector&&target&&target.closest&&target.closest(ignoreSelector))return;
+      if(options.stopPropagation)e.stopPropagation();
       const touch=e.changedTouches[0];
       touchId=touch.identifier;
       place(touch.clientX,touch.clientY);
@@ -213,6 +231,8 @@ export class Input{
       for(const touch of e.changedTouches)if(touch.identifier===touchId)reset();
     };
 
+    this._stickResets.push(reset);
+
     const zone=options.zone||element;
     zone.addEventListener('touchstart',start,{passive:false});
     zone.addEventListener('touchmove',move,{passive:false});
@@ -224,6 +244,8 @@ export class Input{
       zone.removeEventListener('touchmove',move);
       zone.removeEventListener('touchend',end);
       zone.removeEventListener('touchcancel',reset);
+      const index=this._stickResets.indexOf(reset);
+      if(index>=0)this._stickResets.splice(index,1);
       reset();
     };
   }

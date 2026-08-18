@@ -13,6 +13,10 @@ import {audio} from './core/audio.js';
 // the render loop and the wiring between the simulation, the renderer and
 // the DOM UI.
 
+// Elements that must receive their own touches rather than driving the
+// movement stick. Anything matching this keeps its synthesized click.
+const UI_TOUCH_TARGETS='.overlay,.hud-actions,.stick-aim,button,a,input,select,textarea,[role="button"]';
+
 let save=loadSave();
 let session=null;
 const input=new Input();
@@ -121,16 +125,20 @@ function startRun(config){
   // Touch controls: movement stick anywhere on the left, aim stick on the right.
   if(isTouchDevice()){
     hud.el.screen.classList.add('touch');
+    // The movement stick listens on the whole screen, so it must ignore
+    // touches that begin on any interactive element inside it.
     session.detachSticks.push(
       input.bindStick(hud.el.stickMove,hud.el.knobMove,'move',{
         radius:48*(save.settings.touchSize||1),
-        zone:hud.el.screen
+        zone:hud.el.screen,
+        ignore:UI_TOUCH_TARGETS
       })
     );
     session.detachSticks.push(
       input.bindStick(hud.el.stickAim,hud.el.knobAim,'aim',{
         radius:44*(save.settings.touchSize||1),
-        dynamic:false
+        dynamic:false,
+        stopPropagation:true
       })
     );
   }
@@ -161,6 +169,7 @@ function tick(now){
   input.poll();
 
   if(input.takeAction('pause')&&!engine.ended&&engine.pendingLevelUps===0){
+    input.releaseSticks();
     pause.toggle();
   }
 
@@ -170,6 +179,7 @@ function tick(now){
 
   // Present the adaptation screen whenever the engine queues a level.
   if(engine.pendingLevelUps>0&&!levelUp.element&&!engine.ended&&!pause.open){
+    input.releaseSticks();
     levelUp.show(()=>{});
   }
 

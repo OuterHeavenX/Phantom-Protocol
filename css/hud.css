@@ -187,6 +187,7 @@
 
 .overlay{
   position:absolute;inset:0;z-index:20;
+  pointer-events:auto;touch-action:manipulation;
   display:flex;align-items:center;justify-content:center;
   background:rgba(1,6,9,.82);
   backdrop-filter:blur(4px);
@@ -344,6 +345,9 @@
   right:calc(22px + env(safe-area-inset-right));
   bottom:calc(120px + env(safe-area-inset-bottom));
   opacity:.5;
+  /* This stick is its own touch zone; without this it never receives a
+     single touch and the aim control is inert. */
+  pointer-events:auto;
 }
 .touch .stick-aim .stick-knob{background:rgba(255,179,92,.3);border-color:var(--gold)}
 .left-handed.touch .stick-aim{
