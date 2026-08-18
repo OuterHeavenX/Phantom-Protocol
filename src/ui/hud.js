@@ -25,7 +25,10 @@ const template=(operative,ability)=>`
     <div class="hud-panel mission">
       <div class="mission-head">
         <span id="mapName">—</span>
-        <b id="timerValue">00:00</b>
+        <div class="timer-group">
+          <b id="timerValue">00:00</b>
+          <span id="extractionTimer" class="extraction-label" hidden>EXTRACT <b>00:00</b></span>
+        </div>
       </div>
       <div class="phase" id="phaseValue">INFILTRATION</div>
       <div class="mission-bar"><i id="missionBar"></i></div>
@@ -79,7 +82,7 @@ export class Hud{
       screen:$('gameScreen'),canvas:$('gameCanvas'),
       hpValue:$('hpValue'),hpMax:$('hpMax'),hpBar:$('hpBar'),hpGhost:$('hpGhost'),
       levelValue:$('levelValue'),xpBar:$('xpBar'),xpText:$('xpText'),
-      mapName:$('mapName'),timerValue:$('timerValue'),phaseValue:$('phaseValue'),
+      mapName:$('mapName'),timerValue:$('timerValue'),extractionTimer:$('extractionTimer'),phaseValue:$('phaseValue'),
       missionBar:$('missionBar'),
       killsValue:$('killsValue'),creditsValue:$('creditsValue'),jpValue:$('jpValue'),
       comboValue:$('comboValue'),
@@ -125,9 +128,18 @@ export class Hud{
     this.set('xpText',el.xpText,`${Math.floor(engine.xp)}/${engine.xpNeeded}`);
 
     // Mission.
-    const remaining=engine.extraction?engine.extractionTimer:engine.timeRemaining;
-    this.set('timer',el.timerValue,formatTime(remaining));
-    el.timerValue.classList.toggle('urgent',engine.extraction||remaining<30);
+    if(engine.extraction){
+      this.set('timerMission',el.timerValue,formatTime(engine.durationMinutes*60));
+      el.timerValue.classList.toggle('urgent',false);
+      el.extractionTimer.hidden=false;
+      const extractText=el.extractionTimer.querySelector('b');
+      this.set('timerExtraction',extractText,formatTime(engine.extractionTimer));
+      el.extractionTimer.classList.toggle('urgent',true);
+    }else{
+      this.set('timer',el.timerValue,formatTime(engine.timeRemaining));
+      el.timerValue.classList.toggle('urgent',engine.timeRemaining<30);
+      el.extractionTimer.hidden=true;
+    }
     this.set('phase',el.phaseValue,engine.director.phaseLabel());
     el.missionBar.style.width=`${engine.director.progress*100}%`;
 

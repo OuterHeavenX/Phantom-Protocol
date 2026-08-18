@@ -1,5 +1,5 @@
 import {loadSave,saveGame} from './save/storage.js';
-import {commitRun} from './save/progression.js';
+import {commitRun,completeRecruitments} from './save/progression.js';
 import {Screens} from './ui/screens.js';
 import {Hud} from './ui/hud.js';
 import {LevelUpScreen} from './ui/levelup.js';
@@ -18,6 +18,8 @@ import {audio} from './core/audio.js';
 const UI_TOUCH_TARGETS='.overlay,.hud-actions,.stick-aim,button,a,input,select,textarea,[role="button"]';
 
 let save=loadSave();
+const completed=completeRecruitments(save);
+if(completed.length>0)saveGame(save);
 let session=null;
 const input=new Input();
 const screens=new Screens(save,startRun,audio);

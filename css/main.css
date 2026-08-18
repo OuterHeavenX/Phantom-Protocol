@@ -262,6 +262,7 @@ p{margin:0}
 }
 .card:hover{border-color:var(--line-strong);transform:translateY(-2px)}
 .card.locked{opacity:.55;filter:saturate(.35)}
+.card.locked.recruitment{opacity:.75;filter:saturate(.65);border-color:var(--gold)}
 .card h3{font-size:16px}
 .card h4{font-size:13px}
 .card p{font-size:11px}

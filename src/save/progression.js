@@ -300,3 +300,43 @@ export function unlockedWeapons(save){
 export function evolutionsDiscovered(save){
   return EVOLUTIONS.filter(e=>save.statistics.uniqueEvolutions?.[e.id]);
 }
+
+export function startRecruitment(save,operativeId,durationHours){
+  const record=save.operatives[operativeId];
+  if(!record)return false;
+  if(record.unlocked||record.recruitment)return false;
+  record.recruitment={
+    startedAt:Date.now(),
+    durationMs:durationHours*60*60*1000
+  };
+  return true;
+}
+
+export function recruitmentProgress(save,operativeId){
+  const record=save.operatives[operativeId];
+  if(!record?.recruitment)return null;
+  const elapsed=Date.now()-record.recruitment.startedAt;
+  const total=record.recruitment.durationMs;
+  const remaining=Math.max(0,total-elapsed);
+  return{
+    startedAt:record.recruitment.startedAt,
+    durationMs:total,
+    elapsed,
+    remaining,
+    progress:Math.min(1,elapsed/total),
+    complete:remaining===0
+  };
+}
+
+export function completeRecruitments(save){
+  const completed=[];
+  for(const op of OPERATIVES){
+    const progress=recruitmentProgress(save,op.id);
+    if(progress?.complete){
+      save.operatives[op.id].unlocked=true;
+      save.operatives[op.id].recruitment=null;
+      completed.push({kind:'operative',id:op.id,name:op.codename});
+    }
+  }
+  return completed;
+}

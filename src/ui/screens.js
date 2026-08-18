@@ -8,6 +8,7 @@ import {
   DEV_TREE,devNodeCost,devRequirementsMet,devBonuses,accountLevel,
   ACHIEVEMENTS,ACHIEVEMENT_CATEGORIES,MILESTONES,INTEL_FILES
 } from '../../data/meta.js';
+import {recruitmentProgress} from '../save/progression.js';
 import {
   readMetric,achievementProgress,milestoneProgress,purchaseDevNode,respecDev,
   unlockedOperatives,unlockedMaps,unlockedDifficulties
@@ -402,10 +403,21 @@ export class Screens{
         ${OPERATIVES.map(op=>{
           const record=save.operatives[op.id];
           const unlocked=record?.unlocked;
+          const recruitment=recruitmentProgress(save,op.id);
           const mastery=masteryProgress(record?.masteryXp||0);
           const rank=masteryRank(record?.masteryXp||0);
           const nextBonus=MASTERY_RANKS.find(r=>r.rank===rank.rank+1)?.bonus;
           if(!unlocked){
+            if(recruitment){
+              const hoursRemaining=Math.ceil(recruitment.remaining/1000/60/60);
+              return `<article class="card locked operative-card recruitment">
+                <span class="eyebrow">RECRUITMENT IN PROGRESS</span>
+                <h3>COUNSELING SESSION</h3>
+                <p class="muted">Personnel integration underway.</p>
+                <div class="bar mini"><i style="width:${recruitment.progress*100}%"></i></div>
+                <span class="progress-text">${hoursRemaining}h remaining</span>
+              </article>`;
+            }
             return `<article class="card locked operative-card">
               <span class="eyebrow">ACCESS DENIED</span>
               <h3>CLASSIFIED</h3>

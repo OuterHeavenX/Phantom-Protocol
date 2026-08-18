@@ -38,7 +38,7 @@ export function defaultSettings(){
 }
 
 function defaultOperativeRecord(){
-  return{unlocked:false,masteryXp:0,runs:0,wins:0,kills:0,bestTime:0,upgrades:{}};
+  return{unlocked:false,masteryXp:0,runs:0,wins:0,kills:0,bestTime:0,upgrades:{},recruitment:null};
 }
 
 export function defaultSave(){

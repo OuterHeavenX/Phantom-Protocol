@@ -69,8 +69,11 @@
 
 .mission{text-align:center;justify-self:center;min-width:230px}
 .mission-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:10px;letter-spacing:.1em}
+.timer-group{display:flex;flex-direction:column;gap:2px;align-items:center}
 .mission-head #timerValue{font-size:17px;color:#eafffc;font-variant-numeric:tabular-nums}
 .mission-head #timerValue.urgent{color:var(--gold);animation:timer-pulse 1s ease-in-out infinite}
+.extraction-label{font-size:9px;color:var(--gold);letter-spacing:.1em;font-weight:normal}
+.extraction-label b{font-size:13px;font-variant-numeric:tabular-nums;animation:timer-pulse 1s ease-in-out infinite}
 @keyframes timer-pulse{50%{opacity:.55}}
 .phase{margin-top:4px;font-size:8.5px;letter-spacing:.22em;color:#86aaa9}
 .mission-bar{height:2px;background:rgba(118,231,212,.12);margin-top:6px}
