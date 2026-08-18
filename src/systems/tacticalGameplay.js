@@ -1,188 +1,20 @@
-import {EnhancedGameplay} from './enhancedGameplay.js';
+import {ProjectileGameplay} from './projectileGameplay.js';
 
 export const GAME_VERSION='v0.2.0';
 export const VERSION_NAME='TACTICAL COMBAT 2.0';
 
-export class TacticalGameplay extends EnhancedGameplay{
-  constructor(canvas,ctx,opts){
-    super(canvas,ctx,opts);
-    this.version=GAME_VERSION;
-    this.versionName=VERSION_NAME;
-    this.playerHidden=false;
-  }
-
-  setupTacticalEnemy(e){
-    super.setupTacticalEnemy(e);
-    if(!e.awarenessReady){
-      e.awarenessReady=true;
-      e.awareness='tracking';
-      e.memory=2.8;
-      e.lastKnownX=this.player.x;
-      e.lastKnownY=this.player.y;
-      e.searchAngle=Math.random()*Math.PI*2;
-      e.searchClock=0;
-    }
-  }
-
-  update(dt,input){
-    super.update(dt,input);
-    if(this.paused||this.ended)return;
-    this.playerHidden=this.isPlayerHidden();
-    this.updateAwareness(dt);
-  }
-
-  isPlayerHidden(){
-    const p=this.player;
-    return this.obstacles.some(o=>!o.broken&&o.type==='hide'&&p.x>o.x-o.w/2&&p.x<o.x+o.w/2&&p.y>o.y-o.h/2&&p.y<o.y+o.h/2);
-  }
-
-  updateAwareness(dt){
-    const p=this.player;
-    for(const e of this.enemies){
-      this.setupTacticalEnemy(e);
-      const d=Math.hypot(p.x-e.x,p.y-e.y);
-      const drone=e.type?.includes('Drone');
-      const closeDetect=drone?95:68;
-      const maxDetect=drone?360:300;
-      const hiddenPenalty=this.playerHidden&&!drone?.38:1;
-      const visible=d<closeDetect||(d<maxDetect*hiddenPenalty&&this.hasLineOfSight(e.x,e.y,p.x,p.y));
-
-      if(visible){
-        e.awareness='tracking';
-        e.memory=drone?4.2:3.0;
-        e.lastKnownX=p.x;
-        e.lastKnownY=p.y;
-      }else if(e.awareness==='tracking'){
-        e.memory-=dt;
-        if(e.memory<=0){
-          e.awareness='searching';
-          e.searchClock=4.5+Math.random()*2.5;
-          e.searchAngle=Math.random()*Math.PI*2;
-        }
-      }else if(e.awareness==='searching'){
-        e.searchClock-=dt;
-        if(e.searchClock<=0)e.awareness='lost';
-      }
-    }
-  }
-
-  hasLineOfSight(x1,y1,x2,y2){
-    for(const o of this.obstacles){
-      if(o.broken||o.type==='hide')continue;
-      if(this.segmentHitsRect(x1,y1,x2,y2,o.x-o.w/2,o.y-o.h/2,o.w,o.h))return false;
-    }
-    return true;
-  }
-
-  segmentHitsRect(x1,y1,x2,y2,rx,ry,rw,rh){
-    if((x1>=rx&&x1<=rx+rw&&y1>=ry&&y1<=ry+rh)||(x2>=rx&&x2<=rx+rw&&y2>=ry&&y2<=ry+rh))return true;
-    return this.linesIntersect(x1,y1,x2,y2,rx,ry,rx+rw,ry)||
-      this.linesIntersect(x1,y1,x2,y2,rx+rw,ry,rx+rw,ry+rh)||
-      this.linesIntersect(x1,y1,x2,y2,rx+rw,ry+rh,rx,ry+rh)||
-      this.linesIntersect(x1,y1,x2,y2,rx,ry+rh,rx,ry);
-  }
-
-  linesIntersect(ax,ay,bx,by,cx,cy,dx,dy){
-    const den=(ax-bx)*(cy-dy)-(ay-by)*(cx-dx);
-    if(Math.abs(den)<.0001)return false;
-    const t=((ax-cx)*(cy-dy)-(ay-cy)*(cx-dx))/den;
-    const u=-((ax-bx)*(ay-cy)-(ay-by)*(ax-cx))/den;
-    return t>=0&&t<=1&&u>=0&&u<=1;
-  }
-
-  tacticalSteering(dt){
-    const p=this.player;
-    for(const e of this.enemies){
-      this.setupTacticalEnemy(e);
-      if(e.confused>0){
-        e.confused-=dt;
-        const a=e.slotAngle+this.elapsed*e.orbitDir*1.6;
-        e.x+=Math.cos(a)*e.speed*.72*dt;
-        e.y+=Math.sin(a)*e.speed*.72*dt;
-        e.angle=a;
-        continue;
-      }
-
-      if(e.awareness==='lost'){
-        e.searchAngle+=e.orbitDir*.22*dt;
-        const tx=e.lastKnownX+Math.cos(e.searchAngle)*55-e.x;
-        const ty=e.lastKnownY+Math.sin(e.searchAngle)*55-e.y;
-        const m=Math.hypot(tx,ty)||1;
-        e.x+=tx/m*e.speed*.30*dt;
-        e.y+=ty/m*e.speed*.30*dt;
-        e.angle=Math.atan2(ty,tx);
-        continue;
-      }
-
-      if(e.awareness==='searching'){
-        e.searchAngle+=e.orbitDir*.5*dt;
-        const radius=20+Math.sin(this.elapsed*.9+e.phase)*28;
-        const sx=e.lastKnownX+Math.cos(e.searchAngle)*radius;
-        const sy=e.lastKnownY+Math.sin(e.searchAngle)*radius;
-        const tx=sx-e.x,ty=sy-e.y,m=Math.hypot(tx,ty)||1;
-        e.x+=tx/m*e.speed*.52*dt;
-        e.y+=ty/m*e.speed*.52*dt;
-        e.angle=Math.atan2(ty,tx);
-        continue;
-      }
-
-      if(e.role==='flanker')e.slotAngle+=e.orbitDir*e.orbitSpeed*dt;
-      else if(e.role==='support')e.slotAngle+=e.orbitDir*.035*dt;
-      const targetX=p.x+Math.cos(e.slotAngle)*e.preferredRange;
-      const targetY=p.y+Math.sin(e.slotAngle)*e.preferredRange;
-      const tx=targetX-e.x,ty=targetY-e.y,td=Math.hypot(tx,ty)||1;
-      const steer=e.role==='sniper'?.68:e.role==='ranged'?.76:e.role==='support'?.64:e.role==='flanker'?1:.9;
-      e.x+=tx/td*e.speed*steer*dt;
-      e.y+=ty/td*e.speed*steer*dt;
-      e.angle=Math.atan2(p.y-e.y,p.x-e.x);
-      if((e.role==='sniper'||e.role==='ranged'||e.role==='support')&&this.hasLineOfSight(e.x,e.y,p.x,p.y))this.rangedPressure(e,dt);
-    }
-  }
-
-  rangedPressure(e,dt){
-    if(e.awareness!=='tracking')return;
-    super.rangedPressure(e,dt);
-  }
-
-  drawEnemy(c,e){
-    super.drawEnemy(c,e);
-    if(!e.awareness)return;
-    c.save();
-    c.textAlign='center';
-    c.font='bold 8px monospace';
-    if(e.awareness==='tracking'){
-      c.fillStyle='rgba(255,104,94,.9)';
-      c.fillText('!',e.x,e.y-21);
-    }else if(e.awareness==='searching'){
-      c.fillStyle='rgba(255,199,91,.9)';
-      c.fillText('?',e.x,e.y-21);
-    }else{
-      c.fillStyle='rgba(145,180,181,.55)';
-      c.fillText('·',e.x,e.y-21);
-    }
-    c.restore();
-  }
-
-  drawObstacles(c){
-    super.drawObstacles(c);
-    if(this.playerHidden){
-      c.save();
-      c.textAlign='center';
-      c.font='bold 9px monospace';
-      c.fillStyle='rgba(118,231,212,.82)';
-      c.fillText('SIGNATURE MASKED',this.player.x,this.player.y-34);
-      c.restore();
-    }
-  }
-
-  draw(){
-    super.draw();
-    const c=this.ctx,w=this.canvas.width,h=this.canvas.height;
-    c.save();
-    c.textAlign='right';
-    c.font='8px monospace';
-    c.fillStyle='rgba(151,199,199,.58)';
-    c.fillText(`${this.version} // ${this.versionName}`,w-10,h-10);
-    c.restore();
-  }
+export class TacticalGameplay extends ProjectileGameplay{
+  constructor(canvas,ctx,opts){super(canvas,ctx,opts);this.version=GAME_VERSION;this.versionName=VERSION_NAME;this.playerHidden=false}
+  setupTacticalEnemy(e){super.setupTacticalEnemy(e);if(!e.awarenessReady){e.awarenessReady=true;e.awareness='tracking';e.memory=2.8;e.lastKnownX=this.player.x;e.lastKnownY=this.player.y;e.searchAngle=Math.random()*Math.PI*2;e.searchClock=0}}
+  update(dt,input){super.update(dt,input);if(this.paused||this.ended)return;this.playerHidden=this.isPlayerHidden();this.updateAwareness(dt)}
+  isPlayerHidden(){const p=this.player;return this.obstacles.some(o=>!o.broken&&o.type==='hide'&&p.x>o.x-o.w/2&&p.x<o.x+o.w/2&&p.y>o.y-o.h/2&&p.y<o.y+o.h/2)}
+  updateAwareness(dt){const p=this.player;for(const e of this.enemies){this.setupTacticalEnemy(e);const d=Math.hypot(p.x-e.x,p.y-e.y),drone=e.type?.includes('Drone'),closeDetect=drone?95:68,maxDetect=drone?360:300,hiddenPenalty=this.playerHidden&&!drone?.38:1,visible=d<closeDetect||(d<maxDetect*hiddenPenalty&&this.hasLineOfSight(e.x,e.y,p.x,p.y));if(visible){e.awareness='tracking';e.memory=drone?4.2:3;e.lastKnownX=p.x;e.lastKnownY=p.y}else if(e.awareness==='tracking'){e.memory-=dt;if(e.memory<=0){e.awareness='searching';e.searchClock=4.5+Math.random()*2.5;e.searchAngle=Math.random()*Math.PI*2}}else if(e.awareness==='searching'){e.searchClock-=dt;if(e.searchClock<=0)e.awareness='lost'}}}
+  hasLineOfSight(x1,y1,x2,y2){for(const o of this.obstacles){if(o.broken||o.type==='hide')continue;if(this.segmentHitsRect(x1,y1,x2,y2,o.x-o.w/2,o.y-o.h/2,o.w,o.h))return false}return true}
+  segmentHitsRect(x1,y1,x2,y2,rx,ry,rw,rh){if((x1>=rx&&x1<=rx+rw&&y1>=ry&&y1<=ry+rh)||(x2>=rx&&x2<=rx+rw&&y2>=ry&&y2<=ry+rh))return true;return this.linesIntersect(x1,y1,x2,y2,rx,ry,rx+rw,ry)||this.linesIntersect(x1,y1,x2,y2,rx+rw,ry,rx+rw,ry+rh)||this.linesIntersect(x1,y1,x2,y2,rx+rw,ry+rh,rx,ry+rh)||this.linesIntersect(x1,y1,x2,y2,rx,ry+rh,rx,ry)}
+  linesIntersect(ax,ay,bx,by,cx,cy,dx,dy){const den=(ax-bx)*(cy-dy)-(ay-by)*(cx-dx);if(Math.abs(den)<.0001)return false;const t=((ax-cx)*(cy-dy)-(ay-cy)*(cx-dx))/den,u=-((ax-bx)*(ay-cy)-(ay-by)*(ax-cx))/den;return t>=0&&t<=1&&u>=0&&u<=1}
+  tacticalSteering(dt){const p=this.player;for(const e of this.enemies){this.setupTacticalEnemy(e);if(e.confused>0){e.confused-=dt;const a=e.slotAngle+this.elapsed*e.orbitDir*1.6;e.x+=Math.cos(a)*e.speed*.72*dt;e.y+=Math.sin(a)*e.speed*.72*dt;e.angle=a;continue}if(e.awareness==='lost'){e.searchAngle+=e.orbitDir*.22*dt;const tx=e.lastKnownX+Math.cos(e.searchAngle)*55-e.x,ty=e.lastKnownY+Math.sin(e.searchAngle)*55-e.y,m=Math.hypot(tx,ty)||1;e.x+=tx/m*e.speed*.30*dt;e.y+=ty/m*e.speed*.30*dt;e.angle=Math.atan2(ty,tx);continue}if(e.awareness==='searching'){e.searchAngle+=e.orbitDir*.5*dt;const radius=20+Math.sin(this.elapsed*.9+e.phase)*28,sx=e.lastKnownX+Math.cos(e.searchAngle)*radius,sy=e.lastKnownY+Math.sin(e.searchAngle)*radius,tx=sx-e.x,ty=sy-e.y,m=Math.hypot(tx,ty)||1;e.x+=tx/m*e.speed*.52*dt;e.y+=ty/m*e.speed*.52*dt;e.angle=Math.atan2(ty,tx);continue}if(e.role==='flanker')e.slotAngle+=e.orbitDir*e.orbitSpeed*dt;else if(e.role==='support')e.slotAngle+=e.orbitDir*.035*dt;const targetX=p.x+Math.cos(e.slotAngle)*e.preferredRange,targetY=p.y+Math.sin(e.slotAngle)*e.preferredRange,tx=targetX-e.x,ty=targetY-e.y,td=Math.hypot(tx,ty)||1,steer=e.role==='sniper'?.68:e.role==='ranged'?.76:e.role==='support'?.64:e.role==='flanker'?1:.9;e.x+=tx/td*e.speed*steer*dt;e.y+=ty/td*e.speed*steer*dt;e.angle=Math.atan2(p.y-e.y,p.x-e.x);if((e.role==='sniper'||e.role==='ranged'||e.role==='support')&&this.hasLineOfSight(e.x,e.y,p.x,p.y))this.rangedPressure(e,dt)}}
+  rangedPressure(e,dt){if(e.awareness!=='tracking')return;super.rangedPressure(e,dt)}
+  drawEnemy(c,e){super.drawEnemy(c,e);if(!e.awareness)return;c.save();c.textAlign='center';c.font='bold 8px monospace';if(e.awareness==='tracking'){c.fillStyle='rgba(255,104,94,.9)';c.fillText('!',e.x,e.y-21)}else if(e.awareness==='searching'){c.fillStyle='rgba(255,199,91,.9)';c.fillText('?',e.x,e.y-21)}else{c.fillStyle='rgba(145,180,181,.55)';c.fillText('·',e.x,e.y-21)}c.restore()}
+  drawObstacles(c){super.drawObstacles(c);if(this.playerHidden){c.save();c.textAlign='center';c.font='bold 9px monospace';c.fillStyle='rgba(118,231,212,.82)';c.fillText('SIGNATURE MASKED',this.player.x,this.player.y-34);c.restore()}}
+  draw(){super.draw();const c=this.ctx,w=this.canvas.width,h=this.canvas.height;c.save();c.textAlign='right';c.font='8px monospace';c.fillStyle='rgba(151,199,199,.58)';c.fillText(`${this.version} // ${this.versionName}`,w-10,h-10);c.restore()}
 }
