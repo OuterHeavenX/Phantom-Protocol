@@ -38,6 +38,20 @@ step cost roughly linear in entity count.
 Particles, floating text, rings and streaks are **pooled** (`src/game/fx.js`); a long run
 can emit hundreds of thousands of particles without sustained allocation.
 
+## Sector generation order
+
+`World.generate` resolves things in a deliberate order, because each stage competes for
+the same open ground:
+
+1. **Start position** (`computePlayerSpawn`), cached so later stages can avoid it.
+2. **Vaults** (`placeVaults`) — chamber-sized footprints are almost impossible to find
+   once cover has been scattered, so vaults claim theirs first. A vault is rejected
+   near the start (it would seal the operative in) and its door is only cut on a side
+   with a walkable approach, so no vault can generate unopenable.
+3. **Cover**, **hazards** and **hostile spawns**, all of which exclude vault interiors —
+   a sealed chamber must not contain a hazard the player is forced to walk into or a
+   hostile that cannot path out.
+
 ## AI
 
 Three cooperating layers:

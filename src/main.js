@@ -150,6 +150,7 @@ function startRun(config){
   hud.el.pauseBtn.addEventListener('click',()=>pause.toggle());
   hud.el.abilityBtn.addEventListener('click',()=>input.setAction('ability'));
   hud.el.dashBtn.addEventListener('click',()=>input.setAction('dash'));
+  hud.el.turretBtn.addEventListener('click',()=>input.setAction('deploy'));
 
   engine.onEnd=summary=>finishRun(summary,config);
   engine.onBossSpawn=boss=>{

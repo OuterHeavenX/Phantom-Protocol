@@ -62,6 +62,11 @@ const template=(operative,ability)=>`
         <span class="ability-state" id="abilityState">READY</span>
         <i class="ability-fill" id="abilityFill"></i>
       </button>
+      <button class="dash-btn turret-btn" id="turretBtn" type="button" title="Deploy turret">
+        <span>TURRET</span>
+        <em class="turret-count" id="turretCount">0/1</em>
+        <i class="dash-fill" id="turretFill"></i>
+      </button>
       <button class="dash-btn" id="dashBtn" type="button" title="Dash">
         <span>DASH</span><i class="dash-fill" id="dashFill"></i>
       </button>
@@ -98,6 +103,7 @@ export class Hud{
       loadoutStrip:$('loadoutStrip'),statusStrip:$('statusStrip'),
       abilityBtn:$('abilityBtn'),abilityState:$('abilityState'),abilityFill:$('abilityFill'),
       dashBtn:$('dashBtn'),dashFill:$('dashFill'),pauseBtn:$('pauseBtn'),
+      turretBtn:$('turretBtn'),turretFill:$('turretFill'),turretCount:$('turretCount'),
       stickMove:$('stickMove'),knobMove:$('knobMove'),
       stickAim:$('stickAim'),knobAim:$('knobAim')
     };
@@ -182,6 +188,15 @@ export class Hud{
     const dashRatio=1-clamp(player.dashCooldown/1.15,0,1);
     el.dashFill.style.transform=`scaleX(${dashRatio})`;
     el.dashBtn.classList.toggle('ready',player.dashCooldown<=0);
+
+    // Turret kit: the fill tracks the recharge, the count tracks how many of
+    // the rank's slots are standing.
+    const kit=engine.deploySpec;
+    const turretRatio=1-clamp(engine.deployCooldown/kit.cooldown,0,1);
+    el.turretFill.style.transform=`scaleX(${turretRatio})`;
+    this.set('turretCount',el.turretCount,`${engine.deployedTurrets}/${kit.turrets}`);
+    el.turretBtn.classList.toggle('ready',engine.canDeploy);
+    el.turretBtn.classList.toggle('maxed',engine.deployedTurrets>=kit.turrets);
 
     this.updateObjectives();
     this.updateLoadout();

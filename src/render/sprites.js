@@ -745,8 +745,21 @@ export function drawTurret(ctx,turret,time){
   ctx.save();
   ctx.translate(turret.x,turret.y);
   const color=turret.color||'#76e7d4';
+  // Planted turrets are heavier hardware than a weapon-spawned drone: they
+  // get a deployed footplate so the two read differently at a glance.
+  if(turret.planted){
+    ctx.strokeStyle=withAlpha(color,.4);
+    ctx.lineWidth=1.2;
+    ctx.beginPath();
+    for(let i=0;i<3;i++){
+      const a=i/3*TAU+turret.angle*.15;
+      ctx.moveTo(Math.cos(a)*7,Math.sin(a)*7);
+      ctx.lineTo(Math.cos(a)*13,Math.sin(a)*13);
+    }
+    ctx.stroke();
+  }
   // Base.
-  ctx.fillStyle='#123036';
+  ctx.fillStyle=turret.hitFlash>0?'#5a2b2b':'#123036';
   ctx.strokeStyle=color;
   ctx.lineWidth=1.4;
   ctx.beginPath();ctx.arc(0,0,8,0,TAU);ctx.fill();ctx.stroke();
@@ -756,6 +769,15 @@ export function drawTurret(ctx,turret,time){
   ctx.fillRect(2,-2,13,4);
   ctx.beginPath();ctx.arc(0,0,4,0,TAU);ctx.fill();
   ctx.restore();
+
+  // Durability bar, shown once a planted turret has taken a hit.
+  if(turret.planted&&turret.maxHp&&turret.hp<turret.maxHp){
+    const ratio=Math.max(0,turret.hp/turret.maxHp);
+    ctx.fillStyle='rgba(0,0,0,.6)';
+    ctx.fillRect(turret.x-12,turret.y-18,24,3);
+    ctx.fillStyle=ratio>.5?'#8bff9b':ratio>.25?'#ffd166':'#ff7068';
+    ctx.fillRect(turret.x-12,turret.y-18,24*ratio,3);
+  }
   // Expiry warning blink.
   if(turret.life<3){
     ctx.save();

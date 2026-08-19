@@ -108,6 +108,7 @@ export class Renderer{
     this.drawBeams(ctx);
     this.drawParticles(ctx);
     this.drawExtractionBeacon(ctx);
+    this.drawVaultMarkers(ctx);
 
     ctx.restore();
 
@@ -319,6 +320,33 @@ export class Renderer{
     ctx.fillRect(x+3,y+5,cover.w,cover.h);
 
     switch(cover.type){
+      case 'vaultSeal':{
+        // Reads as heavy blast door either way; only the live indicator strip
+        // tells the operative the scanner has resolved what is behind it.
+        const found=cover.vault?.discovered;
+        ctx.fillStyle='#1a2228';
+        ctx.strokeStyle=found?'#f5d27a':palette.wallEdge;
+        ctx.lineWidth=found?2:1.4;
+        ctx.fillRect(x,y,cover.w,cover.h);
+        ctx.strokeRect(x,y,cover.w,cover.h);
+        // Interlock plates.
+        ctx.strokeStyle=withAlpha(found?'#f5d27a':palette.wallEdge,.45);
+        ctx.lineWidth=1;
+        ctx.beginPath();
+        if(cover.w>cover.h){
+          for(let px=x+14;px<x+cover.w-6;px+=18){ctx.moveTo(px,y+3);ctx.lineTo(px,y+cover.h-3)}
+        }else{
+          for(let py=y+14;py<y+cover.h-6;py+=18){ctx.moveTo(x+3,py);ctx.lineTo(x+cover.w-3,py)}
+        }
+        ctx.stroke();
+        if(found){
+          const glow=.4+Math.abs(Math.sin(this.engine.elapsed*3))*.45;
+          ctx.fillStyle=withAlpha('#f5d27a',glow);
+          if(cover.w>cover.h)ctx.fillRect(x+4,cover.y-1.5,cover.w-8,3);
+          else ctx.fillRect(cover.x-1.5,y+4,3,cover.h-8);
+        }
+        break;
+      }
       case 'crate':
         ctx.fillStyle='#3d3324';
         ctx.strokeStyle='#c6a45e';
@@ -735,6 +763,44 @@ export class Renderer{
     ctx.restore();
   }
 
+  // Scanned vaults get a floor sigil and a label so the player can tell at a
+  // glance which chamber the scanner flagged and whether it is still sealed.
+  drawVaultMarkers(ctx){
+    const engine=this.engine;
+    const camera=engine.camera;
+    const time=engine.elapsed;
+
+    for(const vault of engine.world.vaults){
+      if(!vault.discovered)continue;
+      if(!camera.isVisible(vault.x,vault.y,vault.half+140))continue;
+      const open=vault.breached;
+      const color=open?'#8bff9b':'#f5d27a';
+
+      ctx.save();
+      // Floor sigil inside the chamber.
+      ctx.globalAlpha=open?.18:.12+Math.abs(Math.sin(time*2+vault.pulse))*.1;
+      ctx.fillStyle=color;
+      ctx.beginPath();ctx.arc(vault.x,vault.y,vault.half*.7,0,TAU);ctx.fill();
+
+      ctx.globalAlpha=1;
+      ctx.strokeStyle=color;
+      ctx.lineWidth=1.5;
+      ctx.setLineDash([9,7]);
+      ctx.lineDashOffset=open?0:-time*22;
+      ctx.strokeRect(vault.x-vault.half,vault.y-vault.half,vault.half*2,vault.half*2);
+      ctx.setLineDash([]);
+
+      ctx.fillStyle=color;
+      ctx.font='bold 10px ui-monospace,monospace';
+      ctx.textAlign='center';
+      ctx.fillText(
+        open?'VAULT OPEN':vault.guarded?'SEALED VAULT // GARRISON':'SEALED VAULT',
+        vault.x,vault.y-vault.half-22
+      );
+      ctx.restore();
+    }
+  }
+
   drawExtractionBeacon(ctx){
     const engine=this.engine;
     if(!engine.extraction||!engine.extractionPoint)return;
@@ -800,6 +866,9 @@ export class Renderer{
     const addLight=(x,y,radius,color,intensity=1)=>{
       const p=toScreen(x,y);
       const r=radius*camera.zoom*scale;
+      // A caller computing a degenerate radius must not take down the whole
+      // frame: createRadialGradient throws outright on a negative r1.
+      if(!(r>0))return;
       if(p.x<-r||p.y<-r||p.x>w+r||p.y>h+r)return;
       const gradient=lctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r);
       gradient.addColorStop(0,withAlpha(color,.55*intensity));
@@ -944,6 +1013,10 @@ export class Renderer{
     if(engine.extraction&&engine.extractionPoint){
       mark(engine.extractionPoint.x,engine.extractionPoint.y,'#f5d27a',12);
     }
+    // A scanned vault stays flagged off-screen until it has been opened.
+    for(const vault of engine.world.vaults){
+      if(vault.discovered&&!vault.breached)mark(vault.x,vault.y,'#f5d27a',9);
+    }
     let eliteCount=0;
     for(const enemy of engine.enemies){
       if(enemy.dead||!enemy.elite||eliteCount>=6)continue;
@@ -1013,6 +1086,23 @@ export class Renderer{
       ctx.arc(x+engine.extractionPoint.x*scaleX,y+engine.extractionPoint.y*scaleY,
         4+Math.sin(engine.elapsed*5)*1.5,0,TAU);
       ctx.stroke();
+    }
+
+    // Scanned vaults: hollow diamond while sealed, filled once opened.
+    for(const vault of engine.world.vaults){
+      if(!vault.discovered)continue;
+      const vx=x+vault.x*scaleX,vy=y+vault.y*scaleY;
+      ctx.beginPath();
+      ctx.moveTo(vx,vy-4);ctx.lineTo(vx+4,vy);ctx.lineTo(vx,vy+4);ctx.lineTo(vx-4,vy);
+      ctx.closePath();
+      if(vault.breached){
+        ctx.fillStyle='rgba(139,255,155,.75)';
+        ctx.fill();
+      }else{
+        ctx.strokeStyle='#f5d27a';
+        ctx.lineWidth=1.5;
+        ctx.stroke();
+      }
     }
 
     // Operative + facing.

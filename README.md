@@ -21,6 +21,7 @@ python3 -m http.server 8080     # then open http://localhost:8080
 | Aim | Mouse pointer | Right stick | Right stick |
 | Dash | `Shift` / `Space` | A / LB | On-screen button |
 | Ability | `E` / `Q` | X / RT | On-screen button |
+| Deploy turret | `F` | B / LB | On-screen button |
 | Pause | `Esc` / `P` | Start | HUD button |
 | Select adaptation | `1`–`4` | — | Tap card |
 | Reroll adaptation | `R` | — | Tap button |
@@ -48,6 +49,11 @@ camera lead; auto-target can be disabled in settings.
 - **20 command directives**, **61 achievements** and **12 intelligence files**, all with
   real, evaluable conditions tied to tracked statistics.
 - **11 field objective types** rolled three at a time into a live in-run checklist.
+- **Sealed vaults** hidden in every generated sector — 2 to 3 per run, revealed by
+  proximity scan, opened by breaching the door, and paid out in caches, credits and
+  personnel files. Roughly 40% come with a garrison sealed in alongside the loot.
+- **Field turrets** planted by the operative, 1× to 3× simultaneously by kit rank, with
+  durability that scales with rank and level and depletes under contact.
 - **Procedural operative portraits**, drawn as deterministic SVG busts from the
   operative id — and as black silhouettes for personnel who have not been identified.
 
@@ -88,6 +94,19 @@ and filtering follow combat intensity. No audio assets are shipped.
 drawn from eleven templates and scaled to the operative's current level. Clearing one
 pays credits and job points, checks it off the HUD list and rolls a replacement; every
 third clearance drops a personnel cache.
+
+**Sealed vaults.** Every sector generates 2 to 3 concealed chambers
+(`World.placeVaults`). The geometry is ordinary structure — nothing is invisible and
+nothing blocks movement unseen — but the chamber only announces itself once the
+operative's scanner resolves it at close range. The door is destructible cover, so any
+weapon can breach it. Vaults claim their footprint before cover is scattered, never
+generate around the operative's start, and only ever face a side with a walkable
+approach.
+
+**Field turrets.** Every operative carries a rank 1 deployment kit; the Deployment Kit
+adaptation raises it to rank 2 and 3, which is what turns 1× into 2× and 3×. A planted
+turret has no expiry timer — durability is the limiter, scaling with kit rank and
+operative level, and draining while hostiles are on top of it.
 
 **Personnel recovery.** Locked operatives can be found in the field rather than only
 unlocked by statistics. A personnel cache identifies one operative whose file is still

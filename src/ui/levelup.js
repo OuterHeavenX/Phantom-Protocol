@@ -1,5 +1,6 @@
 import {WEAPONS,MAX_WEAPON_LEVEL,MAX_WEAPON_SLOTS,evolutionFor} from '../../data/weapons.js';
 import {PASSIVES,MAX_PASSIVE_LEVEL,MAX_PASSIVE_SLOTS} from '../../data/passives.js';
+import {MAX_DEPLOY_RANK,deploySpec} from '../game/engine.js';
 
 // Field adaptation (level-up) offer screen.
 //
@@ -80,6 +81,20 @@ export class LevelUpScreen{
         sub:passive.desc,
         icon:passive.icon,
         weight:(rank?70:52)
+      });
+    }
+
+    // Field turret kit: each rank adds a simultaneous turret and a sturdier
+    // chassis. Rank 1 ships with every operative, so only 2 and 3 are offered.
+    if(engine.deployRank<MAX_DEPLOY_RANK){
+      const next=deploySpec(engine.deployRank+1);
+      pool.push({
+        kind:'deploy',id:'deployKit',name:'Deployment Kit',
+        rarity:engine.deployRank>=2?'rare':'uncommon',
+        headline:`${next.turrets}× TURRETS`,
+        desc:`Field ${next.turrets} turrets at once with ${next.hp} base durability.`,
+        sub:'Heavier chassis, faster kit recharge.',
+        icon:'⛨',weight:46
       });
     }
 

@@ -1039,6 +1039,8 @@ export class Screens{
       ['ELIMINATIONS',formatNumber(summary.kills)],
       ['ELITE KILLS',summary.eliteKills],
       ['OBJECTIVES CLEARED',summary.objectivesCleared||0],
+      ['VAULTS BREACHED',`${summary.vaultsBreached||0}/${summary.vaultsFound||0}`],
+      ['TURRETS DEPLOYED',summary.turretsDeployed||0],
       ['COMMAND SIGNATURES',summary.bossesDefeated.length],
       ['LEVEL REACHED',summary.level],
       ['BEST COMBO',summary.maxCombo],

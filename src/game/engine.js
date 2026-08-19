@@ -24,6 +24,20 @@ const FIXED_STEP=1/60;
 const MAX_STEPS=5;
 export const EXTRACTION_RADIUS=95;
 export const EXTRACTION_HOLD=2.5;
+// Close enough for the operative's scanner to resolve a sealed chamber.
+export const VAULT_SCAN_RADIUS=330;
+
+// Field turrets. Every operative carries a rank 1 kit; the Deployment Kit
+// adaptation raises the rank, which is what turns 1x into 2x and 3x. Higher
+// ranks also field a sturdier chassis — durability is the whole point of the
+// upgrade, since a planted turret has no expiry timer and only dies to damage.
+export const MAX_DEPLOY_RANK=3;
+export const DEPLOY_RANKS=[
+  {rank:1,turrets:1,cooldown:18,hp:150,damage:9,fireRate:.62},
+  {rank:2,turrets:2,cooldown:15,hp:240,damage:11,fireRate:.55},
+  {rank:3,turrets:3,cooldown:12,hp:360,damage:14,fireRate:.46}
+];
+export const deploySpec=rank=>DEPLOY_RANKS[clamp(rank,1,MAX_DEPLOY_RANK)-1];
 
 export class Engine{
   constructor(canvas,config){
@@ -99,7 +113,8 @@ export class Engine{
       kills:0,eliteKills:0,minionKills:0,hazardKills:0,
       damageDealt:0,damageTaken:0,healingDone:0,criticalHits:0,
       xpCollected:0,pickups:0,distance:0,dashes:0,abilitiesUsed:0,
-      maxAlive:0,evolutions:[]
+      maxAlive:0,evolutions:[],
+      vaultsFound:0,vaultsBreached:0,turretsDeployed:0
     };
 
     // ---- Modifier hooks (set by traits and meta upgrades) ------------------
@@ -120,6 +135,10 @@ export class Engine{
     this.discovered=[];
     this.maxDossiers=2;
     this.dossiersSpawned=0;
+
+    // ---- Field turret kit --------------------------------------------------
+    this.deployRank=1;
+    this.deployCooldown=0;
 
     this.setupPlayer();
     this.setupLoadout();
@@ -284,6 +303,8 @@ export class Engine{
     this.updateScheduled(dt);
     this.updateEffects(dt);
     this.updateStatuses(dt);
+    this.updateTurretDurability(dt);
+    this.updateVaults(dt);
     this.objectives.update(dt);
 
     this.cullEntities();
@@ -322,6 +343,9 @@ export class Engine{
     const player=this.player;
     player.dashCooldown=Math.max(0,player.dashCooldown-dt);
     player.abilityCooldown=Math.max(0,player.abilityCooldown-dt);
+    this.deployCooldown=Math.max(0,this.deployCooldown-dt);
+
+    if(input.takeAction('deploy'))this.deployTurret();
 
     const aim=input.aimVector(this.camera,player);
     this.manualAim=aim.manual&&!this.settings.autoAim===false?aim.manual:aim.manual;
@@ -1756,6 +1780,159 @@ export class Engine{
   // Pickups and XP
   // -------------------------------------------------------------------------
 
+  // ---- Field turrets -------------------------------------------------------
+
+  get deployedTurrets(){
+    let count=0;
+    for(const turret of this.turrets)if(turret.planted&&!turret.dead)count++;
+    return count;
+  }
+
+  get deploySpec(){return deploySpec(this.deployRank)}
+
+  // Whether the deploy button should read as available.
+  get canDeploy(){
+    return this.deployCooldown<=0&&this.deployedTurrets<this.deploySpec.turrets;
+  }
+
+  // Plants a turret at the operative's feet. Returns false (without spending
+  // the cooldown) when the kit is not ready or there is nowhere to put it.
+  deployTurret(){
+    if(!this.canDeploy)return false;
+    const spec=this.deploySpec;
+    const player=this.player;
+
+    // Drop it just behind the operative so it does not block the muzzle, and
+    // fall back to the operative's own footprint if that spot is solid.
+    let x=player.x-Math.cos(player.angle)*26;
+    let y=player.y-Math.sin(player.angle)*26;
+    if(this.world.overlapsSolid(x,y,14)){
+      x=player.x;y=player.y;
+      if(this.world.overlapsSolid(x,y,14))return false;
+    }
+
+    // Durability scales with kit rank and how far into the run the operative
+    // is, so a rank 3 chassis late in a contract genuinely holds a corridor.
+    const maxHp=Math.round((spec.hp+this.level*8)*(1+(this.stats.area||1)-1));
+    const turret=this.spawnTurret({
+      x,y,
+      damage:spec.damage*(this.stats.damage||1),
+      fireRate:spec.fireRate*(this.stats.cooldown||1),
+      range:300*(this.stats.area||1),
+      life:Infinity,
+      projectileSpeed:560*(this.stats.projectileSpeed||1),
+      color:this.operative.color,
+      weapon:null
+    });
+    turret.planted=true;
+    turret.hp=turret.maxHp=maxHp;
+    turret.rank=this.deployRank;
+
+    this.deployCooldown=spec.cooldown*(this.stats.cooldown||1);
+    this.telemetry.turretsDeployed++;
+    this.fx.ring(x,y,6,44,.35,this.operative.color,2);
+    this.audio.play('unlock',{volume:.45});
+    this.announce(`TURRET DEPLOYED // ${this.deployedTurrets}/${spec.turrets}`,this.operative.color,1.3);
+    return true;
+  }
+
+  // Planted turrets have no expiry, so hostiles crowding one are what
+  // eventually takes it down.
+  updateTurretDurability(dt){
+    for(const turret of this.turrets){
+      if(!turret.planted||turret.dead)continue;
+      const nearby=this.enemyHash.query(turret.x,turret.y,46,turretScratch);
+      for(const enemy of nearby){
+        if(enemy.dead)continue;
+        if(dist2(enemy.x,enemy.y,turret.x,turret.y)>(enemy.radius+16)**2)continue;
+        turret.hp-=(enemy.damage||6)*dt*1.6;
+        turret.hitFlash=.12;
+      }
+      if(turret.hitFlash>0)turret.hitFlash-=dt;
+      if(turret.hp<=0){
+        turret.dead=true;
+        this.fx.explosion(turret.x,turret.y,54,turret.color||'#76e7d4');
+        this.audio.play('explode',{volume:.5});
+      }
+    }
+  }
+
+  // Sealed vaults: scan on approach, pay out on breach.
+  updateVaults(dt){
+    const player=this.player;
+    for(const vault of this.world.vaults){
+      if(!vault.discovered){
+        if(dist2(player.x,player.y,vault.x,vault.y)>VAULT_SCAN_RADIUS**2)continue;
+        vault.discovered=true;
+        this.telemetry.vaultsFound++;
+        this.announce(
+          vault.guarded?'SEALED VAULT // GARRISON SIGNATURE':'SEALED VAULT DETECTED',
+          '#f5d27a',3
+        );
+        this.fx.ring(vault.x,vault.y,20,VAULT_SCAN_RADIUS,.9,'#f5d27a',2);
+        this.audio.play('alarm',{volume:.5});
+        continue;
+      }
+      // The seal is ordinary destructible cover, so any weapon can open it.
+      if(!vault.breached&&vault.seal.broken)this.breachVault(vault);
+    }
+  }
+
+  breachVault(vault){
+    vault.breached=true;
+    this.telemetry.vaultsBreached++;
+    this.fx.flash('#f5d27a',.35);
+    this.fx.ring(vault.x,vault.y,10,vault.half*2.2,.7,'#f5d27a',3);
+    this.camera.addShake(.4);
+    this.audio.play('unlock',{volume:1});
+    this.announce('VAULT BREACHED','#f5d27a',2.6);
+
+    const rng=this.rng;
+    const scatter=()=>({
+      x:vault.x+rng.range(-vault.half*.6,vault.half*.6),
+      y:vault.y+rng.range(-vault.half*.6,vault.half*.6)
+    });
+
+    // Standing payout: credits, a supply cache (free adaptation) and a heal.
+    for(let i=0;i<6;i++){
+      const at=scatter();
+      this.spawnPickup('credit',at.x,at.y,rng.int(35,60));
+    }
+    const chest=scatter();
+    this.spawnPickup('chest',chest.x,chest.y,0);
+    const health=scatter();
+    this.spawnPickup('health',health.x,health.y,0);
+    this.jp+=6;
+
+    // A vault is the most reliable place to turn up a personnel file.
+    this.spawnDossier(vault.x,vault.y+vault.half*.4);
+
+    if(vault.guarded){
+      // The garrison was sealed in with the cache. Opening it lets them out.
+      this.announce('VAULT GARRISON ACTIVE','#ff7068',2.4);
+      this.audio.play('alarm',{volume:.8});
+      const count=rng.int(2,4);
+      for(let i=0;i<count;i++){
+        const angle=(i/count)*TAU+rng.range(-.3,.3);
+        const x=vault.x+Math.cos(angle)*vault.half*.55;
+        const y=vault.y+Math.sin(angle)*vault.half*.55;
+        // One elite anchors the garrison; the rest are line hostiles. Elites
+        // are drawn from the same tier band the director would use now.
+        const tierCap=Math.min(ELITES.length,2+Math.floor(this.director.progress*ELITES.length));
+        const enemy=i===0
+          ? this.spawnEliteEnemy(rng.pick(ELITES.slice(0,tierCap)),x,y)
+          : this.spawnEnemy(this.director.pickArchetype(rng),x,y);
+        if(enemy){
+          enemy.awareness=1;
+          enemy.lastKnownX=this.player.x;
+          enemy.lastKnownY=this.player.y;
+        }
+      }
+      // Guarded vaults pay the risk back in credits.
+      this.credits+=Math.round(220*this.creditGainMult);
+    }
+  }
+
   // Drops a personnel cache near the operative. Silently does nothing when
   // there is no unrecovered file left to find, or the run has already had its
   // share, so the caller never has to check first.
@@ -1905,6 +2082,11 @@ export class Engine{
       this.healPlayer(Math.round(this.player.maxHp*.4));
     }else if(choice.kind==='credits'){
       this.credits+=choice.value||150;
+    }else if(choice.kind==='deploy'){
+      this.deployRank=Math.min(MAX_DEPLOY_RANK,this.deployRank+1);
+      // A fresh rank arrives ready so the upgrade is felt immediately.
+      this.deployCooldown=0;
+      this.announce(`DEPLOYMENT KIT // ${this.deploySpec.turrets}× TURRETS`,'#ffb35c',1.6);
     }
 
     this.loadout.recompute(this.externalModifiers());
@@ -2042,6 +2224,10 @@ export class Engine{
       credits:Math.round(this.credits),jp:jpEarned,
       discovered:[...this.discovered],
       objectivesCleared:this.objectives.completed,
+      vaultsFound:this.telemetry.vaultsFound,
+      vaultsBreached:this.telemetry.vaultsBreached,
+      turretsDeployed:this.telemetry.turretsDeployed,
+      deployRank:this.deployRank,
       evolutions:this.telemetry.evolutions,
       bossesDefeated:this.bossesDefeated,
       weapons:this.loadout.weapons.map(w=>({
@@ -2083,6 +2269,7 @@ export class Engine{
 }
 
 const neighbourScratch=[];
+const turretScratch=[];
 const MULTIPLICATIVE=new Set([
   'damage','fireRate','area','projectileSpeed','duration','moveSpeed',
   'magnet','xpGain','luck','cooldown','critDamage'

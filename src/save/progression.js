@@ -170,6 +170,9 @@ export function commitRun(save,run){
   stats.dashes+=run.dashes||0;
   stats.abilitiesUsed+=run.abilitiesUsed||0;
   stats.evolutionsForged+=run.evolutions?.length||0;
+  stats.vaultsFound+=run.vaultsFound||0;
+  stats.vaultsBreached+=run.vaultsBreached||0;
+  stats.turretsDeployed+=run.turretsDeployed||0;
 
   stats.longestSurvival=Math.max(stats.longestSurvival,run.elapsed||0);
   stats.highestLevel=Math.max(stats.highestLevel,run.level||1);

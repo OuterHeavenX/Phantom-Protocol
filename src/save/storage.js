@@ -19,6 +19,7 @@ export function defaultStatistics(){
     distanceTravelled:0,dashes:0,abilitiesUsed:0,
     maxKillsInRun:0,maxCombo:0,maxAlive:0,perfectRuns:0,
     intelRecovered:0,nightmareWins:0,devRanks:0,
+    vaultsFound:0,vaultsBreached:0,turretsDeployed:0,
     // Keyed sub-tables, flattened into derived metrics on read.
     bossKills:{},mapsCleared:{},operativesCleared:{},difficultyWins:{},
     uniqueEvolutions:{},weaponsUnlocked:{},operativeKills:{}

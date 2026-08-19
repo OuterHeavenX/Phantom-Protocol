@@ -22,7 +22,8 @@ export class Input{
     this.stickAim={x:0,y:0,active:false};
     this.gamepadIndex=null;
     this.lastScheme='keyboard';
-    this.actions={dash:false,ability:false,pause:false,interact:false,swap:false};
+    this.actions={dash:false,ability:false,pause:false,interact:false,swap:false,deploy:false};
+    this.padDeployHeld=false;
     this.consumed=new Set();
     this.enabled=true;
     this._bound=[];
@@ -106,10 +107,14 @@ export class Input{
     if(this.keys.has('e')||this.keys.has('q'))this.setAction('ability');
     if(this.pressedThisFrame.has('escape')||this.pressedThisFrame.has('p'))this.setAction('pause');
     if(this.pressedThisFrame.has('tab'))this.setAction('swap');
+    // Deploy is edge-triggered: holding the key must not empty the whole kit.
+    if(this.pressedThisFrame.has('f'))this.setAction('deploy');
     if(pad){
       if(pad.dash)this.setAction('dash');
       if(pad.ability)this.setAction('ability');
       if(pad.pause)this.setAction('pause');
+      if(pad.deploy&&!this.padDeployHeld)this.setAction('deploy');
+      this.padDeployHeld=pad.deploy;
     }
 
     this.pressedThisFrame.clear();
@@ -142,6 +147,7 @@ export class Input{
       aimX:dead(axes[2]||0),aimY:dead(axes[3]||0),
       dash:held(0)||held(6),
       ability:held(2)||held(7),
+      deploy:held(1)||held(4),
       pause:held(9),
       fire:held(5)||held(7)
     };

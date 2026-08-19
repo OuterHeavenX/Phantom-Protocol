@@ -32,6 +32,7 @@ export class World{
     this.decor=[];
     this.coverPoints=[];  // AI-usable cover positions
     this.decals=[];
+    this.vaults=[];       // sealed chambers, hidden until scanned
     this.obstacleHash=new SpatialHash(140);
     this.globalHazards=[];
 
@@ -61,11 +62,105 @@ export class World{
       default:this.generateComplex();
     }
 
+    // Resolve the start position before anything else competes for space.
+    this.spawnPoint=this.computePlayerSpawn();
+
+    // Vaults claim their footprint before cover is scattered — the interior
+    // layouts are dense enough that anything placed afterwards can almost
+    // never find a clear chamber-sized gap.
+    this.placeVaults();
     this.scatterCover();
     this.placeHazards();
     this.scatterDecor();
     this.buildCoverPoints();
     this.rebuildHash();
+  }
+
+  // Sealed vaults. The chamber walls are ordinary geometry that reads as part
+  // of the sector — nothing is invisible and nothing blocks movement without
+  // being drawn. What is hidden is that the chamber is worth opening: that is
+  // only revealed once the operative's scanner picks it up at close range.
+  placeVaults(){
+    const rng=this.rng;
+    const target=rng.int(2,3);
+    const half=58;                       // interior half-extent
+    const t=16;                          // chamber wall thickness
+    const attemptBudget=360;
+    let attempts=0;
+
+    // The operative must never start inside a chamber they would have to
+    // breach from the wrong side.
+    const spawn=this.spawnPoint||this.computePlayerSpawn();
+    const clearOfSpawn=(x,y)=>dist2(x,y,spawn.x,spawn.y)>460*460;
+
+    // Room interiors are the only reliably open ground in the tighter
+    // layouts, so they are tried first; random placement then fills the rest.
+    const seeds=this.rooms
+      .filter(room=>room.w>(half+t)*2.4&&room.h>(half+t)*2.4)
+      .filter(room=>clearOfSpawn(room.x,room.y))
+      .map(room=>({x:room.x,y:room.y,sort:rng.next()}))
+      .sort((a,b)=>a.sort-b.sort);
+
+    while(this.vaults.length<target&&attempts<attemptBudget){
+      attempts++;
+      const seed=seeds.shift();
+      const x=seed?seed.x:rng.range(half+150,this.width-half-150);
+      const y=seed?seed.y:rng.range(half+150,this.height-half-150);
+      // The chamber needs its own clear footprint plus room to breach. Dense
+      // theatres cannot always afford the ideal approach margin, so the
+      // requirement relaxes as the budget runs down rather than giving up and
+      // shipping a sector with no vaults in it at all.
+      const relief=attempts<attemptBudget*.4?40:attempts<attemptBudget*.75?18:2;
+      if(!clearOfSpawn(x,y))continue;
+      if(this.overlapsSolid(x,y,half+t+relief))continue;
+      // Keep vaults apart so one scan never reveals two.
+      if(this.vaults.some(v=>dist2(v.x,v.y,x,y)<520*520))continue;
+
+      const span=(half+t)*2;
+      const sides=[
+        {dx:0,dy:-(half+t/2),w:span,h:t,out:[0,-1]},
+        {dx:half+t/2,dy:0,w:t,h:span,out:[1,0]},
+        {dx:0,dy:half+t/2,w:span,h:t,out:[0,1]},
+        {dx:-(half+t/2),dy:0,w:t,h:span,out:[-1,0]}
+      ];
+
+      // Three solid sides; the fourth is the seal the operative must breach.
+      // The door has to face ground the operative can actually stand on, so
+      // the side is chosen by probing the approach rather than at random.
+      const approaches=sides
+        .map((side,index)=>({index,side}))
+        .filter(({side})=>[46,86,126].every(d=>{
+          const ax=x+side.out[0]*(half+d);
+          const ay=y+side.out[1]*(half+d);
+          return ax>60&&ay>60&&ax<this.width-60&&ay<this.height-60&&
+                 !this.overlapsSolid(ax,ay,15);
+        }));
+      if(!approaches.length)continue;
+      const facing=rng.pick(approaches).index;
+      const walls=[];
+      sides.forEach((side,index)=>{
+        if(index===facing)return;
+        walls.push(this.addWall(x+side.dx,y+side.dy,side.w,side.h,{type:'vault'}));
+      });
+
+      const door=sides[facing];
+      const seal=this.addCover(x+door.dx,y+door.dy,{
+        type:'vaultSeal',w:door.w,h:door.h,
+        hp:520,blocksSight:true,destructible:true
+      });
+      seal.vaultSeal=true;
+
+      const vault={
+        x,y,half,seal,walls,facing,
+        // A guarded vault trades a bigger payout for a garrison on breach.
+        guarded:rng.next()<.4,
+        discovered:false,breached:false,
+        pulse:rng.next()*10
+      };
+      // The renderer reads discovery state off the seal it is drawing.
+      seal.vault=vault;
+      this.vaults.push(vault);
+    }
   }
 
   addWall(x,y,w,h,opts={}){
@@ -259,6 +354,8 @@ export class World{
       const x=rng.range(120,this.width-120);
       const y=rng.range(120,this.height-120);
       if(this.overlapsSolid(x,y,Math.max(spec.w,spec.h)/2+34))continue;
+      // Leave vault interiors clear so the payout has somewhere to land.
+      if(this.insideVault(x,y,30))continue;
       this.addCover(x,y,spec);
       placed++;
     }
@@ -279,7 +376,7 @@ export class World{
           const clearance=Math.max(30,spec.radius*(attempt<10?.5:attempt<20?.3:.18));
           const x=rng.range(180,this.width-180);
           const y=rng.range(180,this.height-180);
-          if(!this.overlapsSolid(x,y,clearance))placed={x,y};
+          if(!this.overlapsSolid(x,y,clearance)&&!this.insideVault(x,y,20))placed={x,y};
         }
         if(!placed)continue;
         this.hazards.push({
@@ -330,6 +427,15 @@ export class World{
     this.obstacleHash.clear();
     for(const wall of this.walls)this.obstacleHash.insert(wall);
     for(const cover of this.cover)if(!cover.broken)this.obstacleHash.insert(cover);
+  }
+
+  // True inside a vault chamber. Spawners use this to keep hostiles and
+  // hazards out of a sealed room nobody can reach yet.
+  insideVault(x,y,pad=0){
+    for(const vault of this.vaults){
+      if(Math.abs(x-vault.x)<vault.half+pad&&Math.abs(y-vault.y)<vault.half+pad)return true;
+    }
+    return false;
   }
 
   // Any solid geometry overlapping a circle.
@@ -407,14 +513,17 @@ export class World{
       const distance=rng.range(minDistance,maxDistance);
       const x=clamp((awayFrom?.x??this.width/2)+Math.cos(angle)*distance,80,this.width-80);
       const y=clamp((awayFrom?.y??this.height/2)+Math.sin(angle)*distance,80,this.height-80);
-      if(!this.overlapsSolid(x,y,26))return{x,y};
+      // Never deploy hostiles into a sealed chamber they cannot leave.
+      if(!this.overlapsSolid(x,y,26)&&!this.insideVault(x,y,24))return{x,y};
     }
     // Fall back to the arena centre offset, which generation keeps clear.
     return{x:clamp(this.width/2,80,this.width-80),y:clamp(this.height/2,80,this.height-80)};
   }
 
-  // Player start: the most open room we generated.
-  playerSpawn(){
+  // Player start: the most open room we generated. Resolved once during
+  // generation, before vaults and cover are placed, so both can be kept clear
+  // of it — a vault built around the spawn would seal the operative in.
+  computePlayerSpawn(){
     if(!this.rooms.length)return{x:this.width/2,y:this.height/2};
     let best=this.rooms[0],bestArea=0;
     for(const room of this.rooms){
@@ -422,6 +531,10 @@ export class World{
       if(area>bestArea&&!this.overlapsSolid(room.x,room.y,40)){bestArea=area;best=room}
     }
     return{x:best.x,y:best.y};
+  }
+
+  playerSpawn(){
+    return this.spawnPoint||(this.spawnPoint=this.computePlayerSpawn());
   }
 
   // Extraction zone: a room a meaningful distance away, but not the far

@@ -201,6 +201,18 @@
 }
 .icon-btn:hover{border-color:var(--accent)}
 
+/* ---- Turret kit button -------------------------------------------------- */
+
+.turret-btn{position:relative;min-width:78px}
+.turret-count{
+  font-style:normal;font-size:11px;letter-spacing:.06em;
+  color:var(--muted);font-variant-numeric:tabular-nums;
+}
+.turret-btn.ready .turret-count{color:var(--gold)}
+/* All slots standing: the button is inert until one falls, so say so. */
+.turret-btn.maxed{opacity:.6}
+.turret-btn.maxed .turret-count{color:var(--accent)}
+
 /* ---- Status strip ------------------------------------------------------- */
 
 .status-strip{
