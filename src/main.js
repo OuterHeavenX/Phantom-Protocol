@@ -1,10 +1,248 @@
-import {loadSave,saveGame} from './save/storage.js';import {Screens} from './ui/screens.js';import {TacticalGameplay} from './systems/tacticalGameplay.js';import {Input} from './core/input.js';
-let save=loadSave(),game=null,last=performance.now(),raf=0;const screens=new Screens(save,startGame);screens.menu();
-function startGame(cfg){const app=document.querySelector('#app'),up=save.operatives.vesper?.upgrades||{};app.innerHTML=`<div id="gameScreen" class="screen"><canvas id="gameCanvas"></canvas><div class="hud"><div class="hud-top"><div class="hudbox vital"><div class="vital-line"><b id="hpTxt"></b><span>LV <b id="lvl">1</b></span></div><div class="bar hp"><i id="hpbar"></i></div><div class="xp-line"><span>XP <b id="xpTxt"></b></span><div class="bar mini"><i id="xpbar"></i></div></div></div><div class="hudbox hud-center"><div class="opline"><span id="operation">${cfg.map.name}</span><b id="timer">00:00</b></div><div id="phase">INFILTRATION</div><small style="opacity:.48;font-size:8px">v0.2.1</small></div><div class="hudbox hud-right"><span>K <b id="kills">0</b></span><span>JP <b id="jp">0</b></span><span>CR <b id="credits">0</b></span></div></div><div class="hud-bottom"><div class="weapon-strip"><div class="slot weapon-card" id="weaponSlot"><span class="weapon-icon">▸</span><span class="weapon-copy">${cfg.operative.weapon.toUpperCase()}<small>LV 1</small></span></div><button id="scramble" class="action" style="pointer-events:auto;min-width:92px;height:48px;padding:5px 8px"><span style="font-size:9px">SCRAMBLE</span><small id="scrambleCd" style="display:block;color:#76e7d4">READY</small></button></div><button id="pause" class="action pause-btn">Ⅱ</button></div></div><div class="joystick" id="joy"><div class="joy-cross"></div><div class="stick" id="stick"></div></div></div>`;const canvas=document.querySelector('#gameCanvas'),ctx=canvas.getContext('2d'),input=new Input(canvas);const resize=()=>{const w=innerWidth,h=innerHeight;canvas.width=w;canvas.height=h;if(game)game.resize(w,h)};resize();addEventListener('resize',resize,{passive:true});const hp=cfg.operative.hp+(up.nanomedical||0)*5,speed=cfg.operative.speed*(1+(up.mobility||0)*.03);game=new TacticalGameplay(canvas,ctx,{duration:cfg.duration,hp,speed,armor:cfg.operative.armor,weapon:cfg.operative.weapon,difficulty:cfg.difficulty,mapColor:cfg.map.color,mapId:cfg.map.id,performance:save.settings.performance});game.metaUpgrades=up;game.emergencyAvailable=!!up.emergency;game.weaponDamageBonus=(up.ballistics||0)*.04;game.scrambleBaseCooldown=18*(1-(up.reactor||0)*.04);game.onLevel=()=>showLevel();game.onBoss=b=>bossIntro(b);game.onEnd=win=>finish(win,cfg);const originalActivate=game.activateScramble.bind(game);game.activateScramble=()=>{const ok=originalActivate();if(ok&&game.scrambleBaseCooldown)game.scrambleCooldown=game.scrambleBaseCooldown;return ok};wireJoystick(input);document.querySelector('#pause').onclick=()=>togglePause();document.querySelector('#scramble').onclick=()=>game?.activateScramble();last=performance.now();cancelAnimationFrame(raf);loop(performance.now(),input)}
-function loop(now,input){if(!game)return;const dt=Math.min(.033,(now-last)/1000);last=now;if(game.emergencyAvailable&&game.player.hp<=0){game.player.hp=1;game.emergencyAvailable=false;game.scrambleActive=2;game.scramblePulse=.65}game.update(dt,input);game.draw();updateHud();raf=requestAnimationFrame(t=>loop(t,input))}
-function updateHud(){if(!game)return;const t=game.extraction?game.extractTimer:game.time,m=Math.max(0,Math.floor(t/60)),s=Math.max(0,Math.floor(t%60));document.querySelector('#timer').textContent=`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;document.querySelector('#phase').textContent=game.extraction?'EXTRACTION PHASE':game.elapsed>game.opts.duration*45?'TOTAL LOCKDOWN':game.elapsed>game.opts.duration*20?'ESCALATION':'INFILTRATION';document.querySelector('#hpTxt').textContent=`HP ${Math.ceil(game.player.hp)}/${game.player.maxHp}`;document.querySelector('#hpbar').style.width=`${Math.max(0,game.player.hp/game.player.maxHp*100)}%`;document.querySelector('#lvl').textContent=game.level;document.querySelector('#xpTxt').textContent=`${game.xp}/${game.xpNeed}`;document.querySelector('#xpbar').style.width=`${game.xp/game.xpNeed*100}%`;document.querySelector('#kills').textContent=game.kills;document.querySelector('#jp').textContent=game.jp;document.querySelector('#credits').textContent=game.currency;document.querySelector('#weaponSlot .weapon-copy').innerHTML=`${game.weapons[0].name}<small>LV ${game.weapons[0].level}</small>`;const cd=document.querySelector('#scrambleCd');if(cd)cd.textContent=game.scrambleCooldown>0?`${game.scrambleCooldown.toFixed(1)}s`:'READY';let bb=document.querySelector('.bossbar');if(game.boss){if(!bb){bb=document.createElement('div');bb.className='bossbar';bb.innerHTML=`<span>${game.boss.name}</span><div><i></i></div>`;document.querySelector('#gameScreen').append(bb)}bb.querySelector('i').style.width=`${Math.max(0,game.boss.hp/game.boss.maxHp*100)}%`}else bb?.remove()}
-function showLevel(){const el=document.createElement('div');el.className='levelup';el.innerHTML=`<div class="levelup-box"><div class="eyebrow">FIELD ADAPTATION AVAILABLE</div><h2>LEVEL ${game.level}</h2><div class="choices"><button class="choice" data-u="weapon"><h3>WEAPON CALIBRATION</h3><p>Upgrade current weapon behavior and output.</p></button><button class="choice" data-u="speed"><h3>MOBILITY FRAME</h3><p>Movement speed +9%.</p></button><button class="choice" data-u="armor"><h3>COMPOSITE LAYER</h3><p>Reduce incoming contact damage.</p></button></div></div>`;document.querySelector('#gameScreen').append(el);el.querySelectorAll('[data-u]').forEach(b=>b.onclick=()=>{game.upgrade(b.dataset.u);el.remove()})}
-function bossIntro(b){const el=document.createElement('div');el.className='boss-banner';el.innerHTML=`<small>HOSTILE COMMAND SIGNATURE</small><strong>DETECTED</strong><b>${b.name}</b>`;document.querySelector('#gameScreen').append(el);setTimeout(()=>el.remove(),2200)}
-function togglePause(){game.paused=!game.paused;document.querySelector('#pause').textContent=game.paused?'▶':'Ⅱ'}
-function finish(win,cfg){cancelAnimationFrame(raf);const earnedJp=game.jp+Math.floor(game.elapsed/30);save.profile.jp+=earnedJp;save.profile.currency+=game.currency;save.statistics.missions++;if(win)save.statistics.wins++;save.statistics.kills+=game.kills;save.statistics.playtime+=game.elapsed;save.statistics.highestLevel=Math.max(save.statistics.highestLevel,game.level);save.statistics.longestSurvival=Math.max(save.statistics.longestSurvival,game.elapsed);save.statistics.totalJp=(save.statistics.totalJp||0)+earnedJp;save.statistics.totalCredits=(save.statistics.totalCredits||0)+game.currency;if(game.bossDefeated)save.statistics.bosses++;if(game.elapsed>=60)save.milestones.m1=true;if(game.elapsed>=180)save.milestones.m2=true;if(win)save.milestones.m3=true;if(game.kills>=100)save.achievements.a2=true;let intel='';if(save.statistics.missions>=3&&!save.intelligence.reconstruction){save.intelligence.reconstruction=true;save.statistics.intelRecovered++;intel='IDENTITY RECONSTRUCTION'}else if(save.statistics.missions>=7&&!save.intelligence.arbitration){save.intelligence.arbitration=true;save.statistics.intelRecovered++;intel='ARBITRATION LOOP'}saveGame(save);screens.setSave(save);const app=document.querySelector('#app');app.innerHTML=`<div class="screen scanlines"><div class="panel"><div class="eyebrow">${win?'EXTRACTION CONFIRMED':'OPERATIVE SIGNAL LOST'}</div><h2>${win?'OPERATION COMPLETE':'OPERATION FAILED'}</h2>${intel?`<div class="card"><div class="eyebrow">INTELLIGENCE RECOVERED</div><h3>${intel}</h3><p>New classified material has been added to the Intelligence Database.</p></div>`:''}<div class="grid"><div class="card"><h3>TIME</h3><div class="big-number">${Math.floor(game.elapsed)}s</div></div><div class="card"><h3>ELIMINATIONS</h3><div class="big-number">${game.kills}</div></div><div class="card"><h3>LEVEL</h3><div class="big-number">${game.level}</div></div><div class="card"><h3>JP EARNED</h3><div class="big-number">${earnedJp}</div></div></div><br><button id="command" class="action accent">RETURN TO COMMAND</button> <button id="again" class="action">RUN AGAIN</button></div></div>`;document.querySelector('#command').onclick=()=>screens.menu();document.querySelector('#again').onclick=()=>startGame(cfg);game=null}
-function wireJoystick(input){const joy=document.querySelector('#joy'),stick=document.querySelector('#stick'),screen=document.querySelector('#gameScreen');if(!joy||!screen)return;let activeId=null,cx=0,cy=0;const reset=()=>{activeId=null;input.vx=input.vy=0;stick.style.transform='';joy.classList.remove('active')};const place=(x,y)=>{const r=joy.offsetWidth/2||58,margin=8;cx=Math.max(r+margin,Math.min(innerWidth-r-margin,x));cy=Math.max(r+margin,Math.min(innerHeight-r-margin,y));joy.style.left=`${cx-r}px`;joy.style.top=`${cy-r}px`;joy.style.right='auto';joy.style.bottom='auto';joy.classList.add('active')};const move=p=>{const dx=p.clientX-cx,dy=p.clientY-cy,max=44,d=Math.hypot(dx,dy)||1,m=Math.min(max,d);input.vx=dx/d*(m/max);input.vy=dy/d*(m/max);stick.style.transform=`translate(${input.vx*34}px,${input.vy*34}px)`};screen.addEventListener('touchstart',e=>{if(activeId!==null||e.target.closest('button,.levelup,.boss-banner'))return;const p=e.changedTouches[0];activeId=p.identifier;place(p.clientX,p.clientY);e.preventDefault()},{passive:false});screen.addEventListener('touchmove',e=>{if(activeId===null)return;const p=[...e.changedTouches].find(t=>t.identifier===activeId);if(!p)return;move(p);e.preventDefault()},{passive:false});screen.addEventListener('touchend',e=>{if([...e.changedTouches].some(t=>t.identifier===activeId))reset()},{passive:false});screen.addEventListener('touchcancel',reset,{passive:false})}
+import {loadSave,saveGame} from './save/storage.js';
+import {commitRun,completeRecruitments,undiscoveredOperatives} from './save/progression.js';
+import {Screens} from './ui/screens.js';
+import {Hud} from './ui/hud.js';
+import {LevelUpScreen} from './ui/levelup.js';
+import {PauseMenu} from './ui/pause.js';
+import {Engine} from './game/engine.js';
+import {Renderer} from './render/renderer.js';
+import {Input,isTouchDevice} from './core/input.js';
+import {audio} from './core/audio.js';
+
+// Application entry point. Owns the top-level state machine (menu ⇄ run),
+// the render loop and the wiring between the simulation, the renderer and
+// the DOM UI.
+
+// Elements that must receive their own touches rather than driving the
+// movement stick. Anything matching this keeps its synthesized click.
+const UI_TOUCH_TARGETS='.overlay,.hud-actions,.stick-aim,button,a,input,select,textarea,[role="button"]';
+
+let save=loadSave();
+const completed=completeRecruitments(save);
+if(completed.length>0)saveGame(save);
+let session=null;
+const input=new Input();
+const screens=new Screens(save,startRun,audio);
+
+screens.onSaveReplaced=next=>{
+  save=next;
+  screens.setSave(save);
+  applyGlobalSettings();
+};
+
+applyGlobalSettings();
+audio.applySettings({
+  master:save.settings.master,music:save.settings.music,
+  sfx:save.settings.sfx,muted:save.settings.muted
+});
+
+// Browsers block audio until a gesture; unlock on the first interaction.
+const unlockAudio=()=>{
+  audio.unlock().then(()=>{
+    if(!session)audio.startMusic('menu');
+  });
+  window.removeEventListener('pointerdown',unlockAudio);
+  window.removeEventListener('keydown',unlockAudio);
+  window.removeEventListener('touchstart',unlockAudio);
+};
+window.addEventListener('pointerdown',unlockAudio);
+window.addEventListener('keydown',unlockAudio);
+window.addEventListener('touchstart',unlockAudio);
+
+function applyGlobalSettings(){
+  document.documentElement.style.setProperty('--ui-scale',save.settings.uiScale||1);
+  document.documentElement.style.setProperty('--touch-scale',save.settings.touchSize||1);
+  document.documentElement.classList.toggle('left-handed',!!save.settings.leftHanded);
+  document.documentElement.classList.toggle('reduced-flashing',!!save.settings.reducedFlashing);
+}
+
+screens.menu();
+
+// ---------------------------------------------------------------------------
+// Run lifecycle
+// ---------------------------------------------------------------------------
+
+function startRun(config){
+  teardownSession();
+  applyGlobalSettings();
+
+  const app=document.querySelector('#app');
+  const operativeRecord=save.operatives[config.operative.id]||{};
+
+  // Build the engine first so the HUD can read from it as it constructs.
+  const engineConfig={
+    operative:config.operative,
+    map:config.map,
+    duration:config.duration,
+    durationSpec:config.durationSpec,
+    difficulty:config.difficulty,
+    settings:save.settings,
+    audio,
+    devRanks:save.dev,
+    masteryXp:operativeRecord.masteryXp||0,
+    // Campaign operation, when this run is a story mission.
+    objective:config.operation?.objective,
+    // Files a personnel cache can turn up in this run.
+    discoverable:undiscoveredOperatives(save).map(op=>({id:op.id,codename:op.codename})),
+    seed:Math.floor(Math.random()*1e9)
+  };
+
+  // The HUD owns the canvas element, so create the DOM before the engine.
+  const placeholder=document.createElement('canvas');
+  placeholder.width=window.innerWidth;
+  placeholder.height=window.innerHeight;
+  const engine=new Engine(placeholder,engineConfig);
+
+  const hud=new Hud(app,engine);
+  const canvas=hud.el.canvas;
+  const ctx=canvas.getContext('2d',{alpha:false});
+  engine.canvas=canvas;
+
+  const renderer=new Renderer(canvas,ctx,engine);
+  const levelUp=new LevelUpScreen(engine,save);
+  const pause=new PauseMenu(engine,save,{
+    onSettingsChange:()=>{
+      audio.applySettings(save.settings);
+      renderer.quality=save.settings.particles;
+      engine.fx.setQuality(save.settings.particles);
+      saveGame(save);
+    }
+  });
+
+  session={engine,renderer,hud,levelUp,pause,config,raf:0,last:performance.now(),detachSticks:[]};
+  // Exposed for debugging and automated smoke tests.
+  window.__pp=session;
+
+  const resize=()=>{
+    const dpr=Math.min(save.settings.performanceMode?1:2,window.devicePixelRatio||1);
+    const width=Math.floor(window.innerWidth*dpr);
+    const height=Math.floor(window.innerHeight*dpr);
+    canvas.width=width;
+    canvas.height=height;
+    canvas.style.width=`${window.innerWidth}px`;
+    canvas.style.height=`${window.innerHeight}px`;
+    engine.resize(width,height);
+    renderer.resize(width,height);
+  };
+  resize();
+  session.onResize=resize;
+  window.addEventListener('resize',resize,{passive:true});
+
+  // Touch controls: movement stick anywhere on the left, aim stick on the right.
+  if(isTouchDevice()){
+    hud.el.screen.classList.add('touch');
+    // The movement stick listens on the whole screen, so it must ignore
+    // touches that begin on any interactive element inside it.
+    session.detachSticks.push(
+      input.bindStick(hud.el.stickMove,hud.el.knobMove,'move',{
+        radius:48*(save.settings.touchSize||1),
+        zone:hud.el.screen,
+        ignore:UI_TOUCH_TARGETS
+      })
+    );
+    session.detachSticks.push(
+      input.bindStick(hud.el.stickAim,hud.el.knobAim,'aim',{
+        radius:44*(save.settings.touchSize||1),
+        dynamic:false,
+        stopPropagation:true
+      })
+    );
+  }
+
+  hud.el.pauseBtn.addEventListener('click',()=>pause.toggle());
+  hud.el.abilityBtn.addEventListener('click',()=>input.setAction('ability'));
+  hud.el.dashBtn.addEventListener('click',()=>input.setAction('dash'));
+  hud.el.turretBtn.addEventListener('click',()=>input.setAction('deploy'));
+
+  engine.onEnd=summary=>finishRun(summary,config);
+  engine.onBossSpawn=boss=>{
+    // Brief cinematic hold on the boss reveal.
+    engine.camera.punchZoom(-.12);
+  };
+  engine.onEvolution=()=>{};
+
+  audio.unlock().then(()=>audio.startMusic(config.map.music||'blacksite'));
+
+  session.last=performance.now();
+  session.raf=requestAnimationFrame(tick);
+}
+
+function tick(now){
+  if(!session)return;
+  const {engine,renderer,hud,levelUp,pause}=session;
+  const dt=Math.min(.1,(now-session.last)/1000);
+  session.last=now;
+
+  input.poll();
+
+  if(input.takeAction('pause')&&!engine.ended&&engine.pendingLevelUps===0){
+    input.releaseSticks();
+    pause.toggle();
+  }
+
+  if(!pause.open){
+    engine.update(dt,input);
+  }
+
+  // Present the adaptation screen whenever the engine queues a level.
+  if(engine.pendingLevelUps>0&&!levelUp.element&&!engine.ended&&!pause.open){
+    input.releaseSticks();
+    levelUp.show(()=>{});
+  }
+
+  renderer.render();
+  hud.update(dt);
+
+  if(!engine.ended)session.raf=requestAnimationFrame(tick);
+}
+
+function finishRun(summary,config){
+  if(!session)return;
+  const {levelUp,pause}=session;
+  levelUp.destroy();
+  pause.close();
+  cancelAnimationFrame(session.raf);
+
+  summary.operationId=config.operation?.id||null;
+  const payout=commitRun(save,summary);
+  screens.setSave(save);
+
+  // Surface unlocks and achievements earned by this run.
+  for(const award of payout.awards){
+    if(award.type==='unlock')audio.play('unlock',{volume:.8});
+  }
+
+  teardownSession();
+  audio.startMusic('menu');
+  // A campaign operation closed for the first time earns its debrief and the
+  // document it returned before the ordinary results screen.
+  if(payout.operationClosed&&config.operation){
+    screens.debrief(config.operation,()=>screens.results(summary,payout,config));
+  }else{
+    screens.results(summary,payout,config);
+  }
+}
+
+function teardownSession(){
+  if(!session)return;
+  cancelAnimationFrame(session.raf);
+  window.removeEventListener('resize',session.onResize);
+  for(const detach of session.detachSticks)detach?.();
+  session.hud?.destroy();
+  session.engine?.destroy();
+  input.releaseAll();
+  session=null;
+  window.__pp=null;
+}
+
+// Pause automatically when the tab loses focus so runs are not lost.
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden&&session&&!session.engine.ended&&!session.pause.open){
+    session.pause.show();
+  }
+});
+
+// Surface fatal errors instead of leaving a black screen.
+window.addEventListener('error',event=>{
+  console.error('[phantom] runtime error',event.error||event.message);
+});

@@ -1,2 +1,179 @@
-@media(max-width:760px){.menu-shell{grid-template-columns:1fr;height:100%;width:100%;border:0}.brand{padding:28px 22px;border-right:0}.intel-panel{display:none}.brand h1{font-size:54px}.panel{width:100%;height:100%;max-height:none;border:0;padding:22px}.deploy-layout{grid-template-columns:1fr}.hud{padding-top:max(7px,env(safe-area-inset-top));padding-left:max(7px,env(safe-area-inset-left));padding-right:max(7px,env(safe-area-inset-right))}.hud-top{grid-template-columns:minmax(0,1fr) auto;gap:5px}.hudbox{padding:6px 7px}.hud-center{grid-column:1/-1;grid-row:1;min-width:0;margin:0 52px}.hud-center .opline{font-size:9px}.hud-center #timer{font-size:13px}.hud-center #phase{font-size:8px;margin-top:2px}.vital{grid-column:1;grid-row:2;max-width:none}.vital-line b{font-size:12px}.vital-line,.xp-line{font-size:9px}.hud-right{grid-column:2;grid-row:2;gap:6px;flex-direction:column;font-size:9px;line-height:1}.bar{height:4px;margin-top:4px}.xp-line{margin-top:3px}.joystick{display:block}.choices{grid-template-columns:1fr}.levelup-box{max-height:90vh;overflow:auto}.weapon-strip{margin-left:0}.weapon-card{min-width:126px;width:126px;height:48px;padding:5px}.weapon-icon{width:28px;height:28px;font-size:17px}.weapon-copy{font-size:9px;max-width:76px}.pause-btn{width:46px;height:46px}.bossbar{left:8%;right:8%;top:max(112px,calc(env(safe-area-inset-top) + 90px))}}
-@media(max-width:390px){.hud-center{margin:0 44px}.weapon-strip{margin-left:0}.weapon-card{min-width:112px;width:112px}.weapon-copy{max-width:64px}.joystick{width:108px;height:108px}.stick{left:33px;top:33px}}
+/* Responsive and platform adaptations. */
+
+/* ---- Tablet ------------------------------------------------------------- */
+@media(max-width:1080px){
+  .deploy-grid{grid-template-columns:1fr}
+  .deploy-brief{max-height:none}
+  .results-columns{grid-template-columns:1fr}
+  .pause-grid{grid-template-columns:1fr}
+  .history-row{grid-template-columns:70px 1fr 1fr 76px 56px 52px 36px 46px;font-size:9.5px}
+}
+
+/* ---- Phone -------------------------------------------------------------- */
+@media(max-width:760px){
+  html,body,#app{font-size:calc(13px * var(--ui-scale))}
+
+  .menu-shell{
+    grid-template-columns:1fr;
+    width:100%;height:100%;border:0;
+    overflow-y:auto;
+  }
+  .brand{padding:26px 20px 20px;border-right:0;border-bottom:1px solid var(--line)}
+  .brand h1{font-size:46px}
+  .tagline{font-size:11px;max-width:none}
+  .nav{margin:20px 0 14px}
+  .intel-panel{padding:22px 20px 28px}
+  .status-grid{grid-template-columns:repeat(2,1fr)}
+  .completion-row{grid-template-columns:1fr;gap:8px}
+
+  .panel{width:100%;height:100%;max-height:none;border:0}
+  .panel-head{
+    flex-direction:column;align-items:stretch;gap:12px;
+    padding:18px 16px 14px;
+  }
+  .panel-head h2{font-size:21px}
+  .panel-actions{justify-content:flex-end}
+  .panel-body{padding:16px}
+
+  .card-grid,.card-grid.tight{grid-template-columns:1fr}
+  .chip-row{grid-template-columns:1fr}
+  .chip-row.compact{grid-template-columns:repeat(2,1fr)}
+  .dev-row{grid-template-columns:1fr}
+  .settings-grid{grid-template-columns:1fr;gap:16px}
+  .stat-grid,.stat-grid.compact{grid-template-columns:repeat(2,1fr)}
+
+  .directive{grid-template-columns:32px 1fr;gap:10px}
+  .directive-reward{grid-column:1/-1;text-align:left;display:flex;gap:12px;align-items:baseline}
+
+  .history-row{
+    grid-template-columns:1fr 1fr;
+    gap:4px 10px;padding:10px;
+  }
+  .history-row.head{display:none}
+
+  .results-inner{padding:22px 18px}
+  .payout-row{grid-template-columns:repeat(2,1fr)}
+
+  /* ---- In-run HUD ---- */
+  .hud{
+    padding-top:max(8px,env(safe-area-inset-top));
+    padding-left:max(8px,env(safe-area-inset-left));
+    padding-right:max(8px,env(safe-area-inset-right));
+    padding-bottom:max(10px,env(safe-area-inset-bottom));
+  }
+  .hud-top{grid-template-columns:minmax(0,1fr) auto;gap:6px}
+  .hud-panel{padding:7px 8px;font-size:10px}
+
+  .mission{grid-column:1/-1;grid-row:1;min-width:0;margin:0 46px}
+  .mission-head{font-size:9px}
+  .mission-head #timerValue{font-size:14px}
+  .phase{font-size:7.5px}
+
+  .hud-column{grid-column:1;grid-row:2;gap:6px}
+  .vitals{max-width:none}
+  .hp-text b{font-size:12px}
+  .xp-row{font-size:8.5px}
+
+  .objectives{max-width:none;padding:6px 8px}
+  .objectives-head{font-size:7.5px;margin-bottom:4px}
+  .objective{font-size:8.5px;gap:5px;padding:2px 4px}
+  .objective-count{font-size:8px}
+
+  .tally{grid-column:2;grid-row:2;min-width:auto}
+  .tally-row{gap:8px;font-size:9px}
+  .combo{font-size:11px}
+
+  .boss-bar{
+    left:8px;right:8px;transform:none;width:auto;
+    top:max(104px,calc(env(safe-area-inset-top) + 96px));
+  }
+
+  /* Collapse the loadout to fixed-size icon chips: four named weapon cards
+     consumed the whole left half of a phone screen and buried the play area. */
+  .loadout{max-width:none;gap:4px;flex-wrap:wrap;align-content:flex-end;max-height:84px}
+  .slot{flex:0 0 auto;padding:3px}
+  .slot.weapon{min-width:0;width:38px;height:38px;position:relative;justify-content:center}
+  .slot .slot-meta{display:none}
+  .slot-icon{width:100%;height:100%;font-size:8.5px;border:none;background:none}
+  .slot.weapon .slot-level{
+    display:block;position:absolute;right:2px;bottom:1px;
+    font-size:8px;color:var(--accent);line-height:1;font-weight:600;
+  }
+  .slot.passive{width:30px;height:30px;justify-content:center}
+  .slot.passive .slot-icon{font-size:13px}
+  .slot-rank{position:absolute;right:2px;bottom:1px;font-size:7.5px}
+  .slot.passive{position:relative}
+  .slot-divider{height:20px}
+
+  .ability-btn{min-width:88px;height:50px}
+  .dash-btn{min-width:58px;height:50px}
+  .icon-btn{width:44px;height:44px}
+
+  .status-strip{bottom:74px;max-width:94vw}
+
+  .adapt-panel{padding:18px 14px}
+  .adapt-head h2{font-size:26px}
+  .adapt-cards{grid-template-columns:1fr}
+  .adapt-card{min-height:0;padding:14px}
+  .adapt-tools{flex-direction:column;align-items:stretch}
+  .adapt-hint{text-align:center;order:3}
+
+  .pause-panel{padding:18px 14px}
+  .pause-head{flex-direction:column;gap:10px}
+  .pause-timer{text-align:left}
+}
+
+/* ---- Small phone -------------------------------------------------------- */
+@media(max-width:400px){
+  .brand h1{font-size:38px}
+  .mission{margin:0 40px}
+  .loadout{max-width:46vw}
+  .slot-meta b{max-width:48px}
+  .ability-btn{min-width:76px}
+  .payout-row,.stat-grid,.stat-grid.compact{grid-template-columns:1fr}
+}
+
+/* ---- Landscape phone: HUD must stay out of the play area ---------------- */
+@media(max-height:520px) and (orientation:landscape){
+  .hud-panel{padding:5px 7px;font-size:9px}
+  .mission{margin:0 40px}
+  /* Only the objective currently closest to done is worth the vertical space. */
+  .objective-list{gap:3px}
+  .objective:nth-child(n+3){display:none}
+  .boss-bar{top:64px}
+  .status-strip{bottom:64px}
+  .ability-btn,.dash-btn{height:44px}
+  .icon-btn{width:40px;height:40px}
+  .adapt-panel{padding:14px}
+  .adapt-card{min-height:0;padding:12px}
+  .adapt-icon{width:30px;height:30px;font-size:11px}
+}
+
+/* ---- Wide desktop ------------------------------------------------------- */
+@media(min-width:1600px){
+  .menu-shell{width:min(1400px,92vw);height:min(880px,92vh)}
+  .card-grid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+}
+
+/* ---- Pointer-coarse: bigger tap targets --------------------------------- */
+@media(pointer:coarse){
+  .btn,.tab,.chip,.nav-item{min-height:44px}
+  .switch{width:52px;height:26px}
+  .switch i{width:20px;height:20px}
+  .switch.on i{left:28px}
+  .adapt-card{min-height:0}
+}
+
+/* ---- Reduced motion ----------------------------------------------------- */
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.01ms !important;
+  }
+  .scanlines::after{display:none}
+}
+
+.reduced-flashing .scanlines::after{opacity:.2}
+.reduced-flashing .bar.hp>i.critical{animation:none}
+.reduced-flashing #timerValue.urgent{animation:none}
