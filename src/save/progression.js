@@ -1,6 +1,6 @@
 import {ACHIEVEMENTS,MILESTONES,INTEL_FILES,DEV_TREE,devNodeCost,devRequirementsMet,accountLevel} from '../../data/meta.js';
 import {OPERATIVES,masteryRank} from '../../data/operatives.js';
-import {WEAPONS,EVOLUTIONS} from '../../data/weapons.js';
+import {WEAPONS,EVOLUTIONS,weaponUnlockLevel} from '../../data/weapons.js';
 import {MAPS,DIFFICULTIES} from '../../data/maps.js';
 import {saveGame} from './storage.js';
 
@@ -91,16 +91,15 @@ function evaluateContentUnlocks(save,unlocked){
       unlocked.push({kind:'difficulty',id:diff.id,name:diff.name});
     }
   }
-  // Weapons unlock once enough of the roster has been mastered, so the
-  // armory keeps opening up as the player progresses.
-  const maxed=readMetric(save,'weaponsMaxed');
+  // Weapons are requisitioned against command rating, so the armory opens on a
+  // schedule the player can read off the ladder rather than one they have to
+  // infer from mastery conditions.
   const level=readMetric(save,'accountLevel');
-  const thresholds={tripmine:1,microwave:2,emp:3,sentry:4,micro:5,rail:6,nanite:7,lance:8,orbital:10};
-  for(const [id,needed] of Object.entries(thresholds)){
-    const record=save.weapons[id];
-    if(record&&!record.unlocked&&(maxed>=needed||level>=needed*3)){
+  for(const weapon of WEAPONS){
+    const record=save.weapons[weapon.id];
+    if(record&&!record.unlocked&&level>=weaponUnlockLevel(weapon.id)){
       record.unlocked=true;
-      unlocked.push({kind:'weapon',id,name:WEAPONS.find(w=>w.id===id)?.name||id});
+      unlocked.push({kind:'weapon',id:weapon.id,name:weapon.name});
     }
   }
 }

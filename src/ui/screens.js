@@ -1,5 +1,5 @@
 import {OPERATIVES,masteryProgress,masteryRank,MASTERY_RANKS} from '../../data/operatives.js';
-import {WEAPONS,EVOLUTIONS,WEAPON_RARITY,MAX_WEAPON_LEVEL} from '../../data/weapons.js';
+import {WEAPONS,EVOLUTIONS,WEAPON_RARITY,MAX_WEAPON_LEVEL,weaponUnlockLevel} from '../../data/weapons.js';
 import {PASSIVES,MAX_PASSIVE_LEVEL} from '../../data/passives.js';
 import {MAPS,DURATIONS,DIFFICULTIES,DIFFICULTIES_BY_ID} from '../../data/maps.js';
 import {ENEMIES,ELITES} from '../../data/enemies.js';
@@ -917,10 +917,15 @@ export class Screens{
         const unlocked=record?.unlocked;
         const rarity=WEAPON_RARITY[weapon.rarity]||'#9fb6b8';
         if(!unlocked){
+          const needed=weaponUnlockLevel(weapon.id);
+          const current=accountLevel(save.profile.accountXp||0).level;
           return `<article class="card locked">
             <span class="eyebrow">${weapon.category.toUpperCase()}</span>
             <h3>█████████</h3>
-            <p class="muted">Discovery required. Master additional weapons to expand requisition access.</p>
+            <p class="muted">Requisition restricted.</p>
+            <div class="unlock-req"><b>COMMAND RATING</b><span>${needed}</span></div>
+            <div class="bar mini"><i style="width:${clamp(current/needed,0,1)*100}%"></i></div>
+            <span class="progress-text">RATING ${current} / ${needed}</span>
           </article>`;
         }
         return `<article class="card weapon-card" style="--c:${rarity}">

@@ -756,10 +756,34 @@ export class World{
     return{x:pick.room.x,y:pick.room.y};
   }
 
+  // Floor staining. Decals are permanent for the whole contract: the renderer
+  // bakes older ones into a single layer, so the list only ever holds the
+  // recent ones and the count is not a reason to throw any away.
   addDecal(x,y,radius,color,alpha=.35,kind='splat'){
-    this.decals.push({x,y,radius,color,alpha,kind,rotation:Math.random()*Math.PI*2,life:1});
-    // Bounded so long runs never accumulate unbounded draw work.
-    if(this.decals.length>320)this.decals.splice(0,this.decals.length-320);
+    this.decals.push({
+      x,y,radius,color,alpha,kind,
+      rotation:this.rng.next()*Math.PI*2,
+      squash:.55+this.rng.next()*.45,
+      seed:this.rng.int(0,999)
+    });
+  }
+
+  // A kill's worth of staining: a main pool with satellite spatter thrown
+  // along the direction of the killing blow.
+  splatter(x,y,{radius=14,color='#4a1f22',alpha=.3,angle=null,intensity=1,kind='splat'}={}){
+    const rng=this.rng;
+    this.addDecal(x,y,radius*rng.range(.9,1.25),color,alpha,kind);
+    const drops=Math.round(rng.range(3,6)*intensity);
+    for(let i=0;i<drops;i++){
+      // Spatter cones along the hit direction when there is one, and throws in
+      // all directions when the kill had no clear vector.
+      const a=angle!==null?angle+rng.range(-.7,.7):rng.angle();
+      const distance=radius*rng.range(.8,3.4)*intensity;
+      const px=x+Math.cos(a)*distance;
+      const py=y+Math.sin(a)*distance;
+      if(!this.isInside(px,py,4))continue;
+      this.addDecal(px,py,radius*rng.range(.16,.5),color,alpha*rng.range(.6,1),kind);
+    }
   }
 
   update(dt,engine){

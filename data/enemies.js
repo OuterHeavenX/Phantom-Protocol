@@ -98,6 +98,17 @@ export const ENEMIES=[
   }
 ];
 
+// Rotary gunship. Flies, so ground cover neither stops it nor shelters you
+// from it — the only answer is to out-range it or put it down.
+export const CHOPPER={
+  id:'chopper',name:'Vulture Gunship',ai:'gunship',render:'chopper',tier:4,weight:0,
+  hp:340,speed:158,damage:9,radius:26,xp:70,credits:22,jp:4,armor:2,color:'#c8d2d6',
+  machine:true,flying:true,
+  range:400,fireRate:2.4,projectileSpeed:400,burst:5,accuracy:.8,
+  hoverBand:300,strafeSpeed:1.15,
+  desc:'Rotary gunship on overwatch. Holds standoff, walks fire across the deck, and ignores every wall between you.'
+};
+
 export const ELITES=[
   {
     id:'nullhunter',name:'Null Hunter',base:'hunter',ai:'diveBomber',render:'drone',

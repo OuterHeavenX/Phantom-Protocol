@@ -254,27 +254,61 @@ export class Renderer{
   }
 
   // ---- 2. Decals ----------------------------------------------------------
+  //
+  // Floor staining lasts the whole contract, so the count only ever grows. The
+  // recent ones are drawn as crisp shapes; once there are enough of them the
+  // oldest are baked into a single half-resolution layer and dropped from the
+  // list. Blood is permanent and unbounded, and costs one drawImage per frame
+  // plus a few dozen fresh shapes.
+  ensureStainLayer(){
+    if(this.stainCanvas)return;
+    const world=this.engine.world;
+    this.stainScale=world.width*world.height>7e6?.3:.42;
+    this.stainCanvas=document.createElement('canvas');
+    this.stainCanvas.width=Math.max(1,Math.ceil(world.width*this.stainScale));
+    this.stainCanvas.height=Math.max(1,Math.ceil(world.height*this.stainScale));
+    this.stainCtx=this.stainCanvas.getContext('2d');
+  }
+
+  paintStain(ctx,decal,scale=1){
+    ctx.save();
+    ctx.globalAlpha=decal.alpha;
+    ctx.fillStyle=decal.color;
+    ctx.translate(decal.x*scale,decal.y*scale);
+    ctx.rotate(decal.rotation);
+    ctx.beginPath();
+    // Irregular splat rather than a plain circle; the seed keeps a given
+    // stain the same shape whether it is drawn fresh or baked.
+    const points=7;
+    for(let i=0;i<points;i++){
+      const a=i/points*TAU;
+      const r=decal.radius*scale*(.6+((i*37+decal.seed)%10)/22);
+      const x=Math.cos(a)*r,y=Math.sin(a)*r*(decal.squash??.7);
+      i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
   drawDecals(ctx){
     const camera=this.engine.camera;
+    const world=this.engine.world;
+    this.ensureStainLayer();
+
+    // Bake everything past the fresh window into the layer, then forget it.
+    const FRESH=90;
+    if(world.decals.length>FRESH){
+      const bake=world.decals.splice(0,world.decals.length-FRESH);
+      for(const decal of bake)this.paintStain(this.stainCtx,decal,this.stainScale);
+    }
+
     ctx.save();
-    for(const decal of this.engine.world.decals){
+    ctx.imageSmoothingEnabled=true;
+    ctx.drawImage(this.stainCanvas,0,0,world.width,world.height);
+    for(const decal of world.decals){
       if(!camera.isVisible(decal.x,decal.y,decal.radius))continue;
-      ctx.globalAlpha=decal.alpha;
-      ctx.fillStyle=decal.color;
-      ctx.save();
-      ctx.translate(decal.x,decal.y);
-      ctx.rotate(decal.rotation);
-      // Irregular splat rather than a plain circle.
-      ctx.beginPath();
-      for(let i=0;i<7;i++){
-        const a=i/7*TAU;
-        const r=decal.radius*(.6+((i*37)%10)/22);
-        const x=Math.cos(a)*r,y=Math.sin(a)*r*.7;
-        i?ctx.lineTo(x,y):ctx.moveTo(x,y);
-      }
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
+      this.paintStain(ctx,decal,1);
     }
     ctx.restore();
   }

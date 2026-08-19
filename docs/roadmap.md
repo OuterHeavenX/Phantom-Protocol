@@ -15,6 +15,12 @@ weapon rank; ten theatres with per-theatre weather and authored landmark props, 
 six-operation campaign with briefing dialogue, four mission objective types and
 progressive document reveals.
 
+And shipped since: a requisition ladder that issues two weapons at induction and opens
+the other sixteen against command rating; persistent blood and oil floor decals that last
+the whole operation, baked into an offscreen layer once they age out of the crisp set;
+and the Vulture gunship, the first flying hostile, scheduled by contract length rather
+than drawn from the deployment pool.
+
 Remaining:
 
 1. Deterministic daily and weekly contracts built on the existing seeded RNG.

@@ -172,6 +172,22 @@ export const WEAPONS=[
 ];
 
 export const MAX_WEAPON_LEVEL=8;
+
+// Requisition ladder. Two weapons ship with the account; the rest are released
+// against command rating, so the armory opens on a schedule the player can
+// read rather than on a mastery condition they have to reverse-engineer.
+export const WEAPON_UNLOCK_LEVEL={
+  needle:0,bulwark:0,
+  kite:2,monofilament:3,
+  specter:5,scatter:7,vector:9,shard:11,
+  tripmine:13,microwave:15,emp:17,sentry:19,micro:22,
+  rail:25,nanite:28,lance:31,
+  orbital:35,revenant:40
+};
+
+export function weaponUnlockLevel(id){
+  return WEAPON_UNLOCK_LEVEL[id]??0;
+}
 export const MAX_WEAPON_SLOTS=6;
 
 // Evolutions fuse a maxed weapon with a specific passive at max rank.

@@ -743,8 +743,17 @@ export class Engine{
 
       enemy.x+=enemy.vx*dt;
       enemy.y+=enemy.vy*dt;
-      const corrected=this.world.resolveCollision(enemy,enemy.radius);
-      if(corrected&&enemy.chargeTimer>0)enemy.chargeTimer=0;
+      // Aircraft are over the sector, not in it: geometry neither stops them
+      // nor shelters the operative from them. They are still held inside the
+      // arena bounds so they cannot drift out of the fight.
+      if(enemy.flying){
+        enemy.x=clamp(enemy.x,enemy.radius,this.world.width-enemy.radius);
+        enemy.y=clamp(enemy.y,enemy.radius,this.world.height-enemy.radius);
+        enemy.rotor=(enemy.rotor||0)+dt*26;
+      }else{
+        const corrected=this.world.resolveCollision(enemy,enemy.radius);
+        if(corrected&&enemy.chargeTimer>0)enemy.chargeTimer=0;
+      }
       enemy.angle=Math.atan2(player.y-enemy.y,player.x-enemy.x);
 
       this.applyEnemyAuras(enemy,dt);
@@ -1010,7 +1019,11 @@ export class Engine{
 
     if(target.hp<=0){
       if(target.boss)this.killBoss(target);
-      else this.killEnemy(target,{weapon:options.weapon,source:options.source});
+      // `angle` is the direction the blow came from, which is the direction
+      // the spatter should be thrown.
+      else this.killEnemy(target,{
+        weapon:options.weapon,source:options.source,direction:options.angle
+      });
     }
     return applied;
   }
@@ -1082,8 +1095,22 @@ export class Engine{
     enemy.squad?.remove(enemy);
 
     this.fx.death(enemy.x,enemy.y,enemy.color,enemy.elite);
-    this.world.addDecal(enemy.x,enemy.y,enemy.radius*(enemy.elite?2.2:1.4),
-      enemy.machine?'#2a3a40':'#4a1f22',enemy.elite?.4:.28);
+
+    // Machines leak oil, everything else bleeds. Both stain the floor for the
+    // rest of the contract; the direction of the killing blow throws the
+    // spatter, so a firefight leaves a readable record of where it happened.
+    const gore=enemy.machine
+      ? {color:'#07090b',alpha:.62,particle:'#12161a'}
+      : {color:'#57121a',alpha:.5,particle:'#7d1d24'};
+    const scale=enemy.elite?2.1:1;
+    this.world.splatter(enemy.x,enemy.y,{
+      radius:enemy.radius*1.5*scale,
+      color:gore.color,
+      alpha:gore.alpha,
+      angle:options.direction??null,
+      intensity:scale
+    });
+    this.fx.blood(enemy.x,enemy.y,gore.particle,(enemy.elite?2.2:1.3));
     this.audio.play('kill',{volume:enemy.elite?.8:.35});
     if(enemy.elite){this.camera.addShake(.16);this.fx.freeze(.035)}
 

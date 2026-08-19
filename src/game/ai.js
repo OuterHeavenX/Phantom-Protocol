@@ -518,6 +518,30 @@ const PROFILES={
     }
   },
 
+  // Gunships never take cover and never close: they orbit at standoff, walk
+  // bursts across the target, and reposition when the operative gets under
+  // them. Ground geometry is irrelevant to them in both directions.
+  gunship:{
+    preferredRange:300,detection:1100,memory:8,strafe:1.25,rangeBand:70,separation:2.2,reaction:.35,
+    decide(enemy,ctx){
+      if(enemy.awareness<.25)return AI_STATES.SEARCH;
+      // Too close to depress the guns: peel off and re-establish standoff.
+      if(ctx.distanceToPlayer<enemy.hoverBand*.55)return AI_STATES.RETREAT;
+      return AI_STATES.ENGAGE;
+    },
+    attack(enemy,ctx){
+      if(ctx.distanceToPlayer>(enemy.range||400))return;
+      enemy.attackCooldown=(enemy.fireRate||2.4)*ctx.fireRateMult;
+      enemy.burstRemaining=(enemy.burst||5)-1;
+      enemy.burstInterval=.085;
+      enemy.burstSpec={
+        speed:enemy.projectileSpeed||400,damage:enemy.damage,
+        accuracy:enemy.accuracy??.8
+      };
+      ctx.fireEnemyShot(enemy,enemy.burstSpec);
+    }
+  },
+
   sniper:{
     preferredRange:440,detection:900,memory:5,strafe:.25,rangeBand:80,separation:1.1,reaction:.5,
     decide(enemy,ctx){

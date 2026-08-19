@@ -1,5 +1,5 @@
 import {OPERATIVES} from '../../data/operatives.js';
-import {WEAPONS} from '../../data/weapons.js';
+import {WEAPONS,weaponUnlockLevel} from '../../data/weapons.js';
 import {MAPS,DIFFICULTIES} from '../../data/maps.js';
 
 const KEY='phantom-protocol-save';
@@ -55,8 +55,8 @@ export function defaultSave(){
   }
   const weapons={};
   for(const w of WEAPONS){
-    // The first eight weapons ship unlocked; the rest are earned.
-    weapons[w.id]=defaultWeaponRecord(WEAPONS.indexOf(w)<8);
+    // Only the weapons requisitioned at command rating zero ship unlocked.
+    weapons[w.id]=defaultWeaponRecord(weaponUnlockLevel(w.id)<=0);
   }
   const maps={};
   for(const m of MAPS)maps[m.id]={unlocked:!!m.unlocked,clears:0,bestTime:0};
@@ -163,7 +163,7 @@ export function normalizeSave(raw){
     if(op.unlocked)merged.operatives[op.id].unlocked=true;
   }
   for(const [index,w] of WEAPONS.entries()){
-    if(!merged.weapons[w.id])merged.weapons[w.id]=defaultWeaponRecord(index<8);
+    if(!merged.weapons[w.id])merged.weapons[w.id]=defaultWeaponRecord(weaponUnlockLevel(w.id)<=0);
     // Records written before the Gunsmith shipped have no experience fields.
     const record=merged.weapons[w.id];
     if(typeof record.xp!=='number')record.xp=0;

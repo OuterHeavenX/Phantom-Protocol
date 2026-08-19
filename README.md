@@ -36,12 +36,14 @@ camera lead; auto-target can be disabled in settings.
 - **18 weapons** across 17 distinct firing behaviours — projectile, burst, shotgun,
   railshot, piercing bolt, lobbed explosive, proximity mine, orbiting drones, damage
   aura, shockwave pulse, melee arc, homing missiles, sustained beam, chain lightning,
-  deployable turrets, designated orbital strikes and phantom summons.
+  deployable turrets, designated orbital strikes and phantom summons. Two are issued at
+  induction; the other sixteen are requisitioned as command rating rises.
 - **16 support systems (passives)** that feed a single derived stat block.
 - **12 weapon evolutions**, each fusing a maxed weapon with a maxed support system into
   a new weapon with its own behaviour.
-- **15 hostile archetypes** and **6 elite signatures**, each bound to one of 15 AI
-  behaviour profiles.
+- **15 hostile archetypes** and **6 elite signatures**, each bound to one of 14 AI
+  behaviour profiles, plus a rotary gunship that arrives on the director's schedule
+  rather than out of the deployment pool.
 - **4 multi-phase command signatures (bosses)** with 12 distinct attack patterns.
 - **10 theatres**, each with its own palette, procedural layout generator, hazard set and
   hostile weighting — including a rain-lashed suspension span, a snowed-in valley, a
@@ -65,6 +67,8 @@ camera lead; auto-target can be disabled in settings.
   durability that scales with rank and level and depletes under contact.
 - **Procedural operative portraits**, drawn as deterministic SVG busts from the
   operative id — and as black silhouettes for personnel who have not been identified.
+- **Persistent battlefield gore** — every kill stains the floor and every stain survives
+  to extraction.
 
 ## Systems
 
@@ -141,6 +145,28 @@ is still to earn.
 **Loadout.** A primary weapon and its bench build are selected before deployment, on both
 the deploy screen and the campaign briefing. Without a selection the operative carries
 their own issue weapon, stock.
+
+**Requisition.** A new operator is issued two weapons — the Needle-7 and the Bulwark
+SG — and requisitions the rest as command rating rises, on the ladder declared in
+`data/weapons.js` (`WEAPON_UNLOCK_LEVEL`). The armory lists every locked weapon with the
+rating it needs rather than hiding it, so the ladder reads as a goal. Every operative
+still deploys with their own issue weapon whatever their rating — the ladder governs
+what can be *issued to anyone*, not what a specialist carries — and in-run adaptations
+still offer the whole armory, so a locked weapon can be earned inside an operation.
+
+**Gore.** Kills stain the ground and the stains stay for the whole operation — organic
+hostiles spray dark arterial red, machines burst black oil, and elites throw roughly
+twice the volume. A directional kill sprays along the shot. Decals are unbounded but not
+unbounded work: the renderer keeps the ~90 newest as crisp vector stains and bakes
+everything older into a half-resolution offscreen layer drawn in a single `drawImage`,
+so a floor thick with blood costs one blit a frame.
+
+**Gunships.** The Vulture gunship (`data/enemies.js`) is the first flying hostile: it
+ignores ground collision, holds a hover band around the operative, strafes rather than
+closes, and fires five-round bursts from beyond most weapons' comfortable range. The
+director schedules it by contract length — one at 36% on every contract, two more at 66%
+on contracts of ten minutes or longer, three more at 82% at twenty minutes and up — so
+early operations meet a single gunship and late ones face a flight.
 
 **Field objectives.** Three objectives are always live (`src/game/objectives.js`),
 drawn from eleven templates and scaled to the operative's current level. Clearing one

@@ -250,7 +250,10 @@ export function drawEnemy(ctx,enemy,time,settings){
   if(cloaked)ctx.globalAlpha=.22;
 
   const scale=enemy.radius/11;
-  drawShadow(ctx,enemy.x,enemy.y,enemy.radius,cloaked?.1:.3);
+  // An aircraft's shadow sits offset and smaller, which is what sells it as
+  // being above the deck rather than on it.
+  if(enemy.flying)drawShadow(ctx,enemy.x+16,enemy.y+22,enemy.radius*.7,.34);
+  else drawShadow(ctx,enemy.x,enemy.y,enemy.radius,cloaked?.1:.3);
 
   ctx.translate(enemy.x,enemy.y);
   ctx.rotate(enemy.angle);
@@ -264,7 +267,82 @@ export function drawEnemy(ctx,enemy,time,settings){
   if(!cloaked)drawEnemyOverlays(ctx,enemy,time,settings);
 }
 
+// Rotary gunship, drawn nose-forward along its facing.
+function drawChopper(ctx,enemy,scale,time){
+  const s=scale*.92;
+  const body=enemy.color||'#c8d2d6';
+
+  // Tail boom and stabiliser.
+  ctx.fillStyle='#2b3338';
+  ctx.strokeStyle=body;
+  ctx.lineWidth=1.4;
+  ctx.beginPath();roundedRect(ctx,-30*s,-3.5*s,26*s,7*s,3*s);ctx.fill();ctx.stroke();
+  ctx.beginPath();roundedRect(ctx,-34*s,-10*s,6*s,20*s,2*s);ctx.fill();ctx.stroke();
+
+  // Fuselage.
+  ctx.fillStyle='#3a444a';
+  ctx.beginPath();
+  ctx.moveTo(20*s,0);
+  ctx.quadraticCurveTo(16*s,-11*s,2*s,-11*s);
+  ctx.lineTo(-8*s,-8*s);
+  ctx.lineTo(-8*s,8*s);
+  ctx.lineTo(2*s,11*s);
+  ctx.quadraticCurveTo(16*s,11*s,20*s,0);
+  ctx.closePath();ctx.fill();ctx.stroke();
+
+  // Canopy.
+  ctx.fillStyle=withAlpha('#8fd8ff',.5);
+  ctx.beginPath();
+  ctx.moveTo(19*s,0);ctx.quadraticCurveTo(14*s,-7*s,6*s,-7*s);
+  ctx.lineTo(6*s,7*s);ctx.quadraticCurveTo(14*s,7*s,19*s,0);
+  ctx.closePath();ctx.fill();
+
+  // Stub wings with underslung pods.
+  ctx.fillStyle='#2b3338';
+  ctx.beginPath();roundedRect(ctx,-4*s,-19*s,12*s,8*s,2*s);ctx.fill();ctx.stroke();
+  ctx.beginPath();roundedRect(ctx,-4*s,11*s,12*s,8*s,2*s);ctx.fill();ctx.stroke();
+
+  // Main rotor: a fast disc plus blades, so it reads as turning at any speed.
+  const spin=enemy.rotor||time*26;
+  ctx.save();
+  ctx.globalAlpha=.11;
+  ctx.fillStyle='#dfe9ee';
+  ctx.beginPath();ctx.arc(0,0,34*s,0,TAU);ctx.fill();
+  // The blades sit under the disc in weight so the airframe still reads.
+  ctx.globalAlpha=.5;
+  ctx.strokeStyle='#e6eef2';
+  ctx.lineWidth=1.8*s;
+  ctx.beginPath();
+  for(let i=0;i<4;i++){
+    const a=spin+i*(TAU/4);
+    ctx.moveTo(0,0);
+    ctx.lineTo(Math.cos(a)*34*s,Math.sin(a)*34*s);
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  // Tail rotor.
+  ctx.save();
+  ctx.translate(-34*s,0);
+  ctx.globalAlpha=.6;
+  ctx.strokeStyle='#dfe9ee';
+  ctx.lineWidth=1.4*s;
+  ctx.beginPath();
+  for(let i=0;i<3;i++){
+    const a=spin*1.7+i*(TAU/3);
+    ctx.moveTo(0,0);ctx.lineTo(Math.cos(a)*9*s,Math.sin(a)*9*s);
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  // Navigation strobe.
+  const blink=(Math.sin(time*5)+1)/2;
+  ctx.fillStyle=`rgba(255,90,80,${(.3+blink*.7).toFixed(2)})`;
+  ctx.beginPath();ctx.arc(-24*s,0,2.2*s,0,TAU);ctx.fill();
+}
+
 const ENEMY_RENDERERS={
+  chopper:drawChopper,
   soldier(ctx,enemy,scale,time){
     drawHumanoid(ctx,{
       bodyColor:enemy.color,accentColor:shade(enemy.color,.3),

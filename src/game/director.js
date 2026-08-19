@@ -1,4 +1,4 @@
-import {ENEMIES,ENEMIES_BY_ID,ELITES} from '../../data/enemies.js';
+import {ENEMIES,ENEMIES_BY_ID,ELITES,CHOPPER} from '../../data/enemies.js';
 import {MINIBOSSES} from '../../data/bosses.js';
 import {clamp,TAU} from '../core/math.js';
 import {Squad} from './ai.js';
@@ -85,6 +85,11 @@ export class Director{
   buildEventSchedule(durationMinutes){
     const events=[];
     const total=durationMinutes*60;
+    // Air support. One gunship on the way in; a flight of two or three once
+    // the sector has had time to call it in properly.
+    events.push({at:total*.36,type:'gunship',count:1});
+    if(durationMinutes>=10)events.push({at:total*.66,type:'gunship',count:2});
+    if(durationMinutes>=20)events.push({at:total*.82,type:'gunship',count:3});
     if(durationMinutes>=10)events.push({at:total*.30,type:'miniboss'});
     if(durationMinutes>=20)events.push({at:total*.42,type:'boss'});
     if(durationMinutes>=15)events.push({at:total*.50,type:'eliteSquad'});
@@ -278,6 +283,37 @@ export class Director{
     return enemy;
   }
 
+  // Air support arrives from one bearing, spread along it, already aware of
+  // the operative — a gunship that has to search for its target is not a
+  // gunship.
+  spawnGunships(count){
+    const engine=this.engine;
+    const rng=engine.rng;
+    const bearing=rng.angle();
+    let deployed=0;
+    for(let i=0;i<count;i++){
+      const angle=bearing+(i-(count-1)/2)*.45;
+      const distance=engine.camera.viewHalfWidth(220)+rng.range(60,220);
+      const x=clamp(engine.player.x+Math.cos(angle)*distance,60,engine.world.width-60);
+      const y=clamp(engine.player.y+Math.sin(angle)*distance,60,engine.world.height-60);
+      // Flying, so it does not need a clear ground spawn — only to be inside
+      // the arena.
+      const enemy=engine.spawnEnemy(CHOPPER,x,y,{});
+      if(!enemy)continue;
+      enemy.awareness=1;
+      enemy.memory=20;
+      enemy.lastKnownX=engine.player.x;
+      enemy.lastKnownY=engine.player.y;
+      deployed++;
+    }
+    if(!deployed)return;
+    engine.announce(
+      deployed>1?`AIR SUPPORT INBOUND // ${deployed} GUNSHIPS`:'AIR SUPPORT INBOUND',
+      '#c8d2d6',3.4
+    );
+    engine.audio.play('alarm',{volume:.85});
+  }
+
   runScriptedEvents(){
     while(this.eventIndex<this.scriptedEvents.length&&
           this.engine.elapsed>=this.scriptedEvents[this.eventIndex].at){
@@ -289,6 +325,10 @@ export class Director{
   fireEvent(event){
     const engine=this.engine;
     switch(event.type){
+      case 'gunship':{
+        this.spawnGunships(event.count||1);
+        break;
+      }
       case 'miniboss':{
         const spec=engine.rng.pick(MINIBOSSES);
         engine.spawnMiniboss(spec);
