@@ -301,6 +301,28 @@ p{margin:0}
   background:#050b0d;
 }
 .portrait svg{display:block;width:100%;height:auto}
+
+/* Authored dossier art, with the procedural portrait behind it for a browser
+   that cannot decode WebP. Only one of the two is ever shown. */
+.portrait-art{display:block;position:relative;line-height:0}
+.portrait-art img{display:block;width:100%;height:auto;aspect-ratio:1}
+.portrait-art-fallback{display:none}
+.portrait-art.art-failed img{display:none}
+.portrait-art.art-failed .portrait-art-fallback{display:block}
+.creed{
+  margin-top:2px;font-size:10px;line-height:1.5;font-style:italic;
+  color:var(--c,var(--accent));opacity:.7;
+}
+.file-btn{margin-top:auto;align-self:stretch}
+
+/* The full personnel file: the card is the screen. */
+.briefing-inner.narrow{max-width:760px}
+.dossier-card{display:block;margin:18px auto}
+.dossier-card img{
+  display:block;width:100%;max-width:100%;height:auto;box-sizing:border-box;
+  border:1px solid var(--line);
+  box-shadow:0 0 60px rgba(0,0,0,.7);
+}
 .operative-card .portrait{width:100%;max-width:132px;margin-bottom:2px}
 .portrait.small{width:84px;flex:0 0 84px}
 .brief-identity{display:flex;gap:12px;align-items:center}
@@ -670,7 +692,10 @@ input[type=range]::-moz-range-thumb{
   display:flex;align-items:center;justify-content:center;
   min-height:100%;padding:32px 20px;
 }
-.briefing-inner{width:min(760px,94vw)}
+/* Sized against the container, not the viewport: .screen already carries the
+   safe-area padding, and 94vw ignored it — which pushed every briefing screen
+   8px past the edge on a narrow phone. */
+.briefing-inner{width:min(760px,100%)}
 .briefing h1{font-size:clamp(26px,5vw,44px);margin:4px 0 20px}
 .dialogue{display:flex;flex-direction:column;gap:12px;margin-bottom:22px}
 .dialogue .line{
@@ -700,7 +725,7 @@ input[type=range]::-moz-range-thumb{
 .objective-meta{display:flex;flex-wrap:wrap;gap:18px;font-size:10px;color:var(--muted)}
 .objective-meta b{color:#eafffc;margin-left:6px}
 
-.briefing.document .briefing-inner{width:min(680px,94vw)}
+.briefing.document .briefing-inner{width:min(680px,100%)}
 .doc-body{
   border:1px solid var(--gold);border-left-width:3px;
   background:rgba(24,18,6,.4);padding:18px 20px;margin-bottom:22px;

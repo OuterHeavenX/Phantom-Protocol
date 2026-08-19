@@ -13,7 +13,7 @@ import {
   unlockedOperatives,unlockedMaps,unlockedDifficulties,
   recruitmentProgress,startRecruitment,counselHours
 } from '../save/progression.js';
-import {portraitSvg} from '../render/portraits.js';
+import {portraitSvg,portraitMarkup,dossierCardMarkup} from '../render/portraits.js';
 import {CAMPAIGN,OBJECTIVE_TYPES,nextOperation,campaignProgress,operationUnlocked} from '../../data/campaign.js';
 import {
   SLOTS,slotLabel,attachmentsFor,ATTACHMENTS_BY_ID,defaultBuild,MAX_WEAPON_RANK
@@ -769,7 +769,7 @@ export class Screens{
       <div class="brief-block">
         <span class="eyebrow">OPERATIVE</span>
         <div class="brief-identity">
-          <div class="portrait small">${portraitSvg(operative,{size:84})}</div>
+          <div class="portrait small">${portraitMarkup(operative,{size:84})}</div>
           <div>
             <h3 style="color:${operative.color}">${operative.codename}</h3>
             <span class="real-name">${escape(operative.name)}</span>
@@ -860,11 +860,12 @@ export class Screens{
             </article>`;
           }
           return `<article class="card operative-card" style="--c:${op.color}">
-            <div class="portrait">${portraitSvg(op)}</div>
+            <div class="portrait">${portraitMarkup(op)}</div>
             <span class="eyebrow">${escape(op.role)}</span>
             <h3 style="color:${op.color}">${op.codename}</h3>
-            <span class="real-name">${escape(op.name)}</span>
+            <span class="real-name">${escape(op.name)}${op.specialty?` // ${escape(op.specialty)}`:''}</span>
             <p class="muted">${escape(op.desc)}</p>
+            ${op.creed?`<p class="creed">${escape(op.creed)}</p>`:''}
             <div class="stat-bars">
               ${statBar('HP',op.hp,160)}
               ${statBar('SPD',op.speed,240)}
@@ -882,11 +883,42 @@ export class Screens{
               <span>CLEARS <b>${record.wins||0}</b></span>
               <span>KILLS <b>${formatNumber(record.kills||0)}</b></span>
             </div>
+            ${op.card?`<button class="btn small ghost file-btn" data-file="${op.id}">
+              OPEN PERSONNEL FILE
+            </button>`:''}
           </article>`;
         }).join('')}
       </div>`,{eyebrow:'PERSONNEL',wide:true}));
     this.wireBack();
     this.wireCounselButtons(()=>this.operatives());
+    root().querySelectorAll('[data-file]').forEach(button=>{
+      button.addEventListener('click',()=>{
+        this.audio?.play('confirm');
+        this.personnelFile(button.dataset.file);
+      });
+    });
+  }
+
+  // The authored dossier card, full size. Everything on it — codename, real
+  // name, role, specialty, file code and creed — is painted into the art, so
+  // this screen adds nothing but the frame and a way back.
+  personnelFile(id){
+    const op=OPERATIVES.find(o=>o.id===id);
+    if(!op)return this.operatives();
+    this.shell(`
+      <div class="briefing personnel-file">
+        <div class="briefing-inner narrow">
+          <span class="eyebrow">PERSONNEL FILE ${escape(op.file||'')} // ${escape(op.role)}</span>
+          ${dossierCardMarkup(op)}
+          <div class="button-row center">
+            <button class="btn primary" id="closeFile">CLOSE FILE</button>
+          </div>
+        </div>
+      </div>`,{scan:false});
+    root().querySelector('#closeFile').addEventListener('click',()=>{
+      this.click();
+      this.operatives();
+    });
   }
 
   // Shared by the roster screen and the debrief: any [data-counsel] button

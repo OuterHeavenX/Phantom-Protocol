@@ -177,3 +177,35 @@ export function portraitSvg(operative,{silhouette=false,size=120,tint=null}={}){
     role="img" aria-label="${operative?.codename||'Operative'} portrait">
     ${frame}<g clip-path="url(#${uid}clip)">${chrome}${body}</g></svg>`;
 }
+
+// The roster's authored dossier art (assets/images/Character_profile) is used
+// wherever an operative has been identified. A locked operative keeps the
+// procedural silhouette: the shape reads as a person, the face is the reward
+// for recovering the file — and a photograph cannot be silhouetted the way a
+// vector bust can, because blacking out a cropped photo yields a black square
+// rather than a person.
+//
+// The art ships as WebP only. A browser that cannot decode it falls back to
+// the procedural portrait, which is what this game shipped before the art
+// existed, so the fallback is a complete picture rather than a broken image.
+export function portraitMarkup(operative,{silhouette=false,size=120,tint=null}={}){
+  const svg=portraitSvg(operative,{silhouette,size,tint});
+  if(silhouette||!operative?.portrait)return svg;
+  const label=`${operative.codename||'Operative'}${operative.name?' — '+operative.name:''}`;
+  return `<span class="portrait-art" style="--size:${size}px">
+    <img src="${operative.portrait}" alt="${label}" width="${size}" height="${size}"
+         loading="lazy" decoding="async"
+         onerror="this.closest('.portrait-art').classList.add('art-failed')">
+    <span class="portrait-art-fallback">${svg}</span>
+  </span>`;
+}
+
+// The full authored dossier card, for the file viewer.
+export function dossierCardMarkup(operative){
+  if(!operative?.card)return '';
+  return `<picture class="dossier-card">
+    <source type="image/webp" srcset="${operative.card}">
+    <img src="${operative.cardFallback||operative.card}"
+         alt="${operative.codename||'Operative'} personnel file" decoding="async">
+  </picture>`;
+}

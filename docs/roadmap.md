@@ -20,7 +20,10 @@ the other sixteen against command rating; persistent blood and oil floor decals 
 the whole operation, baked into an offscreen layer once they age out of the crisp set;
 and the Vulture gunship, the first flying hostile, scheduled by contract length rather
 than drawn from the deployment pool. Plus an authored boot title screen in a wide and a
-tall frame, with the artwork's own painted buttons wired up as the real ones.
+tall frame, with the artwork's own painted buttons wired up as the real ones; authored
+dossier cards for all eight operatives, readable in full and cropped for the roster; and
+music moved off the AudioContext, which was freezing the track whenever the browser
+suspended the context.
 
 Remaining:
 

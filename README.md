@@ -65,8 +65,9 @@ camera lead; auto-target can be disabled in settings.
   personnel files. Roughly 40% come with a garrison sealed in alongside the loot.
 - **Field turrets** planted by the operative, 1× to 3× simultaneously by kit rank, with
   durability that scales with rank and level and depletes under contact.
-- **Procedural operative portraits**, drawn as deterministic SVG busts from the
-  operative id — and as black silhouettes for personnel who have not been identified.
+- **Authored operative dossiers** — eight hand-drawn personnel cards, readable in full,
+  with a head-and-shoulders crop carried across the roster and deploy screens. Personnel
+  who have not been identified stay procedural black silhouettes.
 - **Persistent battlefield gore** — every kill stains the floor and every stain survives
   to extraction.
 - **An authored title screen**, in a wide frame and a tall one, picked by the shape of
@@ -104,12 +105,22 @@ image assets.
 **Audio.** Sound effects are fully synthesized at runtime from oscillators and shaped
 noise (`src/core/audio.js`) — a complete sound library with no samples.
 
+Authored music plays on the browser's own media pipeline rather than through the
+AudioContext. A media element adopted by a suspended context freezes outright — it
+reports itself as playing while its clock stops and no sound comes out — and a browser
+suspends the context on its own for a backgrounded tab, an interruption from another
+app, or its own heuristics. Nothing here suspends it deliberately, so the engine treats
+any suspension as something to recover from and resumes it, and keeps the authored track
+outside the graph where a suspension cannot reach it at all. A track paused by anything
+other than the game is resumed where it stands; a stall is left alone to rebuffer, since
+seeking would turn a gap into a jump.
+
 Music is authored where a track exists and synthesized where one does not. Tracks are
 registered in `data/music.js` against a campaign operation id or a theatre id, stream
-through an `HTMLAudioElement` routed into the shared music bus, and crossfade between
-pieces; anything without a track falls back to the adaptive bed whose tempo, layering and
-filtering follow combat intensity. A browser that cannot decode a track's format falls
-back to the bed rather than going silent.
+through an `HTMLAudioElement`, and crossfade between pieces; anything without a track
+falls back to the adaptive bed whose tempo, layering and filtering follow combat
+intensity. One volume control and one mute cover both paths. A browser that cannot decode
+a track's format falls back to the bed rather than going silent.
 
 Tracks are offered to the browser as multiple `<source>` candidates, so dropping an
 `.m4a` or `.mp3` of the same basename beside a `.ogg` makes it play on browsers that
@@ -147,6 +158,21 @@ is still to earn.
 **Loadout.** A primary weapon and its bench build are selected before deployment, on both
 the deploy screen and the campaign briefing. Without a selection the operative carries
 their own issue weapon, stock.
+
+**Operative dossiers.** The roster's identities — codename, real name, role, specialty,
+file code and the creed on the CONFIDENTIAL panel — are transcribed from the authored
+dossier cards in `assets/images/Character_profile`. The art is the source of truth for
+who these people are; `data/operatives.js` holds what they can do. Each card is shown in
+full from the roster, and a square head-and-shoulders crop of its photo panel is used
+wherever the UI wants a portrait.
+
+An operative who has not been identified keeps the procedural SVG silhouette
+(`src/render/portraits.js`): the shape reads as a person and the face is the reward for
+recovering the file. That is also why the silhouette engine stays — a photograph cannot
+be silhouetted the way a vector bust can, since blacking out a cropped photo yields a
+black square rather than a person. It doubles as the fallback for a browser that cannot
+decode the WebP art, so the failure mode is a complete picture rather than a broken
+image.
 
 **Title screen.** The boot screen is authored artwork (`assets/images`), shipped in a
 wide frame for desktop and landscape tablets and a tall one for phones. The logo,

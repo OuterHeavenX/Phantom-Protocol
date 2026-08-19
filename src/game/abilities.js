@@ -4,7 +4,7 @@ import {dist,dist2,normalize,clamp,TAU} from '../core/math.js';
 // engine invokes; `duration` effects register a tick handler on the engine.
 
 export const ABILITIES={
-  // VESPER — blinds and disorients everything in a wide radius.
+  // RAVEN — blinds and disorients everything in a wide radius.
   scramble(engine,player){
     const radius=340*engine.stats.area;
     engine.spawnShockwave({
@@ -45,7 +45,7 @@ export const ABILITIES={
     return true;
   },
 
-  // MIRAGE — releases independently-hunting interceptor drones.
+  // VIPER — releases independently-hunting interceptor drones.
   droneSwarm(engine,player){
     const count=6;
     for(let i=0;i<count;i++){
@@ -98,7 +98,7 @@ export const ABILITIES={
     return true;
   },
 
-  // ORACLE — slows every hostile while the operative keeps full speed.
+  // RAPTOR — slows every hostile while the operative keeps full speed.
   timeDilation(engine,player){
     engine.timeDilation=.28;
     engine.audio.play('tech',{volume:1});
@@ -111,7 +111,7 @@ export const ABILITIES={
     return true;
   },
 
-  // FERROUS — rolling barrage of charges across the surrounding area.
+  // HAVOC — rolling barrage of charges across the surrounding area.
   demolition(engine,player){
     const shells=10;
     for(let i=0;i<shells;i++){
@@ -131,7 +131,7 @@ export const ABILITIES={
     return true;
   },
 
-  // CIPHER — detonates every status effect currently on the field.
+  // SPECTER — detonates every status effect currently on the field.
   systemPurge(engine,player){
     let detonated=0;
     for(const enemy of engine.enemies){
@@ -152,7 +152,7 @@ export const ABILITIES={
     return true;
   },
 
-  // REQUIEM — consumes held phantoms in a detonation scaled to their number.
+  // REAPER — consumes held phantoms in a detonation scaled to their number.
   lastRites(engine,player){
     const phantoms=engine.phantoms.filter(p=>!p.dead);
     const power=Math.max(1,phantoms.length);

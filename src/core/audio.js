@@ -7,9 +7,14 @@ import {trackFor,trackSources,MUSIC_FORMATS} from '../../data/music.js';
 //
 // Music is authored where a track exists for the theatre or operation and
 // synthesized where one does not. Authored tracks stream through an
-// HTMLAudioElement routed into the music bus, so one volume control, one mute
-// and one crossfade cover both paths — and a browser that cannot decode the
-// file falls back to the synthesized bed rather than going silent.
+// HTMLAudioElement that plays on the browser's own media pipeline rather than
+// through the AudioContext, because a media element adopted by a suspended
+// context freezes outright — it reports itself as playing while its clock
+// stops and no sound comes out, and nothing short of resuming the context
+// brings it back. Its level is driven from the same settings as the
+// synthesized bed, so one volume control, one mute and one crossfade still
+// cover both paths, and a browser that cannot decode the file falls back to
+// the bed rather than going silent.
 
 // Seconds to crossfade between two pieces of music.
 const MUSIC_FADE=1.1;
@@ -58,8 +63,31 @@ export class AudioEngine{
     this.musicBus.connect(this.master);
 
     this.buildNoise();
+    this.watchContext();
     this.ready=true;
     return Promise.resolve();
+  }
+
+  // A browser may suspend the context on its own — a backgrounded tab, an
+  // interruption from another app, its own autoplay heuristics. Nothing in the
+  // game suspends it deliberately, so any suspension is something to recover
+  // from: while it lasts every synthesized sound is silent. Resuming needs no
+  // gesture once one has been given, and is harmless if refused.
+  watchContext(){
+    const revive=()=>this.resumeContext();
+    this.ctx.addEventListener?.('statechange',()=>{
+      if(this.ctx.state==='suspended')revive();
+    });
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden)revive()});
+    // Kept for the life of the page rather than removed after the first
+    // gesture: a context suspended in the middle of a session needs the next
+    // interaction just as much as the first one did.
+    for(const event of ['pointerdown','keydown','touchstart'])
+      window.addEventListener(event,revive,{passive:true});
+  }
+
+  resumeContext(){
+    if(this.ctx?.state==='suspended')this.ctx.resume().catch(()=>{});
   }
 
   buildNoise(){
@@ -84,6 +112,9 @@ export class AudioEngine{
     this.master.gain.setTargetAtTime(this.settings.muted?0:this.settings.master,now,.05);
     this.sfxBus.gain.setTargetAtTime(this.settings.sfx,now,.05);
     this.musicBus.gain.setTargetAtTime(this.settings.music,now,.1);
+    // Authored tracks are outside the graph, so they take the same change
+    // through their own element volume.
+    for(const entry of (this.trackNodes||new Map()).values())this.applyTrackVolume(entry);
   }
 
   now(){return this.ctx?this.ctx.currentTime:0}
@@ -280,9 +311,15 @@ export class AudioEngine{
     return this._supportsTracks;
   }
 
-  // One <audio> element per track, kept for the session: a media element can
-  // only be adopted by the audio graph once, so re-creating it would leak
-  // source nodes on every deployment.
+  // The level the authored tracks play at: the same two settings the
+  // synthesized bed answers to, so one slider and one mute move both.
+  get musicLevel(){
+    return this.settings.muted?0:clamp(this.settings.master*this.settings.music,0,1);
+  }
+
+  // One <audio> element per track, kept for the session so a redeployment
+  // reuses the element (and whatever it has already buffered) instead of
+  // starting the download again.
   trackNode(track){
     this.trackNodes=this.trackNodes||new Map();
     let entry=this.trackNodes.get(track.file);
@@ -291,7 +328,6 @@ export class AudioEngine{
     const element=new Audio();
     element.loop=true;
     element.preload='auto';
-    element.crossOrigin='anonymous';
     // Offered as <source> children rather than a single src so the browser
     // picks the first format it can actually decode.
     for(const candidate of trackSources(track)){
@@ -301,35 +337,55 @@ export class AudioEngine{
       element.appendChild(source);
     }
 
-    const gain=this.ctx.createGain();
-    gain.gain.value=0;
-    let source=null;
-    try{
-      source=this.ctx.createMediaElementSource(element);
-      source.connect(gain);
-      gain.connect(this.musicBus);
-    }catch(err){
-      // Routing failed (rare, but a hard failure): fall back to the bed.
-      console.warn('[phantom] music routing failed',err);
-      return null;
-    }
-    entry={element,gain,source,track,failed:false};
+    entry={element,track,failed:false,level:0,fade:null};
+    element.volume=0;
+
     element.addEventListener('error',()=>{
       entry.failed=true;
       console.warn('[phantom] music track failed to load',track.file);
       // Losing the authored track mid-session must not leave the run silent.
       if(this.currentTrack===entry)this.startSynthMusic(this.synthKey||'blacksite');
     });
+    // A stall is the browser waiting on more of the file. Left alone it
+    // recovers by itself; restarting or seeking here would turn a gap into a
+    // jump backwards, so the only thing to do is not make it worse.
+    element.addEventListener('pause',()=>{
+      // Anything that pauses the current track without the game asking is an
+      // interruption to recover from, not an instruction. Rate-limited so a
+      // browser that insists on keeping it paused is left alone rather than
+      // fought once per event.
+      if(this.currentTrack!==entry||entry.stopping)return;
+      const now=performance.now();
+      if(now-(entry.resumedAt||0)<600)return;
+      entry.resumedAt=now;
+      element.play().catch(()=>{});
+    });
+
     this.trackNodes.set(track.file,entry);
     return entry;
   }
 
+  // Applies a track's fade level and the global music setting to the element.
+  applyTrackVolume(entry){
+    if(!entry)return;
+    entry.element.volume=clamp(entry.level*this.musicLevel,0,1);
+  }
+
+  // Crossfades on a timer rather than an AudioParam ramp: the element is not
+  // in the audio graph, so there is no param to schedule against.
   fadeTrack(entry,to,seconds=MUSIC_FADE){
-    if(!entry||!this.ctx)return;
-    const now=this.ctx.currentTime;
-    entry.gain.gain.cancelScheduledValues(now);
-    entry.gain.gain.setValueAtTime(entry.gain.gain.value,now);
-    entry.gain.gain.linearRampToValueAtTime(to,now+seconds);
+    if(!entry)return;
+    if(entry.fade){clearInterval(entry.fade);entry.fade=null}
+    const from=entry.level;
+    const span=Math.max(.001,seconds)*1000;
+    const started=performance.now();
+    if(from===to){this.applyTrackVolume(entry);return}
+    entry.fade=setInterval(()=>{
+      const t=Math.min(1,(performance.now()-started)/span);
+      entry.level=from+(to-from)*t;
+      this.applyTrackVolume(entry);
+      if(t>=1){clearInterval(entry.fade);entry.fade=null}
+    },40);
   }
 
   // `key` is an operation id or theatre id; `fallback` names the synthesized
@@ -344,22 +400,28 @@ export class AudioEngine{
       const entry=this.trackNode(track);
       if(entry&&!entry.failed){
         this.musicKey=key;
-        // Already playing this piece: let it run rather than restarting it.
+        // Already the current piece: let it run rather than restarting it.
         // Two keys can share a track (an operation and its theatre), so this
-        // is a comparison of entries, not of keys.
-        if(this.currentTrack===entry&&!entry.element.paused)return;
+        // is a comparison of entries, not of keys. A stalled or interrupted
+        // element is resumed where it stands — seeking to zero here would
+        // turn a recoverable gap into a restart.
+        const resuming=this.currentTrack===entry;
         this.stopSynthMusic();
-        if(this.currentTrack&&this.currentTrack!==entry){
+        if(this.currentTrack&&!resuming){
           const previous=this.currentTrack;
+          previous.stopping=true;
           this.fadeTrack(previous,0);
           setTimeout(()=>{
             if(this.currentTrack!==previous)previous.element.pause();
+            previous.stopping=false;
           },MUSIC_FADE*1000);
         }
         this.currentTrack=entry;
-        entry.element.currentTime=0;
+        entry.stopping=false;
+        if(!resuming)entry.element.currentTime=0;
+        this.applyTrackVolume(entry);
         const played=entry.element.play();
-        this.fadeTrack(entry,1);
+        this.fadeTrack(entry,1,resuming?.25:MUSIC_FADE);
         // Autoplay can still be refused before the unlock gesture lands.
         played?.catch?.(err=>{
           console.warn('[phantom] music playback blocked',err);
@@ -378,8 +440,14 @@ export class AudioEngine{
     if(!this.currentTrack)return;
     const entry=this.currentTrack;
     this.currentTrack=null;
+    // Flagged so the element's own pause handler reads this as the game
+    // stopping the music rather than as an interruption to recover from.
+    entry.stopping=true;
     this.fadeTrack(entry,0,.5);
-    setTimeout(()=>{if(this.currentTrack!==entry)entry.element.pause()},520);
+    setTimeout(()=>{
+      if(this.currentTrack!==entry)entry.element.pause();
+      entry.stopping=false;
+    },520);
   }
 
   startSynthMusic(key='blacksite'){

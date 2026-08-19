@@ -5,11 +5,22 @@
 // `counselHours` is the real-time counseling window that runs after a
 // personnel file is recovered in the field, before the operative is cleared
 // for deployment. Deeper assets take longer to clear.
+//
+// Identity — codename, real name, role, specialty, file code and the creed on
+// the CONFIDENTIAL panel — is transcribed from the authored dossier cards in
+// assets/images/Character_profile. The art is the source of truth for who
+// these people are; this file holds what they can do. `portrait` is the
+// head-and-shoulders crop used across the UI and `card` the full dossier.
 
 export const OPERATIVES=[
   {
-    id:'vesper',codename:'VESPER',name:'Elara Voss',role:'Electronic Infiltration',
-    desc:'Reconnaissance officer who corrupts hostile target locks and moves before the correction lands.',
+    id:'vesper',codename:'RAVEN',name:'Michelle',role:'Recon Intelligence Officer',
+    specialty:'Cyber Operations // Electronic Warfare',file:'0x5E7F2',
+    creed:'Enhanced. Connected. Humanity augmented. Information is power. Silence is survival.',
+    portrait:'assets/images/Character_profile/vesper-portrait.webp',
+    card:'assets/images/Character_profile/vesper.webp',
+    cardFallback:'assets/images/Character_profile/vesper.png',
+    desc:'Augmented recon intelligence officer. Corrupts hostile target locks and moves before the correction lands.',
     weapon:'needle',
     hp:100,speed:212,armor:0,
     growth:{hp:8,speed:1.4,armor:.18},
@@ -21,8 +32,13 @@ export const OPERATIVES=[
     color:'#76e7d4'
   },
   {
-    id:'bastion',codename:'BASTION',name:'Marcus Vale',role:'Mechanized Breacher',
-    desc:'Heavy infantry veteran in a reinforced field frame. Slower, far harder to remove.',
+    id:'bastion',codename:'BASTION',name:'Michael',role:'Heavy Weapons Specialist',
+    specialty:'Support Fire // Area Denial',file:'0x4D91',
+    creed:'Unwavering. Reliable. Builds the wall others fight from. Hold the line.',
+    portrait:'assets/images/Character_profile/bastion-portrait.webp',
+    card:'assets/images/Character_profile/bastion.webp',
+    cardFallback:'assets/images/Character_profile/bastion.png',
+    desc:'Heavy weapons veteran in a reinforced field frame. Slower, far harder to remove.',
     weapon:'bulwark',
     hp:150,speed:176,armor:6,
     growth:{hp:14,speed:.9,armor:.5},
@@ -34,8 +50,13 @@ export const OPERATIVES=[
     color:'#ffb35c'
   },
   {
-    id:'mirage',codename:'MIRAGE',name:'Noor Sayegh',role:'Information Warfare',
-    desc:'Drone tactician. Everything on her rig recharges faster than it has any right to.',
+    id:'mirage',codename:'VIPER',name:'Jimmy',role:'Team Commander',
+    specialty:'Tactical Operations // Mission Planning',file:'0x7C21',
+    creed:'Natural leader. Calculated. Disciplined. Always three steps ahead. Mission success above all.',
+    portrait:'assets/images/Character_profile/mirage-portrait.webp',
+    card:'assets/images/Character_profile/mirage.webp',
+    cardFallback:'assets/images/Character_profile/mirage.png',
+    desc:'Team commander. Fields interceptors and keeps every system on his rig cycling faster than doctrine allows.',
     weapon:'kite',
     hp:94,speed:206,armor:0,
     growth:{hp:7,speed:1.5,armor:.14},
@@ -47,8 +68,13 @@ export const OPERATIVES=[
     color:'#7db2ff'
   },
   {
-    id:'wraith',codename:'WRAITH',name:'Ilan Rook',role:'Close Infiltration',
-    desc:'Close-range specialist. Rewards aggressive movement and punishes anything that lets him get close.',
+    id:'wraith',codename:'WRAITH',name:'Kade',role:'Infiltration Specialist',
+    specialty:'Stealth Operations // Covert Insertion',file:'0x2C7B',
+    creed:'You never see him. That is the point. Silence is the deadliest weapon.',
+    portrait:'assets/images/Character_profile/wraith-portrait.webp',
+    card:'assets/images/Character_profile/wraith.webp',
+    cardFallback:'assets/images/Character_profile/wraith.png',
+    desc:'Close-range infiltrator. Rewards aggressive movement and punishes anything that lets him get close.',
     weapon:'monofilament',
     hp:106,speed:230,armor:1,
     growth:{hp:8,speed:2.1,armor:.2},
@@ -60,8 +86,13 @@ export const OPERATIVES=[
     color:'#c79bff'
   },
   {
-    id:'oracle',codename:'ORACLE',name:'Tamsin Keene',role:'Threat Analysis',
-    desc:'Predictive-fire specialist reconstructed from a buried black program. Sees the shot before it is taken.',
+    id:'oracle',codename:'RAPTOR',name:'Miguel',role:'Recon Specialist',
+    specialty:'Reconnaissance // Long Range Insertion',file:'0x7A2',
+    creed:'Excellent field judgment. High adaptability. Operates beyond enemy perception.',
+    portrait:'assets/images/Character_profile/oracle-portrait.webp',
+    card:'assets/images/Character_profile/oracle.webp',
+    cardFallback:'assets/images/Character_profile/oracle.png',
+    desc:'Long-range reconnaissance specialist. Reads the field far enough ahead to fire where a target has not arrived yet.',
     weapon:'specter',
     hp:92,speed:198,armor:0,
     growth:{hp:6,speed:1.3,armor:.12},
@@ -74,8 +105,13 @@ export const OPERATIVES=[
     color:'#ff8d82'
   },
   {
-    id:'ferrous',codename:'FERROUS',name:'Dima Karsk',role:'Ordnance Engineering',
-    desc:'Demolitions engineer with an unhealthy relationship to blast radius calculations.',
+    id:'ferrous',codename:'HAVOC',name:'Vincent',role:'Demolitions Specialist',
+    specialty:'Heavy Ordnance // Sabotage Operations',file:'0x9C7E1',
+    creed:'Unpredictable. Volatile. Destruction is his language. Control the chaos, or be consumed by it.',
+    portrait:'assets/images/Character_profile/ferrous-portrait.webp',
+    card:'assets/images/Character_profile/ferrous.webp',
+    cardFallback:'assets/images/Character_profile/ferrous.png',
+    desc:'Demolitions specialist with an unhealthy relationship to blast radius calculations.',
     weapon:'shard',
     hp:118,speed:190,armor:3,
     growth:{hp:10,speed:1.1,armor:.3},
@@ -88,8 +124,13 @@ export const OPERATIVES=[
     color:'#ff7068'
   },
   {
-    id:'cipher',codename:'CIPHER',name:'Ada Renn',role:'Systems Subversion',
-    desc:'Turns hostile hardware against its owners. The battlefield stops being entirely theirs.',
+    id:'cipher',codename:'SPECTER',name:'Sarah',role:'Covert Intelligence',
+    specialty:'Human Intel Operations // Counter-Intelligence',file:'0x9B1F',
+    creed:'Information is power. Knowledge is survival. Control the narrative.',
+    portrait:'assets/images/Character_profile/cipher-portrait.webp',
+    card:'assets/images/Character_profile/cipher.webp',
+    cardFallback:'assets/images/Character_profile/cipher.png',
+    desc:'Counter-intelligence officer who turns hostile hardware against its owners. The battlefield stops being entirely theirs.',
     weapon:'nanite',
     hp:88,speed:204,armor:0,
     growth:{hp:6,speed:1.5,armor:.1},
@@ -102,8 +143,13 @@ export const OPERATIVES=[
     color:'#9bffb8'
   },
   {
-    id:'requiem',codename:'REQUIEM',name:'—',role:'Unregistered',
-    desc:'No personnel file exists. Command denies the codename is in use. Field telemetry disagrees.',
+    id:'requiem',codename:'REAPER',name:'Korey',role:'Assault Specialist',
+    specialty:'Close Quarters Combat // Direct Action',file:'0x7A23B',
+    creed:'Young. Fast. Ruthless. Fear is a liability. Control is a weapon. Trust no one. Except your team.',
+    portrait:'assets/images/Character_profile/requiem-portrait.webp',
+    card:'assets/images/Character_profile/requiem.webp',
+    cardFallback:'assets/images/Character_profile/requiem.png',
+    desc:'Young, fast and off the books. Trades survivability for a kill rate command will not put in writing.',
     weapon:'revenant',
     hp:80,speed:220,armor:0,
     growth:{hp:5,speed:1.8,armor:.1},
