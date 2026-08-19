@@ -546,8 +546,9 @@ export class World{
       .map(room=>({room,d:Math.sqrt(dist2(room.x,room.y,from.x,from.y))}))
       .sort((a,b)=>a.d-b.d);
     if(!candidates.length)return{x:this.width/2,y:this.height/2};
-    // Around the 70th percentile of distance: a real trek, not a map crossing.
-    const pick=candidates[Math.min(candidates.length-1,Math.floor(candidates.length*.7))];
+    // A third of the way out: far enough to be a withdrawal under fire, close
+    // enough that the window is spent fighting through rather than sprinting.
+    const pick=candidates[Math.min(candidates.length-1,Math.floor(candidates.length*.35))];
     return{x:pick.room.x,y:pick.room.y};
   }
 

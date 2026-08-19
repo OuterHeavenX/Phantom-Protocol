@@ -97,10 +97,17 @@ export const PASSIVES=[
 export const PASSIVES_BY_ID=Object.fromEntries(PASSIVES.map(p=>[p.id,p]));
 
 // Baseline derived stats before operatives, passives and meta upgrades apply.
+// Baseline stat block every operative starts from, before operative profile,
+// passives, mastery and development-tree bonuses are folded in.
+//
+// `damage` sits above 1.0 deliberately. Measured against the spawn curves, a
+// starting weapon delivers well under its nominal DPS once cover, travel time
+// and target switching are accounted for, which left the opening minutes
+// unable to clear hostiles as fast as they arrived.
 export function baseStats(){
   return{
-    damage:1,fireRate:1,area:1,projectileSpeed:1,duration:1,amount:0,
-    maxHp:0,armor:0,regen:0,moveSpeed:1,magnet:1,xpGain:1,luck:1,cooldown:1,
+    damage:1.5,fireRate:1,area:1,projectileSpeed:1,duration:1,amount:0,
+    maxHp:25,armor:0,regen:0,moveSpeed:1,magnet:1,xpGain:1,luck:1,cooldown:1,
     critChance:.05,critDamage:1.8,dodge:0,lifesteal:0,revives:0
   };
 }

@@ -45,7 +45,8 @@ camera lead; auto-target can be disabled in settings.
 - **4 multi-phase command signatures (bosses)** with 12 distinct attack patterns.
 - **5 theatres**, each with its own palette, procedural layout generator, hazard set and
   hostile weighting.
-- **6 contract lengths × 6 threat levels**, with unlock gating.
+- **6 contract lengths × 6 threat levels**, with unlock gating. A new operator's first
+  deployment defaults to the five-minute probe on standard threat.
 - **20 command directives**, **61 achievements** and **12 intelligence files**, all with
   real, evaluable conditions tied to tracked statistics.
 - **11 field objective types** rolled three at a time into a live in-run checklist.

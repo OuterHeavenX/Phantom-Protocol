@@ -107,7 +107,10 @@ export const DURATIONS=[
 ];
 
 export const DIFFICULTIES=[
-  {id:0,name:'RECRUIT',hpMult:.75,damageMult:.7,densityMult:.8,speedMult:.92,jpMult:.7,xpMult:1.15,
+  // Thinner hostile density also means fewer kills, and kills are what fund
+  // levelling — without a compensating experience bonus the easier setting
+  // delivered an under-levelled operative to the same command signature.
+  {id:0,name:'RECRUIT',hpMult:.7,damageMult:.65,densityMult:.85,speedMult:.92,jpMult:.7,xpMult:1.45,
    desc:'Training parameters. Reduced hostile durability and output.',unlocked:true},
   {id:1,name:'OPERATIVE',hpMult:1,damageMult:1,densityMult:1,speedMult:1,jpMult:1,xpMult:1,
    desc:'Standard field conditions.',unlocked:true},

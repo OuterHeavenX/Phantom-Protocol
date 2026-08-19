@@ -60,7 +60,10 @@ export function defaultSave(){
   return{
     version:SAVE_VERSION,
     createdAt:Date.now(),
-    profile:{jp:0,credits:0,accountXp:0,callsign:'OPERATOR',lastOperative:'vesper',lastMap:'blacksite',lastDuration:10,lastDifficulty:1},
+    // A new operator's first deployment defaults to the five-minute probe
+    // rather than the ten-minute standard: it is the contract that teaches the
+    // loop, and it ends before the escalation curve gets serious.
+    profile:{jp:0,credits:0,accountXp:0,callsign:'OPERATOR',lastOperative:'vesper',lastMap:'blacksite',lastDuration:5,lastDifficulty:1},
     operatives,weapons,maps,difficulties,
     dev:{},
     achievements:{},

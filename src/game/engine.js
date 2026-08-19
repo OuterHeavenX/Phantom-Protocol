@@ -24,8 +24,20 @@ const FIXED_STEP=1/60;
 const MAX_STEPS=5;
 export const EXTRACTION_RADIUS=95;
 export const EXTRACTION_HOLD=2.5;
+// Movement bonus while the extraction window is open. Withdrawing across a
+// saturated sector on foot was reliably the deadliest part of a contract;
+// this makes the run for the beacon a sprint the operative can actually win.
+export const EXTRACTION_SPEED_BONUS=1.28;
 // Close enough for the operative's scanner to resolve a sealed chamber.
 export const VAULT_SCAN_RADIUS=330;
+
+// Baseline sustain, in HP per second, before any passive or development-tree
+// regeneration. Enough to recover from chip damage between engagements
+// without meaningfully blunting a burst.
+export const BASE_REGEN=.45;
+// Fraction of maximum health restored when an adaptation is taken, which ties
+// the sustain economy to the progression the player is already chasing.
+export const LEVEL_UP_HEAL=.07;
 
 // Field turrets. Every operative carries a rank 1 kit; the Deployment Kit
 // adaptation raises the rank, which is what turns 1x into 2x and 3x. Higher
@@ -403,8 +415,11 @@ export class Engine{
     }
     if(player.shieldTimer>0)player.shieldTimer-=dt;
 
-    // Regeneration from passives and the development tree.
-    const regen=(stats.regen||0)+(this.devBonuses.regen||0);
+    // Regeneration from passives and the development tree, on top of a small
+    // baseline. Without a baseline the only sustain in a contract was a 3%
+    // drop chance, so unavoidable chip damage was permanent and a long run
+    // was lost to attrition no matter how well it was played.
+    const regen=BASE_REGEN+(stats.regen||0)+(this.devBonuses.regen||0);
     if(regen>0&&player.hp<player.maxHp){
       player.regenAccumulator+=regen*dt;
       if(player.regenAccumulator>=1){
@@ -415,6 +430,7 @@ export class Engine{
     }
 
     let speed=player.baseSpeed*stats.moveSpeed;
+    if(this.extraction)speed*=EXTRACTION_SPEED_BONUS;
     // Terrain and status modifiers.
     const terrain=this.world.passiveHazardAt(player.x,player.y);
     if(terrain?.slow)speed*=1-terrain.slow;
@@ -553,12 +569,18 @@ export class Engine{
   spawnEnemy(archetype,x,y,options={}){
     if(this.enemies.length>=this.director.enemyCap)return null;
     const difficulty=this.difficulty;
-    const progress=this.director.progress;
+    // Escalation rather than contract progress: hostile durability tracks how
+    // long the operative has had to build a loadout, not what fraction of the
+    // contract has elapsed.
+    const progress=this.director.escalation;
     // Health and damage ramp with contract progress and difficulty. The
     // curve is deliberately shallow: hostile *count* is the primary pressure
     // source, so durability must not outrun the player's weapon scaling.
-    const hpScale=(1+progress*1.6)*difficulty.hpMult*(options.hpMult||1);
-    const damageScale=(1+progress*.8)*difficulty.damageMult*(options.damageMult||1);
+    // Progress scaling sits on top of archetype tier escalation, which already
+    // multiplies base health several times over across a contract. Stacking a
+    // steep curve on that outran the player's own damage growth outright.
+    const hpScale=(1+progress*1.05)*difficulty.hpMult*(options.hpMult||1);
+    const damageScale=(1+progress*.6)*difficulty.damageMult*(options.damageMult||1);
 
     const enemy={
       ...archetype,
@@ -1099,7 +1121,7 @@ export class Engine{
     const luck=this.stats.luck||1;
     this.spawnPickup('xp',enemy.x,enemy.y,enemy.xpValue);
     if(this.rng.next()<.11*luck)this.spawnPickup('credit',enemy.x,enemy.y,enemy.creditValue||1);
-    if(this.rng.next()<.032*luck)this.spawnPickup('health',enemy.x,enemy.y,0);
+    if(this.rng.next()<.075*luck)this.spawnPickup('health',enemy.x,enemy.y,0);
     if(this.rng.next()<.008*luck)this.spawnPickup('magnet',enemy.x,enemy.y,0);
     if(this.rng.next()<.006*luck)this.spawnPickup('bomb',enemy.x,enemy.y,0);
     if(enemy.elite){
@@ -1133,10 +1155,17 @@ export class Engine{
     // Boss durability tracks how strong the operative can plausibly be by the
     // time it appears: a 30-minute contract hands the player an evolved
     // loadout at level 40+, which deleted the old flat-HP bosses in seconds.
-    const lengthScale=1+Math.max(0,this.durationMinutes-5)/25*2.4;
+    // A five-minute probe reaches its command signature at roughly level 13
+    // with a partly-built loadout, where the old flat baseline took the whole
+    // remaining contract to chew through; a thirty-minute contract arrives
+    // with an evolved loadout that deleted it outright.
+    const lengthScale=.7+Math.max(0,this.durationMinutes-5)/25*2.4;
     this.boss=new Boss(def,point.x,point.y,{
       hpMult:this.difficulty.hpMult*(1+this.director.progress*.4)*lengthScale,
-      damageMult:this.difficulty.damageMult,
+      // Signature attacks land for 14-52 against an operative carrying roughly
+      // 125 health, so the encounter was decided in three or four connects
+      // regardless of how the rest of the contract had gone.
+      damageMult:this.difficulty.damageMult*.72,
       armorMult:1
     });
     this.onBossSpawn?.(this.boss);
@@ -2102,6 +2131,9 @@ export class Engine{
       this.onEvolution?.(evolution);
     }
 
+    // Taking an adaptation patches the operative up a little.
+    this.healPlayer(Math.round(this.player.maxHp*LEVEL_UP_HEAL),true);
+
     this.pendingLevelUps=Math.max(0,this.pendingLevelUps-1);
     this.audio.play('levelup',{volume:.8});
   }
@@ -2169,6 +2201,7 @@ export class Engine{
     this.extractionTimer=60;
     this.extractionPoint=this.world.extractionPoint(this.player);
     this.announce('EXTRACTION WINDOW OPEN // REACH THE BEACON','#f5d27a',4);
+    this.announce('EXFIL PROTOCOL // MOVEMENT BOOSTED','#8bff9b',3);
     this.audio.play('alarm',{volume:.9});
     this.fx.flash('#f5d27a',.3);
   }
