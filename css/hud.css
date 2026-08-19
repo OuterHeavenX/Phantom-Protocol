@@ -67,6 +67,7 @@
 
 /* ---- Campaign objective ------------------------------------------------- */
 
+.mission-objective[hidden]{display:none}
 .mission-objective{
   display:flex;justify-content:space-between;align-items:center;gap:12px;
   max-width:400px;padding:7px 11px;

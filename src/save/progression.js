@@ -148,6 +148,12 @@ export function evaluateProgression(save){
 
 const bump=(table,key,amount=1)=>{if(key!=null)table[key]=(table[key]||0)+amount};
 
+// Experience a weapon earns from one deployment. Weighted toward eliminations
+// so a weapon that carries a run out-ranks one that only chipped at things.
+export function weaponXpFor(weapon){
+  return Math.round((weapon.damage||0)*.05+(weapon.kills||0)*9+(weapon.level||0)*6);
+}
+
 // Folds one completed run's telemetry into the persistent save, then runs the
 // progression sweep. `run` is the summary object produced by the engine.
 export function commitRun(save,run){
@@ -199,6 +205,10 @@ export function commitRun(save,run){
     record.timesTaken=(record.timesTaken||0)+1;
     record.maxLevel=Math.max(record.maxLevel||0,weapon.level||0);
     record.kills=(record.kills||0)+(weapon.kills||0);
+    record.damage=(record.damage||0)+(weapon.damage||0);
+    // Weapon experience is account-wide, so a barrel earned on one operative
+    // is fitted for every operative who carries that weapon afterwards.
+    record.xp=(record.xp||0)+weaponXpFor(weapon);
   }
 
   const operative=save.operatives[run.operativeId];

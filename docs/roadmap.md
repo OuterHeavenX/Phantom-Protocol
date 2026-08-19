@@ -10,7 +10,8 @@ sessions, procedural operative portraits with silhouettes for unidentified perso
 sealed vaults hidden in every generated sector, and operative-planted field turrets with
 rank-scaled durability.
 
-Also shipped: ten theatres with per-theatre weather and authored landmark props, and a
+Also shipped: a Gunsmith with seven attachment slots, 35 attachments and account-wide
+weapon rank; ten theatres with per-theatre weather and authored landmark props, and a
 six-operation campaign with briefing dialogue, four mission objective types and
 progressive document reveals.
 
@@ -18,10 +19,12 @@ Remaining:
 
 1. Deterministic daily and weekly contracts built on the existing seeded RNG.
 2. A second development tree branch gated behind account level.
-3. Per-weapon secondary fire modes.
+3. Per-weapon secondary fire modes, as an eighth Gunsmith slot.
 4. Replay capture using the seeded, fixed-timestep simulation.
 5. Performance profiling on low-end mobile hardware.
 6. Vault variants beyond the loot-and-garrison pair — timed holds, terminal hacks.
 7. Turret variants (shield pylon, slow field) selectable from the deployment kit.
 8. A second campaign act following the CONTROL designation past trial eleven.
 9. Voice or typewriter pacing on briefing dialogue rather than a straight fade-in.
+10. Weapon camouflage and charm cosmetics earned at the higher weapon ranks.
+11. Saved Gunsmith presets, so one weapon can carry several named builds.

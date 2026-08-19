@@ -8,6 +8,7 @@ import {Engine} from './game/engine.js';
 import {Renderer} from './render/renderer.js';
 import {Input,isTouchDevice} from './core/input.js';
 import {audio} from './core/audio.js';
+import {resolveBuild} from './game/gunsmith.js';
 
 // Application entry point. Owns the top-level state machine (menu ⇄ run),
 // the render loop and the wiring between the simulation, the renderer and
@@ -82,6 +83,11 @@ function startRun(config){
     masteryXp:operativeRecord.masteryXp||0,
     // Campaign operation, when this run is a story mission.
     objective:config.operation?.objective,
+    // Primary weapon and its bench build, resolved into combat modifiers.
+    primary:config.primary?{
+      weaponId:config.primary.weapon.id,
+      mods:resolveBuild(config.primary.weapon,config.primary.build,config.primary.rank)
+    }:null,
     // Files a personnel cache can turn up in this run.
     discoverable:undiscoveredOperatives(save).map(op=>({id:op.id,codename:op.codename})),
     seed:Math.floor(Math.random()*1e9)

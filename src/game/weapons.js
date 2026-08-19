@@ -1,16 +1,21 @@
 import {ALL_WEAPON_FORMS,MAX_WEAPON_LEVEL,evolutionFor} from '../../data/weapons.js';
 import {PASSIVES_BY_ID,MAX_PASSIVE_LEVEL} from '../../data/passives.js';
 import {clamp,dist,dist2,normalize,TAU} from '../core/math.js';
+import {applyMods} from './gunsmith.js';
 
 // Weapon runtime. Every behavior declared in data/weapons.js has a concrete
 // implementation here; a weapon instance owns its own timers and any persistent
 // entities it spawns (orbiters, turrets, mines, phantoms).
 
 export class WeaponInstance{
-  constructor(defId,level=1){
+  constructor(defId,level=1,mods=null){
     this.def=ALL_WEAPON_FORMS[defId];
     this.id=defId;
     this.level=level;
+    // Gunsmith build modifiers, resolved once before the run starts. Only the
+    // weapon the operative deployed with carries them; weapons picked up as
+    // in-run adaptations are stock.
+    this.mods=mods||null;
     this.cooldown=0;
     this.kills=0;
     this.damageDealt=0;
@@ -34,7 +39,9 @@ export class WeaponInstance{
     }else if(typeof scale==='number'){
       value+=scale*(this.level-1);
     }
-    return value;
+    // The fitted build lands last, on top of level scaling, so an attachment
+    // reads the same way at level 1 and level 8.
+    return applyMods(this.mods,key,value);
   }
 
   // Damage after weapon level, global damage multipliers and weapon category.
@@ -69,7 +76,10 @@ export class WeaponInstance{
 
 function acquireTarget(mode,engine,weapon){
   const player=engine.player;
-  const range=weapon.stat('range',engine.stats)||900;
+  // An optic reaches for contacts beyond the weapon's own effective range:
+  // glass finds the target, the barrel decides what happens next.
+  const acquisition=weapon.mods?.optic?.acquisition||1;
+  const range=(weapon.stat('range',engine.stats)||900)*acquisition;
   const candidates=engine.enemyHash.query(player.x,player.y,range,targetScratch);
 
   switch(mode){
@@ -114,6 +124,16 @@ function acquireTarget(mode,engine,weapon){
   }
 }
 
+// Wraps acquisition so the renderer knows what the fitted optic is looking at.
+function acquireAndMark(mode,engine,weapon){
+  const target=acquireTarget(mode,engine,weapon);
+  if(weapon.mods?.optic&&target&&!target.dead){
+    engine.opticTarget=target;
+    engine.opticTargetAt=engine.elapsed;
+  }
+  return target;
+}
+
 const targetScratch=[];
 
 // Auto-target value weighting: lower means higher priority for the same
@@ -141,7 +161,7 @@ function fireDirection(engine,weapon,target){
 const BEHAVIORS={
   // Straight-line projectiles fanned by `spread`.
   projectile(weapon,engine,stats){
-    const target=acquireTarget(weapon.def.targeting,engine,weapon);
+    const target=acquireAndMark(weapon.def.targeting,engine,weapon);
     if(!target&&!engine.manualAim)return false;
     const dir=fireDirection(engine,weapon,target);
     const count=Math.max(1,Math.round(weapon.stat('count',stats)+stats.amount));
@@ -170,7 +190,7 @@ const BEHAVIORS={
 
   // Fires `count` rounds sequentially rather than as one volley.
   burst(weapon,engine,stats){
-    const target=acquireTarget(weapon.def.targeting,engine,weapon);
+    const target=acquireAndMark(weapon.def.targeting,engine,weapon);
     if(!target&&!engine.manualAim)return false;
     const count=Math.max(1,Math.round(weapon.stat('count',stats)+stats.amount));
     const delay=weapon.def.burstDelay||.075;
@@ -197,7 +217,7 @@ const BEHAVIORS={
 
   // Tight cone of short-lived pellets with damage falloff.
   shotgun(weapon,engine,stats){
-    const target=acquireTarget(weapon.def.targeting,engine,weapon);
+    const target=acquireAndMark(weapon.def.targeting,engine,weapon);
     if(!target&&!engine.manualAim)return false;
     const dir=fireDirection(engine,weapon,target);
     const baseAngle=Math.atan2(dir.y,dir.x);
@@ -226,7 +246,7 @@ const BEHAVIORS={
 
   // High-velocity piercing round; the evolved form detonates at the end.
   railshot(weapon,engine,stats){
-    const target=acquireTarget(weapon.def.targeting,engine,weapon);
+    const target=acquireAndMark(weapon.def.targeting,engine,weapon);
     if(!target&&!engine.manualAim)return false;
     const dir=fireDirection(engine,weapon,target);
     const angle=Math.atan2(dir.y,dir.x);
@@ -254,7 +274,7 @@ const BEHAVIORS={
 
   // Pierces everything on the line and optionally leaves a burning corridor.
   piercebolt(weapon,engine,stats){
-    const target=acquireTarget(weapon.def.targeting,engine,weapon);
+    const target=acquireAndMark(weapon.def.targeting,engine,weapon);
     const dir=fireDirection(engine,weapon,target);
     const angle=Math.atan2(dir.y,dir.x);
     const speed=weapon.stat('speed',stats)*stats.projectileSpeed;
@@ -281,7 +301,7 @@ const BEHAVIORS={
   lobbed(weapon,engine,stats){
     const count=Math.max(1,Math.round(weapon.stat('count',stats)+stats.amount));
     for(let i=0;i<count;i++){
-      const target=acquireTarget(weapon.def.targeting,engine,weapon);
+      const target=acquireAndMark(weapon.def.targeting,engine,weapon);
       const angle=target
         ?Math.atan2(target.y-engine.player.y,target.x-engine.player.x)+(engine.rng.next()-.5)*.5
         :engine.rng.angle();
@@ -591,10 +611,10 @@ export class Loadout{
     this.dirty=true;
   }
 
-  addWeapon(id){
+  addWeapon(id,mods=null){
     const existing=this.weapons.find(w=>w.id===id);
     if(existing){existing.levelUp();this.dirty=true;return existing}
-    const instance=new WeaponInstance(id,1);
+    const instance=new WeaponInstance(id,1,mods);
     this.weapons.push(instance);
     this.dirty=true;
     return instance;

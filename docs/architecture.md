@@ -114,3 +114,21 @@ covers both the authored and synthesized paths.
 Failure is expected rather than exceptional: an unsupported codec, a missing file, or a
 blocked autoplay call all fall back to the synthesized bed. Nothing about a music problem
 is allowed to leave a run silent.
+
+## Gunsmith
+
+`data/attachments.js` declares slots and attachments; `src/game/gunsmith.js` resolves a
+saved build into one modifier table of `mult` and `add` entries. That table is applied in
+exactly one place — `WeaponInstance.stat` — which is the choke point every weapon stat in
+the simulation already resolved through. An attachment therefore affects all seventeen
+firing behaviours without any of them knowing attachments exist.
+
+Two rules keep the system honest. `MODIFIABLE` whitelists the stats an attachment may
+touch, so a typo in the registry cannot quietly introduce a new stat. And `sanitizeBuild`
+drops any slot referencing an attachment that is unknown, wrong-slotted, illegal for the
+weapon's category, or above its current rank — a save edited by hand, or carried across a
+data change, can never equip something unearned.
+
+Only the weapon the operative deployed with carries a build. Weapons picked up as in-run
+adaptations are stock, which keeps the bench a pre-mission decision rather than something
+the adaptation screen has to model.

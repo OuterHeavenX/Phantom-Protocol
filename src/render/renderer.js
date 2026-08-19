@@ -118,6 +118,7 @@ export class Renderer{
     this.drawExtractionBeacon(ctx);
     this.drawVaultMarkers(ctx);
     this.drawMissionMarkers(ctx);
+    this.drawOptic(ctx);
 
     ctx.restore();
 
@@ -878,6 +879,88 @@ export class Renderer{
       );
       ctx.restore();
     }
+  }
+
+  // Fitted optic: a reticle on the acquired contact, and a sight line back to
+  // the operative for glass that ranges rather than just steadies.
+  drawOptic(ctx){
+    const engine=this.engine;
+    const optic=engine.opticProfile;
+    const target=engine.opticTarget;
+    if(!optic||!optic.reticle||!target||target.dead)return;
+    const camera=engine.camera;
+    if(!camera.isVisible(target.x,target.y,80))return;
+
+    const time=engine.elapsed;
+    const color=engine.operative.color;
+    const r=(target.radius||14)+9;
+    ctx.save();
+    ctx.strokeStyle=withAlpha(color,.85);
+    ctx.lineWidth=1.6;
+
+    switch(optic.reticle){
+      case 'dot':
+        // Reflex: a single illuminated dot, nothing around it.
+        ctx.fillStyle=withAlpha(color,.9);
+        ctx.beginPath();ctx.arc(target.x,target.y,2.6,0,TAU);ctx.fill();
+        ctx.globalAlpha=.5;
+        ctx.beginPath();ctx.arc(target.x,target.y,r*.55,0,TAU);ctx.stroke();
+        break;
+      case 'holo':{
+        // Holographic ring with a broken circle around the contact.
+        ctx.globalAlpha=.8;
+        for(let i=0;i<4;i++){
+          const a=i*(TAU/4)+time*.4;
+          ctx.beginPath();ctx.arc(target.x,target.y,r,a,a+.7);ctx.stroke();
+        }
+        ctx.fillStyle=withAlpha(color,.9);
+        ctx.beginPath();ctx.arc(target.x,target.y,2,0,TAU);ctx.fill();
+        break;
+      }
+      case 'thermal':{
+        // Thermal box with corner ticks, the way a marked contact reads.
+        const s=r*.95;
+        ctx.globalAlpha=.85;
+        ctx.beginPath();
+        for(const [sx,sy] of [[-1,-1],[1,-1],[-1,1],[1,1]]){
+          ctx.moveTo(target.x+sx*s,target.y+sy*s-sy*s*.45);
+          ctx.lineTo(target.x+sx*s,target.y+sy*s);
+          ctx.lineTo(target.x+sx*s-sx*s*.45,target.y+sy*s);
+        }
+        ctx.stroke();
+        break;
+      }
+      default:{
+        // Ranging crosshair with a gap at the centre so the contact stays read.
+        ctx.globalAlpha=.85;
+        ctx.beginPath();ctx.arc(target.x,target.y,r,0,TAU);ctx.stroke();
+        ctx.beginPath();
+        for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+          ctx.moveTo(target.x+dx*r*.45,target.y+dy*r*.45);
+          ctx.lineTo(target.x+dx*r*1.35,target.y+dy*r*1.35);
+        }
+        ctx.stroke();
+        break;
+      }
+    }
+
+    // Ranging glass draws the sight line and the distance to the contact.
+    if(optic.marks){
+      const player=engine.player;
+      ctx.globalAlpha=.22;
+      ctx.setLineDash([6,9]);
+      ctx.beginPath();
+      ctx.moveTo(player.x,player.y);
+      ctx.lineTo(target.x,target.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha=.7;
+      ctx.fillStyle=withAlpha(color,.9);
+      ctx.font='bold 9px ui-monospace,monospace';
+      ctx.textAlign='center';
+      ctx.fillText(`${Math.round(dist(player.x,player.y,target.x,target.y))}m`,target.x,target.y-r-9);
+    }
+    ctx.restore();
   }
 
   // Campaign objective markers: data caches and the escorted asset.

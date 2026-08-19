@@ -56,6 +56,8 @@ camera lead; auto-target can be disabled in settings.
 - **20 command directives**, **61 achievements** and **12 intelligence files**, all with
   real, evaluable conditions tied to tracked statistics.
 - **11 field objective types** rolled three at a time into a live in-run checklist.
+- **35 weapon attachments** across seven slots, unlocked by weapon rank and fitted at the
+  Gunsmith bench.
 - **Sealed vaults** hidden in every generated sector — 2 to 3 per run, revealed by
   proximity scan, opened by breaching the door, and paid out in caches, credits and
   personnel files. Roughly 40% come with a garrison sealed in alongside the loot.
@@ -113,6 +115,32 @@ are implemented in `src/game/mission.js` and layered over the survival contract:
 marked data caches, locate an asset and walk them to the beacon alive, or fight a single
 prototype with the director muted and no reinforcement on either side. An operation with
 an unmet objective cannot extract — the beacon refuses and says why.
+
+**Gunsmith.** Every weapon carries seven slots — optic, barrel, muzzle, underbarrel,
+magazine, stock and internal tuning — whose labels change with the weapon's category, so
+a drone fits a sensor and an emitter rather than a scope and a barrel. Attachments are
+declared in `data/attachments.js` as `mult` and `add` deltas and resolved by
+`src/game/gunsmith.js` into one modifier table, applied at `WeaponInstance.stat` — the
+single point every weapon stat in the simulation resolves through, so one attachment
+affects a railshot and an orbiting drone by the same rule. Almost every attachment
+carries a drawback: a slot the player can fill with a pure upgrade is a slot with one
+correct answer.
+
+Optics do something visible rather than only shifting numbers. A fitted optic extends
+target acquisition beyond the weapon's own effective range, draws its reticle on the
+acquired contact — a reflex dot, a holographic ring, a thermal box, a ranging crosshair —
+and ranging glass adds a sight line and the distance to target. The lock persists between
+shots rather than being rebuilt each frame.
+
+**Weapon rank.** Field experience belongs to the weapon, not the operative: a barrel
+earned on the Needle-7 is fitted on the Needle-7 for every operative who carries it.
+Weapons rank 1 to 20 on experience weighted toward eliminations, and each rank opens
+another attachment. The bench shows what is fitted, what it does to the numbers, and what
+is still to earn.
+
+**Loadout.** A primary weapon and its bench build are selected before deployment, on both
+the deploy screen and the campaign briefing. Without a selection the operative carries
+their own issue weapon, stock.
 
 **Field objectives.** Three objectives are always live (`src/game/objectives.js`),
 drawn from eleven templates and scaled to the operative's current level. Clearing one

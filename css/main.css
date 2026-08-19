@@ -713,3 +713,102 @@ input[type=range]::-moz-range-thumb{
   .op-action .btn{width:100%}
   .dialogue .line{grid-template-columns:1fr;gap:4px}
 }
+
+/* ---- Gunsmith ----------------------------------------------------------- */
+
+.gs-layout{display:grid;grid-template-columns:210px 1fr;gap:18px;align-items:start}
+
+.gs-rack{display:flex;flex-direction:column;gap:4px;position:sticky;top:0}
+.gs-rack .eyebrow{margin-bottom:6px}
+.gs-rack-item{
+  display:grid;grid-template-columns:34px 1fr auto;align-items:center;gap:8px;
+  border:1px solid var(--line);border-left:2px solid var(--c,var(--line));
+  background:rgba(6,17,24,.55);padding:8px 9px;cursor:pointer;text-align:left;
+  transition:.14s ease;
+}
+.gs-rack-item:hover{background:rgba(16,44,53,.7);transform:translateX(3px)}
+.gs-rack-item.active{border-color:var(--c);background:rgba(16,44,53,.85)}
+.gs-rack-glyph{
+  display:grid;place-items:center;height:26px;
+  border:1px solid var(--line);color:var(--c,var(--accent));font-size:9px;
+}
+.gs-rack-name{font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gs-rack-rank{font-size:9px;color:var(--muted);letter-spacing:.08em}
+
+.gs-head{
+  display:flex;justify-content:space-between;align-items:flex-start;gap:20px;
+  border-bottom:1px solid var(--line);border-left:3px solid var(--c,var(--accent));
+  padding:0 0 14px 14px;margin-bottom:16px;
+}
+.gs-head h3{font-size:19px;margin:2px 0 4px;color:var(--c,var(--ink))}
+.gs-head p{font-size:11px;max-width:52ch}
+.gs-rank{min-width:190px;text-align:right}
+.gs-rank b{font-size:11px;letter-spacing:.14em;color:var(--gold)}
+
+.gs-columns{display:grid;grid-template-columns:1fr 260px;gap:18px;align-items:start}
+.gs-slots{display:flex;flex-direction:column;gap:14px}
+
+.gs-slot-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.gs-next{font-style:normal;font-size:9px;letter-spacing:.12em;color:var(--muted)}
+.gs-next.done{color:var(--good)}
+.gs-options{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:6px}
+.gs-option{
+  display:flex;flex-direction:column;gap:3px;text-align:left;cursor:pointer;
+  border:1px solid var(--line);background:rgba(6,17,24,.5);
+  padding:8px 10px;transition:.14s ease;
+}
+.gs-option:hover:not(:disabled){border-color:var(--accent);background:rgba(16,44,53,.7)}
+.gs-option b{font-size:11px}
+.gs-option span{font-size:9.5px;color:var(--muted);line-height:1.5}
+.gs-option.active{border-color:var(--accent);background:rgba(24,80,78,.45)}
+.gs-option.active b{color:var(--accent)}
+.gs-option.locked{opacity:.4;cursor:not-allowed}
+
+.gs-readout{
+  border:1px solid var(--line);background:rgba(4,12,18,.6);
+  padding:14px;position:sticky;top:0;
+}
+.gs-stats{display:flex;flex-direction:column;gap:3px;margin:8px 0 14px}
+.gs-stat{
+  display:grid;grid-template-columns:1fr auto 52px;align-items:baseline;gap:8px;
+  font-size:10px;padding:3px 0;border-bottom:1px solid rgba(118,231,212,.07);
+}
+.gs-stat span{color:var(--muted);letter-spacing:.1em}
+.gs-stat b{color:#eafffc;font-variant-numeric:tabular-nums}
+.gs-stat i{font-style:normal;font-size:9px;text-align:right;color:var(--muted)}
+.gs-stat.better i{color:var(--good)}
+.gs-stat.worse i{color:var(--warn)}
+
+.gs-profile{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.gs-axis{display:grid;grid-template-columns:56px 1fr;align-items:center;gap:8px}
+.gs-axis span{font-size:8.5px;color:var(--muted);letter-spacing:.12em}
+.gs-axis .bar{margin:0}
+
+.gs-record{display:flex;flex-direction:column;gap:3px;font-size:9.5px;color:var(--muted)}
+.gs-record b{color:#eafffc;float:right}
+.gs-primary-note{display:block;margin-top:8px;font-size:9.5px;color:var(--good)}
+
+/* Loadout strip on the deploy screen and the campaign briefing. */
+.primary-fitted{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.fitted-tag{
+  font-size:9px;letter-spacing:.06em;padding:3px 7px;
+  border:1px solid var(--line);color:var(--accent);
+  background:rgba(118,231,212,.06);
+}
+.briefing-loadout{
+  border:1px solid var(--line);padding:14px;margin-bottom:20px;
+  background:rgba(6,16,22,.45);
+}
+.briefing-loadout .field-group{margin:0}
+
+@media(max-width:900px){
+  .gs-layout{grid-template-columns:1fr}
+  .gs-rack{flex-direction:row;overflow-x:auto;position:static}
+  .gs-rack .eyebrow{display:none}
+  .gs-rack-item{flex:0 0 auto;grid-template-columns:auto auto;gap:6px}
+  .gs-rack-name{display:none}
+  .gs-columns{grid-template-columns:1fr}
+  .gs-readout{position:static}
+  .gs-head{flex-direction:column;gap:12px}
+  .gs-rank{text-align:left;min-width:0;width:100%}
+}

@@ -38,6 +38,12 @@ export function defaultSettings(){
   };
 }
 
+// Weapon records are account-wide: experience earned on a weapon belongs to
+// the weapon, not to whoever was carrying it.
+function defaultWeaponRecord(unlocked=false){
+  return{unlocked,maxLevel:0,timesTaken:0,kills:0,xp:0,damage:0,build:null,seenAttachments:[]};
+}
+
 function defaultOperativeRecord(){
   return{unlocked:false,discovered:false,masteryXp:0,runs:0,wins:0,kills:0,bestTime:0,upgrades:{},recruitment:null};
 }
@@ -50,7 +56,7 @@ export function defaultSave(){
   const weapons={};
   for(const w of WEAPONS){
     // The first eight weapons ship unlocked; the rest are earned.
-    weapons[w.id]={unlocked:WEAPONS.indexOf(w)<8,maxLevel:0,timesTaken:0,kills:0};
+    weapons[w.id]=defaultWeaponRecord(WEAPONS.indexOf(w)<8);
   }
   const maps={};
   for(const m of MAPS)maps[m.id]={unlocked:!!m.unlocked,clears:0,bestTime:0};
@@ -63,7 +69,7 @@ export function defaultSave(){
     // A new operator's first deployment defaults to the five-minute probe
     // rather than the ten-minute standard: it is the contract that teaches the
     // loop, and it ends before the escalation curve gets serious.
-    profile:{jp:0,credits:0,accountXp:0,callsign:'OPERATOR',lastOperative:'vesper',lastMap:'blacksite',lastDuration:5,lastDifficulty:1},
+    profile:{jp:0,credits:0,accountXp:0,callsign:'OPERATOR',lastOperative:'vesper',lastMap:'blacksite',lastDuration:5,lastDifficulty:1,lastPrimary:null},
     operatives,weapons,maps,difficulties,
     dev:{},
     campaign:{},
@@ -157,7 +163,13 @@ export function normalizeSave(raw){
     if(op.unlocked)merged.operatives[op.id].unlocked=true;
   }
   for(const [index,w] of WEAPONS.entries()){
-    if(!merged.weapons[w.id])merged.weapons[w.id]={unlocked:index<8,maxLevel:0,timesTaken:0,kills:0};
+    if(!merged.weapons[w.id])merged.weapons[w.id]=defaultWeaponRecord(index<8);
+    // Records written before the Gunsmith shipped have no experience fields.
+    const record=merged.weapons[w.id];
+    if(typeof record.xp!=='number')record.xp=0;
+    if(typeof record.damage!=='number')record.damage=0;
+    if(!Array.isArray(record.seenAttachments))record.seenAttachments=[];
+    if(record.build===undefined)record.build=null;
   }
   for(const m of MAPS){
     if(!merged.maps[m.id])merged.maps[m.id]={unlocked:!!m.unlocked,clears:0,bestTime:0};

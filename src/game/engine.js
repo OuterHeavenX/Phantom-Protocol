@@ -32,6 +32,10 @@ export const EXTRACTION_SPEED_BONUS=1.28;
 // Close enough for the operative's scanner to resolve a sealed chamber.
 export const VAULT_SCAN_RADIUS=330;
 
+// How long a fitted optic keeps its lock on a contact after last acquiring it.
+// Comfortably longer than any weapon's cycle, so the reticle reads as steady.
+export const OPTIC_LOCK_HOLD=1.4;
+
 // Baseline sustain, in HP per second, before any passive or development-tree
 // regeneration. Enough to recover from chip damage between engagements
 // without meaningfully blunting a burst.
@@ -225,7 +229,21 @@ export class Engine{
     }
 
     this.loadout=new Loadout(this,base);
-    this.loadout.addWeapon(op.weapon);
+    // The operative deploys with the weapon selected in the loadout screen,
+    // fitted as it was left on the bench; without a selection they carry their
+    // own issue weapon, stock.
+    const primary=this.config.primary;
+    this.primaryId=primary?.weaponId||op.weapon;
+    this.primaryMods=primary?.mods||null;
+    this.loadout.addWeapon(this.primaryId,this.primaryMods);
+    // An optic changes how far the loadout acquires targets, and a suppressor
+    // changes how quickly hostiles resolve where the fire came from.
+    this.opticProfile=this.primaryMods?.optic||null;
+    this.opticTarget=null;
+    this.opticTargetAt=0;
+    if(this.primaryMods?.field?.detection){
+      this.detectionMult*=1+this.primaryMods.field.detection;
+    }
     // "Expanded Loadout" grants a second starting weapon.
     if(dev.startingWeapons&&this.config.secondWeapon){
       this.loadout.addWeapon(this.config.secondWeapon);
@@ -300,6 +318,12 @@ export class Engine{
     this.dt=dt;
 
     this.updateTimers(dt);
+    // The optic holds its lock between shots. Clearing it every step would
+    // show the reticle on the one frame in forty the weapon happens to fire,
+    // so it persists until the contact dies or the lock goes stale.
+    if(this.opticTarget&&(this.opticTarget.dead||this.elapsed-this.opticTargetAt>OPTIC_LOCK_HOLD)){
+      this.opticTarget=null;
+    }
     this.updateInput(dt,input);
     this.rebuildHashes();
     this.world.update(dt,this);

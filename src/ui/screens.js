@@ -15,6 +15,13 @@ import {
 } from '../save/progression.js';
 import {portraitSvg} from '../render/portraits.js';
 import {CAMPAIGN,OBJECTIVE_TYPES,nextOperation,campaignProgress,operationUnlocked} from '../../data/campaign.js';
+import {
+  SLOTS,slotLabel,attachmentsFor,ATTACHMENTS_BY_ID,defaultBuild,MAX_WEAPON_RANK
+} from '../../data/attachments.js';
+import {
+  resolveBuild,sanitizeBuild,previewStats,buildProfile,
+  weaponRank,weaponRankProgress,attachmentUnlocked
+} from '../game/gunsmith.js';
 import {saveGame,exportSave,importSave,resetSave,defaultSettings} from '../save/storage.js';
 import {formatDuration,formatNumber,formatTime,clamp} from '../core/math.js';
 import {MenuBackground} from './menuBackground.js';
@@ -106,6 +113,7 @@ export class Screens{
       ['CAMPAIGN','Story operations and recovered documents','campaign'],
       ['DEPLOY','Configure and launch an operation','deploy'],
       ['OPERATIVES','Roster, mastery and dossiers','operatives'],
+      ['GUNSMITH','Fit optics, barrels and internals','gunsmith'],
       ['ARMORY','Weapons, support systems, evolutions','armory'],
       ['DEVELOPMENT','Spend job points on permanent upgrades','development'],
       ['DIRECTIVES','Milestones and achievements','directives'],
@@ -200,6 +208,7 @@ export class Screens{
   route(name){
     const routes={
       campaign:()=>this.campaign(),
+      gunsmith:()=>this.gunsmith(),
       deploy:()=>this.deploy(),operatives:()=>this.operatives(),
       armory:()=>this.armory(),development:()=>this.development(),
       directives:()=>this.directives(),intel:()=>this.intel(),
@@ -326,6 +335,10 @@ export class Screens{
               <span>THREAT <b>${escape(DIFFICULTIES_BY_ID[op.difficulty]?.name||'')}</b></span>
             </div>
           </div>
+          <div class="briefing-loadout">
+            ${this.primaryPickerMarkup(OPERATIVES.find(o=>o.id===(this.save.profile.lastOperative||'vesper')))}
+          </div>
+
           <div class="button-row center">
             <button class="btn primary large" id="launchOp">DEPLOY</button>
             <button class="btn" id="abortOp">BACK</button>
@@ -333,6 +346,7 @@ export class Screens{
         </div>
       </div>`,{scan:false});
 
+    this.wirePrimaryPicker(()=>this.briefing(op));
     root().querySelector('#abortOp').addEventListener('click',()=>{this.click();this.campaign()});
     root().querySelector('#launchOp').addEventListener('click',()=>{
       this.audio?.play('confirm');
@@ -344,6 +358,7 @@ export class Screens{
         duration:op.duration,
         durationSpec:DURATIONS.find(d=>d.minutes===op.duration),
         difficulty:DIFFICULTIES_BY_ID[op.difficulty],
+        primary:this.currentPrimary(),
         operation:op
       });
     });
@@ -393,6 +408,235 @@ export class Screens{
     });
   }
 
+
+  // The primary weapon carried into a run, with its bench build. Falls back to
+  // the operative's own issue weapon when nothing has been selected.
+  currentPrimary(){
+    const save=this.save;
+    const stored=save.profile.lastPrimary;
+    const weapon=stored&&WEAPONS.find(w=>w.id===stored.weaponId);
+    if(!weapon||!save.weapons[weapon.id]?.unlocked)return null;
+    const record=save.weapons[weapon.id];
+    const rank=weaponRank(record);
+    return{weapon,record,rank,build:sanitizeBuild(weapon,stored.build||record.build,rank)};
+  }
+
+  // Markup for the loadout strip shown before deployment.
+  primaryPickerMarkup(operative){
+    const save=this.save;
+    const owned=WEAPONS.filter(w=>save.weapons[w.id]?.unlocked);
+    const primary=this.currentPrimary();
+    const issue=WEAPONS.find(w=>w.id===operative?.weapon);
+    return `<div class="field-group">
+      <label class="eyebrow">PRIMARY WEAPON</label>
+      <div class="chip-row" id="primaryChips">
+        <button class="chip small ${primary?'':'active'}" data-primary="">
+          <b>ISSUE</b><span>${escape(issue?.name||'Operative default')}</span>
+        </button>
+        ${owned.map(w=>{
+          const rank=weaponRank(save.weapons[w.id]);
+          return `<button class="chip small ${primary?.weapon.id===w.id?'active':''}" data-primary="${w.id}"
+                    style="--c:${WEAPON_RARITY[w.rarity]||'#9fb6b8'}">
+            <b>${escape(w.name)}</b><span>RANK ${rank}</span>
+          </button>`;
+        }).join('')}
+      </div>
+      ${primary?`<div class="primary-fitted">
+        ${SLOTS.map(slot=>{
+          const fitted=ATTACHMENTS_BY_ID[primary.build[slot.id]];
+          if(!fitted||fitted.rank<=1)return '';
+          return `<span class="fitted-tag" title="${escape(fitted.desc)}">${escape(fitted.name)}</span>`;
+        }).join('')||'<span class="muted small">Stock configuration.</span>'}
+      </div>`:''}
+    </div>`;
+  }
+
+  wirePrimaryPicker(rerender){
+    root().querySelectorAll('[data-primary]').forEach(button=>{
+      button.addEventListener('click',()=>{
+        this.click();
+        const id=button.dataset.primary;
+        if(!id){
+          this.save.profile.lastPrimary=null;
+        }else{
+          const weapon=WEAPONS.find(w=>w.id===id);
+          const record=this.save.weapons[id];
+          this.save.profile.lastPrimary={
+            weaponId:id,
+            build:record.build||defaultBuild(weapon)
+          };
+        }
+        this.persist();
+        rerender();
+      });
+    });
+  }
+
+  // ---- gunsmith ----------------------------------------------------------
+
+  // The bench. Left: which weapon. Right: what is fitted to it, what that
+  // does to the numbers, and what is still to earn.
+  gunsmith(weaponId){
+    const save=this.save;
+    const owned=WEAPONS.filter(w=>save.weapons[w.id]?.unlocked);
+    if(!owned.length)return this.menu();
+
+    this.benchWeapon=weaponId||this.benchWeapon||save.profile.lastPrimary?.weaponId||owned[0].id;
+    if(!owned.find(w=>w.id===this.benchWeapon))this.benchWeapon=owned[0].id;
+
+    const weapon=WEAPONS.find(w=>w.id===this.benchWeapon);
+    const record=save.weapons[weapon.id];
+    const rank=weaponRank(record);
+    const progress=weaponRankProgress(record);
+    const build=sanitizeBuild(weapon,record.build,rank);
+    const stats=previewStats(weapon,build,rank);
+    const profile=buildProfile(weapon,build,rank);
+    const rarity=WEAPON_RARITY[weapon.rarity]||'#9fb6b8';
+
+    const statRow=entry=>{
+      const fmt=v=>entry.key==='cooldown'?`${v.toFixed(2)}s`:
+                   entry.key==='spread'?v.toFixed(3):
+                   Number.isInteger(v)?String(v):v.toFixed(1);
+      const cls=entry.better?'better':entry.worse?'worse':'';
+      const pct=Math.round(entry.delta*100);
+      return `<div class="gs-stat ${cls}">
+        <span>${entry.key.toUpperCase()}</span>
+        <b>${fmt(entry.built)}</b>
+        ${pct?`<i>${pct>0?'+':''}${pct}%</i>`:'<i></i>'}
+      </div>`;
+    };
+
+    const bar=(label,value)=>`
+      <div class="gs-axis"><span>${label}</span>
+        <div class="bar mini"><i style="width:${Math.round(value*100)}%"></i></div>
+      </div>`;
+
+    this.shell(this.panel('GUNSMITH',
+      'Field experience is held by the weapon, not the operative. Anything earned here is fitted for everyone who carries it.',
+      `<div class="gs-layout">
+        <aside class="gs-rack">
+          <span class="eyebrow">RACK</span>
+          ${owned.map(w=>{
+            const r=weaponRank(save.weapons[w.id]);
+            return `<button class="gs-rack-item ${w.id===weapon.id?'active':''}" data-bench="${w.id}"
+                      style="--c:${WEAPON_RARITY[w.rarity]||'#9fb6b8'}">
+              <span class="gs-rack-glyph">${w.short}</span>
+              <span class="gs-rack-name">${escape(w.name)}</span>
+              <span class="gs-rack-rank">R${r}</span>
+            </button>`;
+          }).join('')}
+        </aside>
+
+        <section class="gs-bench">
+          <header class="gs-head" style="--c:${rarity}">
+            <div>
+              <span class="eyebrow">${weapon.category.toUpperCase()} · ${weapon.rarity.toUpperCase()}</span>
+              <h3>${escape(weapon.name)}</h3>
+              <p class="muted">${escape(weapon.desc)}</p>
+            </div>
+            <div class="gs-rank">
+              <b>RANK ${rank}${rank>=MAX_WEAPON_RANK?' // MAX':''}</b>
+              <div class="bar mini"><i style="width:${progress.pct*100}%"></i></div>
+              <span class="progress-text">${progress.max?'Fully ranked':
+                `${formatNumber(progress.current)} / ${formatNumber(progress.needed)} XP`}</span>
+            </div>
+          </header>
+
+          <div class="gs-columns">
+            <div class="gs-slots">
+              ${SLOTS.map(slot=>{
+                const fitted=ATTACHMENTS_BY_ID[build[slot.id]];
+                const pool=attachmentsFor(slot.id,weapon.category);
+                const nextLocked=pool.find(a=>!attachmentUnlocked(a,rank));
+                return `<div class="gs-slot" data-slot="${slot.id}">
+                  <div class="gs-slot-head">
+                    <span class="eyebrow">${slotLabel(slot.id,weapon.category)}</span>
+                    ${nextLocked?`<i class="gs-next">NEXT R${nextLocked.rank}</i>`:'<i class="gs-next done">COMPLETE</i>'}
+                  </div>
+                  <div class="gs-options">
+                    ${pool.map(option=>{
+                      const unlocked=attachmentUnlocked(option,rank);
+                      const active=fitted?.id===option.id;
+                      return `<button class="gs-option ${active?'active':''} ${unlocked?'':'locked'}"
+                                data-fit="${option.id}" data-slot="${slot.id}"
+                                ${unlocked?'':'disabled'}
+                                title="${escape(option.desc)}">
+                        <b>${escape(option.name)}</b>
+                        <span>${unlocked?escape(option.desc):`Locked · rank ${option.rank}`}</span>
+                      </button>`;
+                    }).join('')}
+                  </div>
+                </div>`;
+              }).join('')}
+            </div>
+
+            <aside class="gs-readout">
+              <span class="eyebrow">AS BUILT</span>
+              <div class="gs-stats">${stats.map(statRow).join('')}</div>
+              <div class="gs-profile">
+                ${bar('POWER',profile.power)}
+                ${bar('RATE',profile.rate)}
+                ${bar('REACH',profile.reach)}
+                ${bar('CONTROL',profile.control)}
+              </div>
+              <div class="gs-record">
+                <span>ELIMINATIONS <b>${formatNumber(record.kills||0)}</b></span>
+                <span>DEPLOYMENTS <b>${record.timesTaken||0}</b></span>
+                <span>TOTAL XP <b>${formatNumber(record.xp||0)}</b></span>
+              </div>
+              <div class="button-row">
+                <button class="btn small" id="gsReset">STRIP TO STOCK</button>
+                <button class="btn small primary" id="gsPrimary">SET AS PRIMARY</button>
+              </div>
+              ${save.profile.lastPrimary?.weaponId===weapon.id
+                ? '<span class="gs-primary-note">Currently deploying with this weapon.</span>':''}
+            </aside>
+          </div>
+        </section>
+      </div>`,{eyebrow:'WEAPON BENCH',wide:true}));
+
+    this.wireBack();
+
+    root().querySelectorAll('[data-bench]').forEach(button=>{
+      button.addEventListener('click',()=>{this.click();this.gunsmith(button.dataset.bench)});
+    });
+
+    root().querySelectorAll('[data-fit]').forEach(button=>{
+      button.addEventListener('click',()=>{
+        if(button.disabled)return;
+        this.audio?.play('tech');
+        const next={...build,[button.dataset.slot]:button.dataset.fit};
+        record.build=next;
+        // Fitting an attachment marks it seen, which clears its "new" badge.
+        record.seenAttachments=[...new Set([...(record.seenAttachments||[]),button.dataset.fit])];
+        // The primary loadout follows the bench, so a change here is what
+        // deploys without needing to be confirmed twice.
+        if(save.profile.lastPrimary?.weaponId===weapon.id){
+          save.profile.lastPrimary={weaponId:weapon.id,build:next};
+        }
+        this.persist();
+        this.gunsmith(weapon.id);
+      });
+    });
+
+    root().querySelector('#gsReset')?.addEventListener('click',()=>{
+      this.click();
+      record.build=defaultBuild(weapon);
+      if(save.profile.lastPrimary?.weaponId===weapon.id){
+        save.profile.lastPrimary={weaponId:weapon.id,build:record.build};
+      }
+      this.persist();
+      this.gunsmith(weapon.id);
+    });
+
+    root().querySelector('#gsPrimary')?.addEventListener('click',()=>{
+      this.audio?.play('confirm');
+      save.profile.lastPrimary={weaponId:weapon.id,build:record.build||defaultBuild(weapon)};
+      this.persist();
+      this.gunsmith(weapon.id);
+    });
+  }
+
   // ---- deploy ------------------------------------------------------------
 
   deploy(){
@@ -419,6 +663,8 @@ export class Screens{
                 </button>`).join('')}
             </div>
           </div>
+
+          ${this.primaryPickerMarkup(OPERATIVES.find(o=>o.id===this.deployConfig.operative))}
 
           <div class="field-group">
             <label class="eyebrow">THEATRE</label>
@@ -477,6 +723,7 @@ export class Screens{
         });
       });
     };
+    this.wirePrimaryPicker(()=>this.deploy());
     bind('[data-op]','op','operative');
     bind('[data-map]','map','map');
     bind('[data-dur]','dur','duration',Number);
@@ -496,7 +743,8 @@ export class Screens{
         map:MAPS.find(m=>m.id===config.map),
         duration:config.duration,
         durationSpec:DURATIONS.find(d=>d.minutes===config.duration),
-        difficulty:DIFFICULTIES_BY_ID[config.difficulty]
+        difficulty:DIFFICULTIES_BY_ID[config.difficulty],
+        primary:this.currentPrimary()
       });
     });
   }
