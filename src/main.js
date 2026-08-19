@@ -161,7 +161,13 @@ function startRun(config){
   };
   engine.onEvolution=()=>{};
 
-  audio.unlock().then(()=>audio.startMusic(config.map.music||'blacksite'));
+  // Music is chosen by operation first so a campaign track plays on its own
+  // operation, then by theatre so the same piece covers free deployment there.
+  // `fallback` names the synthesized bed for everything without a track.
+  audio.unlock().then(()=>audio.startMusic(
+    config.operation?.id||config.map.id,
+    {fallback:config.map.music||'blacksite'}
+  ));
 
   session.last=performance.now();
   session.raf=requestAnimationFrame(tick);

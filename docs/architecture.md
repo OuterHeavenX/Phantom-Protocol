@@ -96,3 +96,21 @@ Achievement, directive and unlock state is **derived**, not stored as hand-maint
 flags: `readMetric` resolves a metric name against tracked statistics (including derived
 metrics assembled from keyed sub-tables), and the progression sweep grants anything whose
 threshold is met.
+
+## Music
+
+`data/music.js` maps a key to a track file. `AudioEngine.startMusic(key,{fallback})`
+resolves it in order: the campaign operation id, then the theatre id, then nothing — at
+which point the synthesized bed named by `fallback` plays instead. Two keys deliberately
+share one track (an operation and the theatre it is set in), so the "already playing"
+check compares media elements rather than keys.
+
+Tracks stream through an `HTMLAudioElement` adopted into the audio graph by
+`createMediaElementSource`. That adoption is one-way and one-time per element, so the
+elements are cached for the session rather than rebuilt per deployment. Each has its own
+gain node for crossfades; the shared music bus still owns volume and mute, so one control
+covers both the authored and synthesized paths.
+
+Failure is expected rather than exceptional: an unsupported codec, a missing file, or a
+blocked autoplay call all fall back to the synthesized bed. Nothing about a music problem
+is allowed to leave a run silent.

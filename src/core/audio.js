@@ -1,9 +1,18 @@
 import {clamp} from './math.js';
+import {trackFor,trackSources,MUSIC_FORMATS} from '../../data/music.js';
 
-// Fully synthesized audio. The repository ships no audio assets, so every
-// sound is generated at runtime from oscillators and shaped noise buffers.
-// This keeps the project build-free and asset-free while still giving the
-// game weapon reports, impacts, UI clicks and an adaptive music bed.
+// Sound effects are fully synthesized at runtime from oscillators and shaped
+// noise buffers, so the game keeps its weapon reports, impacts and UI clicks
+// without shipping a single sample.
+//
+// Music is authored where a track exists for the theatre or operation and
+// synthesized where one does not. Authored tracks stream through an
+// HTMLAudioElement routed into the music bus, so one volume control, one mute
+// and one crossfade cover both paths — and a browser that cannot decode the
+// file falls back to the synthesized bed rather than going silent.
+
+// Seconds to crossfade between two pieces of music.
+const MUSIC_FADE=1.1;
 export class AudioEngine{
   constructor(settings={}){
     this.ctx=null;
@@ -259,9 +268,123 @@ export class AudioEngine{
   // Intensity 0..1 drives tempo, layer count and filter openness.
   setIntensity(value){this.targetIntensity=clamp(value,0,1)}
 
-  startMusic(key='blacksite'){
+  // Whether this browser can decode the authored tracks at all. Safari has
+  // historically refused Ogg Vorbis, and a silent title screen is a worse
+  // outcome than the synthesized bed.
+  get supportsTracks(){
+    if(this._supportsTracks===undefined){
+      const probe=document.createElement('audio');
+      this._supportsTracks=!!probe.canPlayType&&
+        MUSIC_FORMATS.some(f=>probe.canPlayType(f.type)!=='');
+    }
+    return this._supportsTracks;
+  }
+
+  // One <audio> element per track, kept for the session: a media element can
+  // only be adopted by the audio graph once, so re-creating it would leak
+  // source nodes on every deployment.
+  trackNode(track){
+    this.trackNodes=this.trackNodes||new Map();
+    let entry=this.trackNodes.get(track.file);
+    if(entry)return entry;
+
+    const element=new Audio();
+    element.loop=true;
+    element.preload='auto';
+    element.crossOrigin='anonymous';
+    // Offered as <source> children rather than a single src so the browser
+    // picks the first format it can actually decode.
+    for(const candidate of trackSources(track)){
+      const source=document.createElement('source');
+      source.src=candidate.src;
+      source.type=candidate.type;
+      element.appendChild(source);
+    }
+
+    const gain=this.ctx.createGain();
+    gain.gain.value=0;
+    let source=null;
+    try{
+      source=this.ctx.createMediaElementSource(element);
+      source.connect(gain);
+      gain.connect(this.musicBus);
+    }catch(err){
+      // Routing failed (rare, but a hard failure): fall back to the bed.
+      console.warn('[phantom] music routing failed',err);
+      return null;
+    }
+    entry={element,gain,source,track,failed:false};
+    element.addEventListener('error',()=>{
+      entry.failed=true;
+      console.warn('[phantom] music track failed to load',track.file);
+      // Losing the authored track mid-session must not leave the run silent.
+      if(this.currentTrack===entry)this.startSynthMusic(this.synthKey||'blacksite');
+    });
+    this.trackNodes.set(track.file,entry);
+    return entry;
+  }
+
+  fadeTrack(entry,to,seconds=MUSIC_FADE){
+    if(!entry||!this.ctx)return;
+    const now=this.ctx.currentTime;
+    entry.gain.gain.cancelScheduledValues(now);
+    entry.gain.gain.setValueAtTime(entry.gain.gain.value,now);
+    entry.gain.gain.linearRampToValueAtTime(to,now+seconds);
+  }
+
+  // `key` is an operation id or theatre id; `fallback` names the synthesized
+  // bed to use when no authored track is registered for it.
+  startMusic(key='blacksite',options={}){
     if(!this.ready||!this.ctx)return;
-    this.stopMusic();
+    const fallback=options.fallback||key;
+    this.synthKey=fallback;
+
+    const track=this.supportsTracks?trackFor(key):null;
+    if(track){
+      const entry=this.trackNode(track);
+      if(entry&&!entry.failed){
+        this.musicKey=key;
+        // Already playing this piece: let it run rather than restarting it.
+        // Two keys can share a track (an operation and its theatre), so this
+        // is a comparison of entries, not of keys.
+        if(this.currentTrack===entry&&!entry.element.paused)return;
+        this.stopSynthMusic();
+        if(this.currentTrack&&this.currentTrack!==entry){
+          const previous=this.currentTrack;
+          this.fadeTrack(previous,0);
+          setTimeout(()=>{
+            if(this.currentTrack!==previous)previous.element.pause();
+          },MUSIC_FADE*1000);
+        }
+        this.currentTrack=entry;
+        entry.element.currentTime=0;
+        const played=entry.element.play();
+        this.fadeTrack(entry,1);
+        // Autoplay can still be refused before the unlock gesture lands.
+        played?.catch?.(err=>{
+          console.warn('[phantom] music playback blocked',err);
+          this.currentTrack=null;
+          this.startSynthMusic(fallback);
+        });
+        return;
+      }
+    }
+
+    this.stopTrack();
+    this.startSynthMusic(fallback);
+  }
+
+  stopTrack(){
+    if(!this.currentTrack)return;
+    const entry=this.currentTrack;
+    this.currentTrack=null;
+    this.fadeTrack(entry,0,.5);
+    setTimeout(()=>{if(this.currentTrack!==entry)entry.element.pause()},520);
+  }
+
+  startSynthMusic(key='blacksite'){
+    if(!this.ready||!this.ctx)return;
+    this.stopSynthMusic();
     this.musicKey=key;
     this.step=0;
     this.musicOn=true;
@@ -279,6 +402,11 @@ export class AudioEngine{
   }
 
   stopMusic(){
+    this.stopTrack();
+    this.stopSynthMusic();
+  }
+
+  stopSynthMusic(){
     this.musicOn=false;
     if(this.musicTimer){clearTimeout(this.musicTimer);this.musicTimer=null}
   }
@@ -332,3 +460,6 @@ export class AudioEngine{
 }
 
 export const audio=new AudioEngine();
+
+// Exposed for debugging and automated smoke tests, alongside window.__pp.
+if(typeof window!=='undefined')window.__audio=audio;

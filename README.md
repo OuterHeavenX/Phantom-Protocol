@@ -93,9 +93,19 @@ lighting pass, then post (vignette, flash, minimap, off-screen threat markers). 
 sprites are drawn procedurally as animated vector figures — the repository ships no
 image assets.
 
-**Audio.** Fully synthesized at runtime from oscillators and shaped noise
-(`src/core/audio.js`) — a sound library plus an adaptive music bed whose tempo, layering
-and filtering follow combat intensity. No audio assets are shipped.
+**Audio.** Sound effects are fully synthesized at runtime from oscillators and shaped
+noise (`src/core/audio.js`) — a complete sound library with no samples.
+
+Music is authored where a track exists and synthesized where one does not. Tracks are
+registered in `data/music.js` against a campaign operation id or a theatre id, stream
+through an `HTMLAudioElement` routed into the shared music bus, and crossfade between
+pieces; anything without a track falls back to the adaptive bed whose tempo, layering and
+filtering follow combat intensity. A browser that cannot decode a track's format falls
+back to the bed rather than going silent.
+
+Tracks are offered to the browser as multiple `<source>` candidates, so dropping an
+`.m4a` or `.mp3` of the same basename beside a `.ogg` makes it play on browsers that
+refuse Vorbis (Safari and iOS) with no code change.
 
 **Campaign.** Six ordered operations (`data/campaign.js`), each carrying its own
 briefing and debrief dialogue, a mission objective, and one document fragment. Objectives
