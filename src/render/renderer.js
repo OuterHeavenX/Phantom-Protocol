@@ -1,4 +1,6 @@
 import {clamp,TAU,dist,formatTime} from '../core/math.js';
+import {Weather} from './weather.js';
+import {drawLandmark} from './landmarks.js';
 import {EXTRACTION_RADIUS,EXTRACTION_HOLD} from '../game/engine.js';
 import {
   drawPlayer,drawEnemy,drawBoss,drawPhantom,drawTurret,drawMine,drawPickup,
@@ -22,6 +24,9 @@ import {
 // The previous build drew everything in a fixed order with no sorting, no
 // lighting pass and no culling.
 
+// Cover whose visible form is an authored landmark rather than a generic box.
+const LANDMARK_COLLIDERS=new Set(['fuselage','trunk','boulder','wreck']);
+
 export class Renderer{
   constructor(canvas,ctx,engine){
     this.canvas=canvas;
@@ -40,6 +45,8 @@ export class Renderer{
     this.fps=60;
     this.floorPattern=null;
     this.buildFloorPattern();
+    // Per-theatre ambient weather; theatres without a profile cost nothing.
+    this.weather=new Weather(engine.map?.weather,this.settings);
   }
 
   get lightingEnabled(){
@@ -100,6 +107,7 @@ export class Renderer{
 
     this.drawFloor(ctx);
     this.drawDecals(ctx);
+    this.drawLandmarks(ctx);
     this.drawHazards(ctx);
     this.drawGroundEffects(ctx);
     this.drawGeometry(ctx);
@@ -113,6 +121,15 @@ export class Renderer{
     ctx.restore();
 
     if(this.lightingEnabled)this.drawLighting();
+
+    // Weather sits above the lit world but below the HUD, so the sector is
+    // seen through it rather than behind it.
+    if(this.weather.active){
+      ctx.setTransform(1,0,0,1,0,0);
+      this.weather.update(this.lastDelta??1/60);
+      this.weather.draw(ctx,width,height,engine.camera,engine.elapsed);
+    }
+
     this.drawPost(ctx,width,height);
   }
 
@@ -123,6 +140,9 @@ export class Renderer{
     if(this.frameTimes.length>40)this.frameTimes.shift();
     const average=this.frameTimes.reduce((a,b)=>a+b,0)/this.frameTimes.length;
     this.fps=Math.round(1000/Math.max(1,average));
+    // Weather advances on real frame time, not the fixed simulation step, so
+    // it keeps drifting while the run is paused behind an overlay.
+    this.lastDelta=clamp(delta/1000,0,.05);
   }
 
   // ---- 1. Floor -----------------------------------------------------------
@@ -144,6 +164,7 @@ export class Renderer{
     if(y<0)ctx.fillRect(x,y,halfW*2,-y);
     if(x+halfW*2>world.width)ctx.fillRect(world.width,y,x+halfW*2-world.width,halfH*2);
     if(y+halfH*2>world.height)ctx.fillRect(x,world.height,halfW*2,y+halfH*2-world.height);
+    this.drawWater(ctx,x,y,halfW,halfH);
     ctx.restore();
 
     // Perimeter boundary line.
@@ -155,6 +176,44 @@ export class Renderer{
     ctx.restore();
 
     this.drawDecor(ctx);
+  }
+
+  // Open water beyond a theatre's playable bands — drawn as part of the floor
+  // so the deck reads as a structure over something, not a hole in the grid.
+  drawWater(ctx,x,y,halfW,halfH){
+    const world=this.engine.world;
+    if(!world.water)return;
+    const time=this.engine.elapsed;
+    const bands=[[world.water.y0-400,world.water.y1],[world.water.y2,world.water.y3+400]];
+    ctx.save();
+    for(const [top,bottom] of bands){
+      if(bottom<y||top>y+halfH*2)continue;
+      ctx.fillStyle='#0a141d';
+      ctx.fillRect(x,top,halfW*2,bottom-top);
+      // Slow swell lines give the surface motion without a shader.
+      ctx.strokeStyle='rgba(120,168,200,.10)';
+      ctx.lineWidth=2;
+      ctx.beginPath();
+      for(let wy=Math.floor(top/46)*46;wy<bottom;wy+=46){
+        const phase=Math.sin(time*.5+wy*.03)*22;
+        ctx.moveTo(x+phase,wy);
+        ctx.lineTo(x+halfW*2+phase,wy);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Authored theatre furniture: towers, wrecks, trees, airframes.
+  drawLandmarks(ctx){
+    const world=this.engine.world;
+    if(!world.landmarks?.length)return;
+    const camera=this.engine.camera;
+    const time=this.engine.elapsed;
+    for(const item of world.landmarks){
+      if(!camera.isVisible(item.x,item.y,item.span||item.r||item.size||260))continue;
+      drawLandmark(ctx,item,world.palette,time);
+    }
   }
 
   drawDecor(ctx){
@@ -314,6 +373,10 @@ export class Renderer{
   }
 
   drawCoverPiece(ctx,cover,palette){
+    // Some cover exists only to give a landmark its collision footprint; the
+    // prop itself is drawn from world.landmarks, so drawing a generic box here
+    // would sit a grey rectangle on top of the aircraft or the tree.
+    if(LANDMARK_COLLIDERS.has(cover.type))return;
     const x=cover.x-cover.hw,y=cover.y-cover.hh;
     // Shadow.
     ctx.fillStyle='rgba(0,0,0,.4)';
@@ -345,6 +408,21 @@ export class Renderer{
           if(cover.w>cover.h)ctx.fillRect(x+4,cover.y-1.5,cover.w-8,3);
           else ctx.fillRect(cover.x-1.5,y+4,3,cover.h-8);
         }
+        break;
+      }
+      case 'log':{
+        // Half-sunk trunk: rounded, with a waterline stain.
+        const horizontal=cover.w>cover.h;
+        ctx.fillStyle='#2b2419';
+        ctx.strokeStyle='#5c6a48';
+        ctx.lineWidth=1.4;
+        ctx.beginPath();roundedRect(ctx,x,y,cover.w,cover.h,Math.min(cover.w,cover.h)/2);
+        ctx.fill();ctx.stroke();
+        ctx.strokeStyle='rgba(140,170,120,.25)';
+        ctx.beginPath();
+        if(horizontal){ctx.moveTo(x+6,cover.y);ctx.lineTo(x+cover.w-6,cover.y)}
+        else{ctx.moveTo(cover.x,y+6);ctx.lineTo(cover.x,y+cover.h-6)}
+        ctx.stroke();
         break;
       }
       case 'crate':

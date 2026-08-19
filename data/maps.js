@@ -79,6 +79,91 @@ export const MAPS=[
     boss:'arbiter',
     unlocked:false,
     unlock:{type:'stat',stat:'bosses',value:6,label:'Defeat 6 command signatures'}
+  },
+  {
+    id:'crossfall',name:'CROSSFALL SPAN',condition:'Suspension crossing, sustained rainfall',
+    desc:'A kilometre of exposed roadway over open water. Nowhere to break line of sight, and the rain hides muzzle flash on both sides.',
+    music:'sunken',
+    weather:{type:'rain',density:1,wind:-.34,color:'rgba(176,214,232,.5)',
+             flashes:true,ambient:'rgba(28,44,62,.36)'},
+    palette:{
+      floor:'#141d26',floorAlt:'#18232e',grid:'rgba(150,190,220,.05)',
+      wall:'#233140',wallEdge:'#6d93ad',accent:'#8fb8dd',hazard:'#ffcf6a',
+      fog:'rgba(10,18,28,.6)',light:'rgba(143,184,221,.1)'
+    },
+    layout:{type:'bridge',density:.55,coverDensity:.25,roomSize:[240,460],corridorWidth:150},
+    hazards:['slickDeck','snappedCable'],
+    enemyBias:{rifle:1.4,sniper:1.3,scout:1.2,pursuit:1.2,breacher:.7,crawler:.6},
+    boss:'carrion',
+    unlocked:false,unlock:{type:'stat',stat:'missions',value:2,label:'Complete 2 operations'}
+  },
+  {
+    id:'hollow',name:'HOLLOW VALLEY',condition:'Glacial basin, whiteout conditions',
+    desc:'A snowed-in valley floor between two ridgelines. Drifts swallow sound and movement, and the treeline is the only cover for four hundred metres.',
+    music:'arctic',
+    weather:{type:'snow',density:1.1,wind:.22,color:'rgba(232,246,255,.72)',
+             ambient:'rgba(150,180,205,.13)'},
+    palette:{
+      floor:'#1b2733',floorAlt:'#20303e',grid:'rgba(200,230,255,.05)',
+      wall:'#2b3d4c',wallEdge:'#9dc4d8',accent:'#bfe3f5',hazard:'#ffe08a',
+      fog:'rgba(24,36,50,.5)',light:'rgba(191,227,245,.13)'
+    },
+    layout:{type:'valley',density:.5,coverDensity:.3,roomSize:[320,600],corridorWidth:190},
+    hazards:['snowDrift','iceSlick','blizzard'],
+    enemyBias:{sniper:1.5,marauder:1.3,rifle:1.2,warden:1.1,crawler:.7},
+    boss:'carrion',
+    unlocked:false,unlock:{type:'stat',stat:'missions',value:4,label:'Complete 4 operations'}
+  },
+  {
+    id:'mire',name:'ASHEN MIRE',condition:'Drowned forestry concession',
+    desc:'Standing water under a dead canopy. Sightlines end at the next trunk and everything that moves out there sounds the same.',
+    music:'sunken',
+    weather:{type:'fog',density:.85,wind:.08,color:'rgba(126,150,124,.3)',
+             ambient:'rgba(26,40,28,.26)',fireflies:true},
+    palette:{
+      floor:'#16211a',floorAlt:'#1a2820',grid:'rgba(150,200,150,.04)',
+      wall:'#243528',wallEdge:'#6f9068',accent:'#9ad86f',hazard:'#d8e05a',
+      fog:'rgba(10,20,12,.62)',light:'rgba(154,216,111,.1)'
+    },
+    layout:{type:'swamp',density:.72,coverDensity:.35,roomSize:[220,420],corridorWidth:120},
+    hazards:['sinkhole','floodWater','sporeBloom'],
+    enemyBias:{veil:1.6,crawler:1.4,sapper:1.3,phantomcell:1.2,sniper:.6,mortar:.6},
+    boss:'aegis',
+    unlocked:false,unlock:{type:'stat',stat:'missions',value:6,label:'Complete 6 operations'}
+  },
+  {
+    id:'hangar',name:'DERELICT HANGAR',condition:'Abandoned strategic airlift facility',
+    desc:'Transport airframes left where they were parked, several of them stripped or burned out. The wrecks are the only cover on an otherwise open deck.',
+    music:'foundry',
+    weather:{type:'dust',density:.7,wind:.12,color:'rgba(214,190,150,.3)',
+             ambient:'rgba(38,32,24,.3)',shafts:true},
+    palette:{
+      floor:'#22221f',floorAlt:'#282824',grid:'rgba(230,200,150,.05)',
+      wall:'#343029',wallEdge:'#9d8a6a',accent:'#e0c078',hazard:'#ff8a4c',
+      fog:'rgba(16,14,10,.5)',light:'rgba(224,192,120,.12)'
+    },
+    layout:{type:'hangar',density:.6,coverDensity:.3,roomSize:[300,560],corridorWidth:180},
+    hazards:['fuelSpill','steamVent'],
+    enemyBias:{breacher:1.3,shield:1.3,rifle:1.2,hunter:1.2,veil:.7},
+    boss:'aegis',
+    unlocked:false,unlock:{type:'stat',stat:'missions',value:8,label:'Complete 8 operations'}
+  },
+  {
+    id:'proving',name:'PROVING GROUND',condition:'Glasshouse evaluation chamber',
+    desc:'A sealed circular floor with no cover and no exit. Whatever the network wants measured, it gets measured here.',
+    music:'orbital',
+    weather:{type:'ember',density:.5,wind:0,color:'rgba(255,140,120,.4)',
+             ambient:'rgba(30,10,14,.34)'},
+    palette:{
+      floor:'#1a1418',floorAlt:'#20181d',grid:'rgba(255,140,140,.06)',
+      wall:'#2e2028',wallEdge:'#b06a7a',accent:'#ff8d9a',hazard:'#ff5b5b',
+      fog:'rgba(14,6,10,.6)',light:'rgba(255,141,154,.14)'
+    },
+    layout:{type:'arena',density:.3,coverDensity:0,vaults:false,roomSize:[520,760],corridorWidth:240},
+    hazards:[],
+    enemyBias:{},
+    boss:'arbiter',
+    unlocked:false,unlock:{type:'stat',stat:'missions',value:10,label:'Complete 10 operations'}
   }
 ];
 
@@ -94,7 +179,13 @@ export const HAZARDS={
   moltenChannel:{name:'Molten Channel',damage:9,interval:.6,radius:70,color:'#ff5b30',status:'burn',passive:true,affectsEnemies:true},
   pressRam:{name:'Press Ram',damage:58,interval:8.5,radius:96,warn:1.4,color:'#ff9a5c',affectsEnemies:true},
   vacuumBreach:{name:'Vacuum Breach',damage:24,interval:9.5,radius:170,warn:2,color:'#c895ff',pull:340,affectsEnemies:true},
-  lowGravity:{name:'Low Gravity',damage:0,global:true,knockbackMult:2.2,frictionMult:.6,color:'#c895ff'}
+  lowGravity:{name:'Low Gravity',damage:0,global:true,knockbackMult:2.2,frictionMult:.6,color:'#c895ff'},
+  slickDeck:{name:'Slick Deck',damage:0,radius:130,friction:.28,color:'#8fb8dd',passive:true},
+  snappedCable:{name:'Snapped Cable',damage:34,interval:8,radius:92,warn:1.3,color:'#ffcf6a',status:'shock',affectsEnemies:true},
+  snowDrift:{name:'Deep Drift',damage:0,radius:150,slow:.3,color:'#bfe3f5',passive:true},
+  sinkhole:{name:'Sinkhole',damage:0,radius:130,slow:.42,color:'#6f9068',passive:true},
+  sporeBloom:{name:'Spore Bloom',damage:14,interval:5.5,radius:104,warn:1.1,color:'#9ad86f',status:'poison',affectsEnemies:true},
+  fuelSpill:{name:'Fuel Spill',damage:11,interval:.7,radius:84,color:'#ff8a4c',status:'burn',passive:true,affectsEnemies:true}
 };
 
 export const DURATIONS=[

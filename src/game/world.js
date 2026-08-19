@@ -33,6 +33,8 @@ export class World{
     this.coverPoints=[];  // AI-usable cover positions
     this.decals=[];
     this.vaults=[];       // sealed chambers, hidden until scanned
+    this.landmarks=[];    // large authored props the renderer draws by kind
+    this.water=null;      // open water bands, for theatres that have them
     this.obstacleHash=new SpatialHash(140);
     this.globalHazards=[];
 
@@ -49,8 +51,17 @@ export class World{
     // Arena size scales with the contract length so 30-minute runs get room
     // to breathe without 5-minute runs feeling empty.
     const base=2100*this.sizeMult;
-    this.width=Math.round(base*(layout.type==='open'?1.2:1));
-    this.height=Math.round(base*(layout.type==='open'?1.12:1));
+    // Aspect follows the layout: a suspension span is long and narrow, a
+    // valley runs between two ridgelines, an evaluation chamber is compact.
+    const shape={
+      open:[1.2,1.12],
+      bridge:[1.75,.52],
+      valley:[1.4,.86],
+      hangar:[1.25,.82],
+      arena:[.62,.62]
+    }[layout.type]||[1,1];
+    this.width=Math.round(base*shape[0]);
+    this.height=Math.round(base*shape[1]);
 
     this.buildPerimeter();
 
@@ -59,6 +70,11 @@ export class World{
       case 'streets':this.generateStreets();break;
       case 'industrial':this.generateIndustrial();break;
       case 'modular':this.generateModular();break;
+      case 'bridge':this.generateBridge();break;
+      case 'valley':this.generateValley();break;
+      case 'swamp':this.generateSwamp();break;
+      case 'hangar':this.generateHangar();break;
+      case 'arena':this.generateArena();break;
       default:this.generateComplex();
     }
 
@@ -81,6 +97,8 @@ export class World{
   // being drawn. What is hidden is that the chamber is worth opening: that is
   // only revealed once the operative's scanner picks it up at close range.
   placeVaults(){
+    // A duel chamber is deliberately bare — no caches, no side rooms.
+    if(this.layout.vaults===false)return;
     const rng=this.rng;
     const target=rng.int(2,3);
     const half=58;                       // interior half-extent
@@ -112,6 +130,7 @@ export class World{
       // shipping a sector with no vaults in it at all.
       const relief=attempts<attemptBudget*.4?40:attempts<attemptBudget*.75?18:2;
       if(!clearOfSpawn(x,y))continue;
+      if(!this.playable(x,y,half+t+40))continue;
       if(this.overlapsSolid(x,y,half+t+relief))continue;
       // Keep vaults apart so one scan never reveals two.
       if(this.vaults.some(v=>dist2(v.x,v.y,x,y)<520*520))continue;
@@ -335,6 +354,173 @@ export class World{
     }
   }
 
+  // Suspension crossing: a long roadway boxed in by parapets, with towers and
+  // stalled traffic on the deck. Landmarks are recorded separately from cover
+  // so the renderer can draw the span's own furniture.
+  generateBridge(){
+    const rng=this.rng;
+    const deckHalf=Math.min(this.height*.3,420);
+    const midY=this.height/2;
+
+    // Parapets run the length of the span; everything outside them is water.
+    this.addWall(this.width/2,midY-deckHalf,this.width,54,{type:'parapet'});
+    this.addWall(this.width/2,midY+deckHalf,this.width,54,{type:'parapet'});
+    this.water={y0:0,y1:midY-deckHalf-27,y2:midY+deckHalf+27,y3:this.height};
+
+    const towers=3;
+    for(let i=1;i<=towers;i++){
+      const x=this.width*(i/(towers+1));
+      // Tower legs sit inside the parapets and leave a gap to run through.
+      this.addWall(x,midY-deckHalf+120,46,150,{type:'tower'});
+      this.addWall(x,midY+deckHalf-120,46,150,{type:'tower'});
+      this.landmarks.push({kind:'bridgeTower',x,y:midY,span:deckHalf});
+      this.rooms.push({x,y:midY,w:this.width/(towers+1)*.8,h:deckHalf*1.6});
+    }
+    // Stalled and burnt-out vehicles make the only mid-deck cover.
+    const wrecks=Math.round(this.width/230);
+    for(let i=0;i<wrecks;i++){
+      const x=rng.range(160,this.width-160);
+      const y=midY+rng.range(-deckHalf*.72,deckHalf*.72);
+      if(this.overlapsSolid(x,y,90))continue;
+      this.addCover(x,y,{type:'wreck',w:rng.range(84,132),h:rng.range(42,56),
+        hp:210,blocksSight:true,destructible:true});
+      this.landmarks.push({kind:'vehicle',x,y,burnt:rng.bool(.4),rotation:rng.range(-.25,.25)});
+    }
+  }
+
+  // Glacial basin: ridgelines down both long edges, boulder fields and a
+  // scattered treeline for cover on the valley floor.
+  generateValley(){
+    const rng=this.rng;
+    const ridge=Math.min(this.height*.22,300);
+    // Ridge walls are broken into segments so the basin has entry points.
+    for(const side of [-1,1]){
+      const baseY=side<0?ridge:this.height-ridge;
+      let x=60;
+      while(x<this.width-60){
+        const w=rng.range(180,420);
+        if(rng.bool(.78)){
+          this.addWall(x+w/2,baseY,w,70,{type:'ridge'});
+          this.landmarks.push({kind:'ridge',x:x+w/2,y:baseY,w,side});
+        }
+        x+=w+rng.range(70,190);
+      }
+    }
+    this.rooms.push({x:this.width/2,y:this.height/2,w:this.width*.7,h:this.height-ridge*2.4,open:true});
+
+    const boulders=Math.round(this.width*this.height/150000);
+    for(let i=0;i<boulders;i++){
+      const x=rng.range(140,this.width-140);
+      const y=rng.range(ridge+110,this.height-ridge-110);
+      if(this.overlapsSolid(x,y,80))continue;
+      const r=rng.range(34,62);
+      this.addCover(x,y,{type:'boulder',w:r*2,h:r*1.7,hp:0,blocksSight:true,destructible:false});
+      this.landmarks.push({kind:'boulder',x,y,r,rotation:rng.angle()});
+    }
+    // A thin treeline: bare conifers, no collision beyond their trunks.
+    const trees=Math.round(this.width*this.height/90000);
+    for(let i=0;i<trees;i++){
+      const x=rng.range(90,this.width-90);
+      const y=rng.range(ridge+80,this.height-ridge-80);
+      if(this.overlapsSolid(x,y,44))continue;
+      this.landmarks.push({kind:'conifer',x,y,size:rng.range(30,58),rotation:rng.range(-.08,.08)});
+    }
+  }
+
+  // Drowned forest: dense trunk cover, standing water, no long sightlines.
+  generateSwamp(){
+    const rng=this.rng;
+    const clusters=rng.int(7,10);
+    for(let c=0;c<clusters;c++){
+      const cx=rng.range(240,this.width-240);
+      const cy=rng.range(240,this.height-240);
+      this.rooms.push({x:cx,y:cy,w:rng.range(240,400),h:rng.range(240,400)});
+      // Trunks ring each clearing rather than filling it.
+      const trunks=rng.int(5,9);
+      for(let i=0;i<trunks;i++){
+        const a=i/trunks*Math.PI*2+rng.range(-.3,.3);
+        const d=rng.range(150,260);
+        const x=clamp(cx+Math.cos(a)*d,80,this.width-80);
+        const y=clamp(cy+Math.sin(a)*d,80,this.height-80);
+        if(this.overlapsSolid(x,y,52))continue;
+        const r=rng.range(22,34);
+        this.addCover(x,y,{type:'trunk',w:r*2,h:r*2,hp:0,blocksSight:true,destructible:false});
+        this.landmarks.push({kind:'deadTree',x,y,r,rotation:rng.angle(),lean:rng.range(-.16,.16)});
+      }
+    }
+    // Half-sunk logs give low cover between the clearings.
+    const logs=Math.round(this.width*this.height/160000);
+    for(let i=0;i<logs;i++){
+      const x=rng.range(140,this.width-140);
+      const y=rng.range(140,this.height-140);
+      if(this.overlapsSolid(x,y,90))continue;
+      const horizontal=rng.bool();
+      this.addCover(x,y,{type:'log',w:horizontal?rng.range(120,190):32,h:horizontal?32:rng.range(120,190),
+        hp:150,blocksSight:false,destructible:true});
+    }
+  }
+
+  // Airlift facility: a clear deck with parked and wrecked transport airframes
+  // standing in as the cover field.
+  generateHangar(){
+    const rng=this.rng;
+    const t=64;
+    // Structural bays down both sides of the deck.
+    for(const side of [-1,1]){
+      const y=side<0?t*1.6:this.height-t*1.6;
+      let x=140;
+      while(x<this.width-140){
+        const w=rng.range(150,260);
+        this.addWall(x+w/2,y,w,t,{type:'bay'});
+        x+=w+rng.range(140,240);
+      }
+    }
+    this.rooms.push({x:this.width/2,y:this.height/2,w:this.width*.78,h:this.height*.66,open:true});
+
+    // Airframes parked in rows. The fuselage blocks sight; the wings do not.
+    const rows=2,perRow=rng.int(2,3);
+    for(let r=0;r<rows;r++){
+      for(let i=0;i<perRow;i++){
+        const x=this.width*((i+1)/(perRow+1))+rng.range(-90,90);
+        const y=this.height*((r+1)/(rows+1))+rng.range(-70,70);
+        if(this.overlapsSolid(x,y,220))continue;
+        const facing=rng.bool()?0:Math.PI;
+        const scale=rng.range(.85,1.2);
+        const wrecked=rng.bool(.45);
+        this.addCover(x,y,{type:'fuselage',w:250*scale,h:56*scale,
+          hp:0,blocksSight:true,destructible:false});
+        this.landmarks.push({kind:'aircraft',x,y,scale,rotation:facing,wrecked,
+          tailBroken:wrecked&&rng.bool(.6),wingBroken:wrecked&&rng.bool(.5)});
+        this.rooms.push({x,y,w:300*scale,h:200*scale});
+      }
+    }
+    // Loose ground equipment.
+    const crates=Math.round(this.width*this.height/220000);
+    for(let i=0;i<crates;i++){
+      const x=rng.range(160,this.width-160);
+      const y=rng.range(160,this.height-160);
+      if(this.overlapsSolid(x,y,70))continue;
+      this.addCover(x,y,{type:'crate',w:52,h:52,hp:70,blocksSight:true,destructible:true});
+    }
+  }
+
+  // Evaluation chamber: one sealed circular floor, no cover, no exit. Built
+  // for a duel, so nothing here is allowed to break line of sight.
+  generateArena(){
+    const radius=Math.min(this.width,this.height)*.42;
+    const cx=this.width/2,cy=this.height/2;
+    const segments=44;
+    for(let i=0;i<segments;i++){
+      const a=i/segments*Math.PI*2;
+      const wx=cx+Math.cos(a)*radius;
+      const wy=cy+Math.sin(a)*radius;
+      const horizontal=Math.abs(Math.cos(a))<Math.abs(Math.sin(a));
+      this.addWall(wx,wy,horizontal?radius*.18:44,horizontal?44:radius*.18,{type:'chamber'});
+    }
+    this.rooms.push({x:cx,y:cy,w:radius*1.5,h:radius*1.5,open:true});
+    this.landmarks.push({kind:'arenaRing',x:cx,y:cy,r:radius});
+  }
+
   // Remove wall area overlapping a rectangle — used to punch doorways.
   carve(hole){
     if(!hole)return;
@@ -346,6 +532,9 @@ export class World{
 
   scatterCover(){
     const rng=this.rng;
+    // A theatre that authors its own cover field (or deliberately has none)
+    // must not have generic crates sprinkled over it.
+    if(!this.layout.coverDensity)return;
     const target=Math.round(this.width*this.height/26000*this.layout.coverDensity);
     let placed=0,attempts=0;
     while(placed<target&&attempts<target*14){
@@ -353,6 +542,7 @@ export class World{
       const spec=rng.pick(COVER_TYPES);
       const x=rng.range(120,this.width-120);
       const y=rng.range(120,this.height-120);
+      if(!this.playable(x,y,60))continue;
       if(this.overlapsSolid(x,y,Math.max(spec.w,spec.h)/2+34))continue;
       // Leave vault interiors clear so the payout has somewhere to land.
       if(this.insideVault(x,y,30))continue;
@@ -376,7 +566,8 @@ export class World{
           const clearance=Math.max(30,spec.radius*(attempt<10?.5:attempt<20?.3:.18));
           const x=rng.range(180,this.width-180);
           const y=rng.range(180,this.height-180);
-          if(!this.overlapsSolid(x,y,clearance)&&!this.insideVault(x,y,20))placed={x,y};
+          if(!this.overlapsSolid(x,y,clearance)&&!this.insideVault(x,y,20)&&
+             this.playable(x,y,90))placed={x,y};
         }
         if(!placed)continue;
         this.hazards.push({
@@ -427,6 +618,17 @@ export class World{
     this.obstacleHash.clear();
     for(const wall of this.walls)this.obstacleHash.insert(wall);
     for(const cover of this.cover)if(!cover.broken)this.obstacleHash.insert(cover);
+  }
+
+  // Ground the operative and hostiles can actually stand on. Most layouts use
+  // the whole rectangle; the ones with dead zones — open water beyond a
+  // bridge's parapets — carve those out so nothing is placed where it would be
+  // stranded or unreachable.
+  playable(x,y,pad=0){
+    if(this.water){
+      if(y<this.water.y1+pad||y>this.water.y2-pad)return false;
+    }
+    return x>pad&&y>pad&&x<this.width-pad&&y<this.height-pad;
   }
 
   // True inside a vault chamber. Spawners use this to keep hostiles and
@@ -513,8 +715,10 @@ export class World{
       const distance=rng.range(minDistance,maxDistance);
       const x=clamp((awayFrom?.x??this.width/2)+Math.cos(angle)*distance,80,this.width-80);
       const y=clamp((awayFrom?.y??this.height/2)+Math.sin(angle)*distance,80,this.height-80);
-      // Never deploy hostiles into a sealed chamber they cannot leave.
-      if(!this.overlapsSolid(x,y,26)&&!this.insideVault(x,y,24))return{x,y};
+      // Never deploy hostiles into a sealed chamber they cannot leave, or
+      // into a dead zone they cannot path out of.
+      if(!this.overlapsSolid(x,y,26)&&!this.insideVault(x,y,24)&&
+         this.playable(x,y,70))return{x,y};
     }
     // Fall back to the arena centre offset, which generation keeps clear.
     return{x:clamp(this.width/2,80,this.width-80),y:clamp(this.height/2,80,this.height-80)};
