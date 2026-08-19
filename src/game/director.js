@@ -114,6 +114,9 @@ export class Director{
 
   update(dt){
     const engine=this.engine;
+    // A duel is one opponent and nothing else: no waves, no elites, no boss
+    // schedule beyond the one the mission placed itself.
+    if(this.suppressed)return;
     this.samplePressure(dt);
     this.runScriptedEvents();
 

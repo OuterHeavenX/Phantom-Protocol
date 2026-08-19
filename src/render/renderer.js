@@ -117,6 +117,7 @@ export class Renderer{
     this.drawParticles(ctx);
     this.drawExtractionBeacon(ctx);
     this.drawVaultMarkers(ctx);
+    this.drawMissionMarkers(ctx);
 
     ctx.restore();
 
@@ -879,6 +880,94 @@ export class Renderer{
     }
   }
 
+  // Campaign objective markers: data caches and the escorted asset.
+  drawMissionMarkers(ctx){
+    const engine=this.engine;
+    const mission=engine.mission;
+    if(!mission)return;
+    const camera=engine.camera;
+    const time=engine.elapsed;
+
+    for(const cache of mission.caches){
+      if(!camera.isVisible(cache.x,cache.y,90))continue;
+      const done=cache.recovered;
+      const color=done?'#8bff9b':'#8fd8ff';
+      ctx.save();
+      // Ground ring, filled by the download.
+      ctx.globalAlpha=done?.2:.14+Math.abs(Math.sin(time*2+cache.phase))*.1;
+      ctx.fillStyle=color;
+      ctx.beginPath();ctx.arc(cache.x,cache.y,86,0,TAU);ctx.fill();
+      ctx.globalAlpha=1;
+      ctx.strokeStyle=color;
+      ctx.lineWidth=2;
+      ctx.setLineDash([8,7]);
+      ctx.lineDashOffset=done?0:-time*20;
+      ctx.beginPath();ctx.arc(cache.x,cache.y,86,0,TAU);ctx.stroke();
+      ctx.setLineDash([]);
+      if(cache.progress>0&&!done){
+        ctx.lineWidth=5;
+        ctx.beginPath();
+        ctx.arc(cache.x,cache.y,86,-Math.PI/2,-Math.PI/2+TAU*cache.progress);
+        ctx.stroke();
+      }
+      // The cache itself: a squat data brick.
+      ctx.translate(cache.x,cache.y);
+      ctx.fillStyle=done?'#16301c':'#12242e';
+      ctx.strokeStyle=color;
+      ctx.lineWidth=1.6;
+      ctx.beginPath();roundedRect(ctx,-9,-11,18,22,2);ctx.fill();ctx.stroke();
+      ctx.fillStyle=color;
+      for(let i=0;i<3;i++)ctx.fillRect(-5,-7+i*6,10,1.6);
+      ctx.restore();
+
+      ctx.save();
+      ctx.fillStyle=color;
+      ctx.font='bold 10px ui-monospace,monospace';
+      ctx.textAlign='center';
+      ctx.fillText(done?'RECOVERED':'DATA CACHE',cache.x,cache.y-100);
+      ctx.restore();
+    }
+
+    const asset=mission.asset;
+    if(asset&&!asset.downed&&camera.isVisible(asset.x,asset.y,80)){
+      ctx.save();
+      const color=asset.aboard?'#8bff9b':'#ffd166';
+      // Locator ring before pickup, follow marker after.
+      ctx.globalAlpha=.16+Math.abs(Math.sin(time*2.4))*.12;
+      ctx.fillStyle=color;
+      ctx.beginPath();ctx.arc(asset.x,asset.y,asset.aboard?36:120,0,TAU);ctx.fill();
+      ctx.globalAlpha=1;
+      drawShadow(ctx,asset.x,asset.y,11,.3);
+      ctx.translate(asset.x,asset.y);
+      // A civilian silhouette, not an operative.
+      ctx.fillStyle=asset.hitFlash>0?'#ffffff':'#243b46';
+      ctx.strokeStyle=color;
+      ctx.lineWidth=1.6;
+      ctx.beginPath();ctx.arc(0,-7,5.4,0,TAU);ctx.fill();ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-7,9);ctx.quadraticCurveTo(0,-3,7,9);
+      ctx.closePath();ctx.fill();ctx.stroke();
+      ctx.restore();
+
+      // Health bar once the asset can be hurt.
+      if(asset.aboard&&asset.hp<asset.maxHp){
+        const ratio=Math.max(0,asset.hp/asset.maxHp);
+        ctx.save();
+        ctx.fillStyle='rgba(0,0,0,.6)';
+        ctx.fillRect(asset.x-16,asset.y-26,32,3.5);
+        ctx.fillStyle=ratio>.5?'#8bff9b':ratio>.25?'#ffd166':'#ff7068';
+        ctx.fillRect(asset.x-16,asset.y-26,32*ratio,3.5);
+        ctx.restore();
+      }
+      ctx.save();
+      ctx.fillStyle=color;
+      ctx.font='bold 10px ui-monospace,monospace';
+      ctx.textAlign='center';
+      ctx.fillText(asset.aboard?'ASSET':'ASSET // LOCATE',asset.x,asset.y-34);
+      ctx.restore();
+    }
+  }
+
   drawExtractionBeacon(ctx){
     const engine=this.engine;
     if(!engine.extraction||!engine.extractionPoint)return;
@@ -1090,6 +1179,13 @@ export class Renderer{
     if(engine.boss)mark(engine.boss.x,engine.boss.y,engine.boss.def.color,12);
     if(engine.extraction&&engine.extractionPoint){
       mark(engine.extractionPoint.x,engine.extractionPoint.y,'#f5d27a',12);
+    }
+    // Objective markers take priority: they are what the operation is for.
+    for(const cache of engine.mission?.caches||[]){
+      if(!cache.recovered)mark(cache.x,cache.y,'#8fd8ff',10);
+    }
+    if(engine.mission?.asset&&!engine.mission.asset.downed&&!engine.mission.asset.aboard){
+      mark(engine.mission.asset.x,engine.mission.asset.y,'#ffd166',11);
     }
     // A scanned vault stays flagged off-screen until it has been opened.
     for(const vault of engine.world.vaults){

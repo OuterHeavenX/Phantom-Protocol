@@ -66,6 +66,7 @@ export function defaultSave(){
     profile:{jp:0,credits:0,accountXp:0,callsign:'OPERATOR',lastOperative:'vesper',lastMap:'blacksite',lastDuration:5,lastDifficulty:1},
     operatives,weapons,maps,difficulties,
     dev:{},
+    campaign:{},
     achievements:{},
     milestones:{},
     intelligence:{},

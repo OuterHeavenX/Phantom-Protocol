@@ -80,6 +80,8 @@ function startRun(config){
     audio,
     devRanks:save.dev,
     masteryXp:operativeRecord.masteryXp||0,
+    // Campaign operation, when this run is a story mission.
+    objective:config.operation?.objective,
     // Files a personnel cache can turn up in this run.
     discoverable:undiscoveredOperatives(save).map(op=>({id:op.id,codename:op.codename})),
     seed:Math.floor(Math.random()*1e9)
@@ -201,6 +203,7 @@ function finishRun(summary,config){
   pause.close();
   cancelAnimationFrame(session.raf);
 
+  summary.operationId=config.operation?.id||null;
   const payout=commitRun(save,summary);
   screens.setSave(save);
 
@@ -209,10 +212,15 @@ function finishRun(summary,config){
     if(award.type==='unlock')audio.play('unlock',{volume:.8});
   }
 
-  const engine=session.engine;
   teardownSession();
   audio.startMusic('menu');
-  screens.results(summary,payout,config);
+  // A campaign operation closed for the first time earns its debrief and the
+  // document it returned before the ordinary results screen.
+  if(payout.operationClosed&&config.operation){
+    screens.debrief(config.operation,()=>screens.results(summary,payout,config));
+  }else{
+    screens.results(summary,payout,config);
+  }
 }
 
 function teardownSession(){

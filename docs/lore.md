@@ -24,3 +24,20 @@ hostile force. There is not supposed to be one.
 
 The full record is recovered in fragments through field performance and assembled in the
 Intelligence Database.
+
+## The disclosure
+
+The campaign recovers six documents, in order. An intake variance nobody reconciled. A
+procurement schedule whose line items are people, with a yield figure of twelve percent
+and no accounting for the rest. A clarification that yield does not measure survival — it
+measures who keeps following instruction after the instruction stops being legible. A
+facility manifest on which the operative's own first assignment appears under four
+different designations. Load records in which candidates come back down from an
+evaluation facility twenty-two kilograms heavier than they went up, itemised down to a
+compliance module with its own warranty.
+
+The last document is an evaluation. Prototype ONE was built from a reconstructed
+behavioural profile rather than a living candidate, and the profile's source is a serving
+operative designated CONTROL, who was not informed. Trial eleven closed on schedule. The
+recommendation has not changed across any of the eleven: the control performs better than
+the build, and the build is cheaper to replace.

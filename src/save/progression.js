@@ -247,9 +247,19 @@ export function commitRun(save,run){
   });
   save.runHistory=save.runHistory.slice(-50);
 
+  // Campaign operations close only when their objective was actually met.
+  let operationClosed=false;
+  if(run.operationId&&run.victory&&run.mission?.complete!==false){
+    save.campaign=save.campaign||{};
+    if(!save.campaign[run.operationId]?.completed){
+      save.campaign[run.operationId]={completed:true,at:Date.now()};
+      operationClosed=true;
+    }
+  }
+
   const awards=evaluateProgression(save);
   saveGame(save);
-  return{jp,credits,accountXp,awards,recovered};
+  return{jp,credits,accountXp,awards,recovered,operationClosed};
 }
 
 // Purchase a development node; returns true when the transaction went through.

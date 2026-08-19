@@ -43,8 +43,14 @@ camera lead; auto-target can be disabled in settings.
 - **15 hostile archetypes** and **6 elite signatures**, each bound to one of 15 AI
   behaviour profiles.
 - **4 multi-phase command signatures (bosses)** with 12 distinct attack patterns.
-- **5 theatres**, each with its own palette, procedural layout generator, hazard set and
-  hostile weighting.
+- **10 theatres**, each with its own palette, procedural layout generator, hazard set and
+  hostile weighting — including a rain-lashed suspension span, a snowed-in valley, a
+  drowned forest, a hangar of stripped and burned-out airframes, and a sealed duel
+  chamber. Five carry ambient weather (rain with lightning, snow, fog, dust with roof
+  shafts, embers) and authored landmark props.
+- **A 6-operation campaign** with pre-mission dialogue, four objective types and a
+  document recovered from each operation; read in order they are the Glasshouse
+  disclosure.
 - **6 contract lengths × 6 threat levels**, with unlock gating. A new operator's first
   deployment defaults to the five-minute probe on standard threat.
 - **20 command directives**, **61 achievements** and **12 intelligence files**, all with
@@ -90,6 +96,13 @@ image assets.
 **Audio.** Fully synthesized at runtime from oscillators and shaped noise
 (`src/core/audio.js`) — a sound library plus an adaptive music bed whose tempo, layering
 and filtering follow combat intensity. No audio assets are shipped.
+
+**Campaign.** Six ordered operations (`data/campaign.js`), each carrying its own
+briefing and debrief dialogue, a mission objective, and one document fragment. Objectives
+are implemented in `src/game/mission.js` and layered over the survival contract: recover
+marked data caches, locate an asset and walk them to the beacon alive, or fight a single
+prototype with the director muted and no reinforcement on either side. An operation with
+an unmet objective cannot extract — the beacon refuses and says why.
 
 **Field objectives.** Three objectives are always live (`src/game/objectives.js`),
 drawn from eleven templates and scaled to the operative's current level. Clearing one

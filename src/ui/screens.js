@@ -14,6 +14,7 @@ import {
   recruitmentProgress,startRecruitment,counselHours
 } from '../save/progression.js';
 import {portraitSvg} from '../render/portraits.js';
+import {CAMPAIGN,OBJECTIVE_TYPES,nextOperation,campaignProgress,operationUnlocked} from '../../data/campaign.js';
 import {saveGame,exportSave,importSave,resetSave,defaultSettings} from '../save/storage.js';
 import {formatDuration,formatNumber,formatTime,clamp} from '../core/math.js';
 import {MenuBackground} from './menuBackground.js';
@@ -102,6 +103,7 @@ export class Screens{
     const nextProgress=nextMilestone?milestoneProgress(save,nextMilestone):null;
 
     const nav=[
+      ['CAMPAIGN','Story operations and recovered documents','campaign'],
       ['DEPLOY','Configure and launch an operation','deploy'],
       ['OPERATIVES','Roster, mastery and dossiers','operatives'],
       ['ARMORY','Weapons, support systems, evolutions','armory'],
@@ -197,6 +199,7 @@ export class Screens{
 
   route(name){
     const routes={
+      campaign:()=>this.campaign(),
       deploy:()=>this.deploy(),operatives:()=>this.operatives(),
       armory:()=>this.armory(),development:()=>this.development(),
       directives:()=>this.directives(),intel:()=>this.intel(),
@@ -229,6 +232,165 @@ export class Screens{
     window.addEventListener('keydown',handler);
     this.navHandler&&window.removeEventListener('keydown',this.navHandler);
     this.navHandler=handler;
+  }
+
+  // ---- campaign ----------------------------------------------------------
+
+  campaign(){
+    const save=this.save;
+    const progress=campaignProgress(save);
+    const next=nextOperation(save);
+
+    this.shell(this.panel('PHANTOM PROTOCOL',
+      'The audit, in order. Each operation returns one document; read end to end they are the disclosure.',
+      `<div class="campaign-progress">
+        <span class="eyebrow">DISCLOSURE ${progress.done}/${progress.total}</span>
+        <div class="bar mini"><i style="width:${progress.pct*100}%"></i></div>
+      </div>
+      <div class="op-list">
+        ${CAMPAIGN.map(op=>{
+          const record=save.campaign?.[op.id];
+          const done=!!record?.completed;
+          const unlocked=operationUnlocked(save,op);
+          const isNext=next&&next.id===op.id;
+          const map=MAPS.find(m=>m.id===op.map);
+          if(!unlocked){
+            return `<article class="op-row locked">
+              <span class="op-index">${String(op.index).padStart(2,'0')}</span>
+              <div class="op-body">
+                <h3>CLASSIFIED</h3>
+                <p class="muted">Preceding operations must be closed before this file opens.</p>
+              </div>
+            </article>`;
+          }
+          return `<article class="op-row ${done?'done':''} ${isNext?'next':''}">
+            <span class="op-index">${String(op.index).padStart(2,'0')}</span>
+            <div class="op-body">
+              <span class="eyebrow">${OBJECTIVE_TYPES[op.objective.type].name} · ${escape(map?.name||op.map)}</span>
+              <h3>${escape(op.name)}</h3>
+              <p class="muted">${escape(op.tagline)}</p>
+              ${done?`<div class="op-doc"><b>${escape(op.document.name)}</b><span>${escape(op.document.classification)}</span></div>`:''}
+            </div>
+            <div class="op-action">
+              ${done
+                ? `<button class="btn small" data-readdoc="${op.id}">READ FILE</button>`
+                : `<button class="btn ${isNext?'primary':''} small" data-startop="${op.id}">BRIEFING</button>`}
+            </div>
+          </article>`;
+        }).join('')}
+      </div>
+      ${progress.complete?`<p class="campaign-closing muted">
+        Every document is recovered. The audit is closed, which is not the same as finished.
+      </p>`:''}`,
+      {eyebrow:'OPERATIONS',wide:true}));
+
+    this.wireBack();
+    root().querySelectorAll('[data-startop]').forEach(button=>{
+      button.addEventListener('click',()=>{
+        this.click();
+        this.briefing(CAMPAIGN.find(op=>op.id===button.dataset.startop));
+      });
+    });
+    root().querySelectorAll('[data-readdoc]').forEach(button=>{
+      button.addEventListener('click',()=>{
+        this.click();
+        this.documentScreen(CAMPAIGN.find(op=>op.id===button.dataset.readdoc),()=>this.campaign());
+      });
+    });
+  }
+
+  // Pre-mission dialogue. Short, skippable, and it states the objective.
+  briefing(op){
+    if(!op)return this.campaign();
+    const map=MAPS.find(m=>m.id===op.map);
+    const objective=OBJECTIVE_TYPES[op.objective.type];
+
+    this.shell(`
+      <div class="briefing">
+        <div class="briefing-inner">
+          <span class="eyebrow">OPERATION ${String(op.index).padStart(2,'0')} // ${escape(map?.name||'')}</span>
+          <h1>${escape(op.name)}</h1>
+          <div class="dialogue">
+            ${op.briefing.map((line,index)=>`
+              <div class="line speaker-${line.speaker.toLowerCase()}" style="animation-delay:${index*.5}s">
+                <b>${line.speaker}</b>
+                <p>${escape(line.text)}</p>
+              </div>`).join('')}
+          </div>
+          <div class="objective-card">
+            <span class="eyebrow">OBJECTIVE // ${objective.name}</span>
+            <p>${escape(objective.summary)}</p>
+            <div class="objective-meta">
+              <span>THEATRE <b>${escape(map?.name||op.map)}</b></span>
+              <span>WINDOW <b>${op.duration} MIN</b></span>
+              <span>THREAT <b>${escape(DIFFICULTIES_BY_ID[op.difficulty]?.name||'')}</b></span>
+            </div>
+          </div>
+          <div class="button-row center">
+            <button class="btn primary large" id="launchOp">DEPLOY</button>
+            <button class="btn" id="abortOp">BACK</button>
+          </div>
+        </div>
+      </div>`,{scan:false});
+
+    root().querySelector('#abortOp').addEventListener('click',()=>{this.click();this.campaign()});
+    root().querySelector('#launchOp').addEventListener('click',()=>{
+      this.audio?.play('confirm');
+      this.teardownBackground();
+      const operativeId=this.save.profile.lastOperative||'vesper';
+      this.startGame({
+        operative:OPERATIVES.find(o=>o.id===operativeId)||OPERATIVES[0],
+        map:MAPS.find(m=>m.id===op.map),
+        duration:op.duration,
+        durationSpec:DURATIONS.find(d=>d.minutes===op.duration),
+        difficulty:DIFFICULTIES_BY_ID[op.difficulty],
+        operation:op
+      });
+    });
+  }
+
+  // Post-mission dialogue plus the document the operation returned.
+  debrief(op,onDone){
+    this.shell(`
+      <div class="briefing">
+        <div class="briefing-inner">
+          <span class="eyebrow">DEBRIEF // OPERATION ${String(op.index).padStart(2,'0')}</span>
+          <h1>${escape(op.name)}</h1>
+          <div class="dialogue">
+            ${op.debrief.map((line,index)=>`
+              <div class="line speaker-${line.speaker.toLowerCase()}" style="animation-delay:${index*.5}s">
+                <b>${line.speaker}</b>
+                <p>${escape(line.text)}</p>
+              </div>`).join('')}
+          </div>
+          <div class="button-row center">
+            <button class="btn primary large" id="readDoc">OPEN RECOVERED FILE</button>
+          </div>
+        </div>
+      </div>`,{scan:false});
+    root().querySelector('#readDoc').addEventListener('click',()=>{
+      this.audio?.play('confirm');
+      this.documentScreen(op,onDone);
+    });
+  }
+
+  documentScreen(op,onDone){
+    const doc=op.document;
+    this.shell(`
+      <div class="briefing document">
+        <div class="briefing-inner">
+          <span class="eyebrow">${escape(doc.classification)}</span>
+          <h1>${escape(doc.name)}</h1>
+          <div class="doc-body"><p>${escape(doc.body)}</p></div>
+          <div class="button-row center">
+            <button class="btn primary" id="closeDoc">CLOSE FILE</button>
+          </div>
+        </div>
+      </div>`,{scan:false});
+    root().querySelector('#closeDoc').addEventListener('click',()=>{
+      this.click();
+      (onDone||(()=>this.campaign()))();
+    });
   }
 
   // ---- deploy ------------------------------------------------------------

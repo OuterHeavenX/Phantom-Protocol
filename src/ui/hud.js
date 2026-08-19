@@ -23,6 +23,11 @@ const template=(operative,ability)=>`
       </div>
     </div>
 
+    <div class="hud-panel mission-objective" id="missionObjective" hidden>
+      <span class="mission-objective-label" id="missionObjectiveLabel">OBJECTIVE</span>
+      <b class="mission-objective-value" id="missionObjectiveValue">—</b>
+    </div>
+
     <div class="hud-panel objectives" id="objectivePanel">
       <span class="objectives-head">FIELD OBJECTIVES <b id="objectivesCleared">0</b></span>
       <ul class="objective-list" id="objectiveList"></ul>
@@ -97,6 +102,8 @@ export class Hud{
       mapName:$('mapName'),timerValue:$('timerValue'),extractionTimer:$('extractionTimer'),phaseValue:$('phaseValue'),
       missionBar:$('missionBar'),
       objectiveList:$('objectiveList'),objectivesCleared:$('objectivesCleared'),
+      missionObjective:$('missionObjective'),missionObjectiveLabel:$('missionObjectiveLabel'),
+      missionObjectiveValue:$('missionObjectiveValue'),
       killsValue:$('killsValue'),creditsValue:$('creditsValue'),jpValue:$('jpValue'),
       comboValue:$('comboValue'),
       bossBar:$('bossBar'),bossName:$('bossName'),bossPhase:$('bossPhase'),bossHp:$('bossHp'),
@@ -198,9 +205,24 @@ export class Hud{
     el.turretBtn.classList.toggle('ready',engine.canDeploy);
     el.turretBtn.classList.toggle('maxed',engine.deployedTurrets>=kit.turrets);
 
+    this.updateMissionObjective();
     this.updateObjectives();
     this.updateLoadout();
     this.updateStatuses();
+  }
+
+  // The campaign objective, when the operation has one beyond extraction.
+  updateMissionObjective(){
+    const line=this.engine.mission?.hudLine?.();
+    const el=this.el;
+    if(!line){
+      if(!el.missionObjective.hidden)el.missionObjective.hidden=true;
+      return;
+    }
+    el.missionObjective.hidden=false;
+    this.set('missionLabel',el.missionObjectiveLabel,line.label);
+    this.set('missionValue',el.missionObjectiveValue,String(line.value));
+    el.missionObjective.classList.toggle('done',!!line.done);
   }
 
   // The checklist only redraws when a tracked count actually ticks over,

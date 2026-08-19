@@ -7,6 +7,7 @@ import {EnemyBrain,AI_STATES} from './ai.js';
 import {Loadout} from './weapons.js';
 import {Boss} from './boss.js';
 import {Objectives} from './objectives.js';
+import {Mission} from './mission.js';
 import {Fx} from './fx.js';
 import {ABILITIES,TRAITS,distanceToSegment} from './abilities.js';
 import {ENEMIES_BY_ID,STATUS_EFFECTS} from '../../data/enemies.js';
@@ -158,6 +159,8 @@ export class Engine{
       difficulty:this.difficulty,duration:config.duration,map:this.map
     });
     this.objectives=new Objectives(this);
+    // Campaign operations layer an objective over the survival contract.
+    this.mission=new Mission(this,config.objective);
     this.applyTrait('onInit');
 
     this.camera.x=this.player.x;
@@ -317,6 +320,7 @@ export class Engine{
     this.updateStatuses(dt);
     this.updateTurretDurability(dt);
     this.updateVaults(dt);
+    this.mission.update(dt);
     this.objectives.update(dt);
 
     this.cullEntities();
@@ -2213,6 +2217,15 @@ export class Engine{
       // Hold decays rather than resetting: being knocked or dashed out of the
       // zone for a moment should cost progress, not erase it.
       if(distance<EXTRACTION_RADIUS){
+        // An operation with an unmet objective does not get to leave.
+        if(!this.mission.objectiveMet){
+          this.extractionHold=0;
+          if(!this._blockedNotice||this.elapsed-this._blockedNotice>4){
+            this._blockedNotice=this.elapsed;
+            this.announce(`OBJECTIVE INCOMPLETE // ${this.mission.blockedReason}`,'#ff7068',2.4);
+          }
+          return;
+        }
         this.extractionHold=(this.extractionHold||0)+this.dt;
         if(this.extractionHold>=EXTRACTION_HOLD)this.finish(true,'EXTRACTION CONFIRMED');
       }else{
@@ -2257,6 +2270,7 @@ export class Engine{
       credits:Math.round(this.credits),jp:jpEarned,
       discovered:[...this.discovered],
       objectivesCleared:this.objectives.completed,
+      mission:this.mission.summary(),
       vaultsFound:this.telemetry.vaultsFound,
       vaultsBreached:this.telemetry.vaultsBreached,
       turretsDeployed:this.telemetry.turretsDeployed,
