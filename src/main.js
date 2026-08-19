@@ -1,6 +1,7 @@
 import {loadSave,saveGame} from './save/storage.js';
 import {commitRun,completeRecruitments,undiscoveredOperatives} from './save/progression.js';
 import {Screens} from './ui/screens.js';
+import {Splash} from './ui/splash.js';
 import {Hud} from './ui/hud.js';
 import {LevelUpScreen} from './ui/levelup.js';
 import {PauseMenu} from './ui/pause.js';
@@ -57,7 +58,16 @@ function applyGlobalSettings(){
   document.documentElement.classList.toggle('reduced-flashing',!!save.settings.reducedFlashing);
 }
 
+// The command menu is built immediately and the boot title screen is laid
+// over it, so dismissing the title fades straight through to a menu that is
+// already there. START is also the gesture that unlocks audio, which is why
+// the title track opens under the artwork rather than after it.
 screens.menu();
+new Splash({
+  audio,
+  onStart:()=>{},
+  onSettings:()=>screens.settings()
+}).mount(document.body);
 
 // ---------------------------------------------------------------------------
 // Run lifecycle

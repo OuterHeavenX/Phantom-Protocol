@@ -19,7 +19,8 @@ And shipped since: a requisition ladder that issues two weapons at induction and
 the other sixteen against command rating; persistent blood and oil floor decals that last
 the whole operation, baked into an offscreen layer once they age out of the crisp set;
 and the Vulture gunship, the first flying hostile, scheduled by contract length rather
-than drawn from the deployment pool.
+than drawn from the deployment pool. Plus an authored boot title screen in a wide and a
+tall frame, with the artwork's own painted buttons wired up as the real ones.
 
 Remaining:
 

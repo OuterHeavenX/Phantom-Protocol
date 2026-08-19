@@ -11,6 +11,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap"/>
+<!-- The boot title screen picks its artwork by viewport shape; the crossover
+     sits at the geometric mean of the two frames' aspect ratios (see
+     src/ui/splash.js), so only the one that will be shown is fetched. -->
+<link rel="preload" as="image" type="image/webp" href="./assets/images/title-screen-wide.webp" media="(min-aspect-ratio: 11/14)"/>
+<link rel="preload" as="image" type="image/webp" href="./assets/images/title-screen-tall.webp" media="(max-aspect-ratio: 11/14)"/>
 <link rel="stylesheet" href="./css/main.css"/>
 <link rel="stylesheet" href="./css/hud.css"/>
 <link rel="stylesheet" href="./css/responsive.css"/>

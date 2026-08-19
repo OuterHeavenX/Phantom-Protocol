@@ -69,6 +69,8 @@ camera lead; auto-target can be disabled in settings.
   operative id — and as black silhouettes for personnel who have not been identified.
 - **Persistent battlefield gore** — every kill stains the floor and every stain survives
   to extraction.
+- **An authored title screen**, in a wide frame and a tall one, picked by the shape of
+  the screen it lands on.
 
 ## Systems
 
@@ -146,6 +148,24 @@ is still to earn.
 the deploy screen and the campaign briefing. Without a selection the operative carries
 their own issue weapon, stock.
 
+**Title screen.** The boot screen is authored artwork (`assets/images`), shipped in a
+wide frame for desktop and landscape tablets and a tall one for phones. The logo,
+tagline and both buttons are painted into the image, so `src/ui/splash.js` does not draw
+a menu over it — it makes the painted buttons real. That only works if the artwork is
+never cropped, because a crop slides the painted buttons out from under their hit areas,
+so the stage carries the artwork's own aspect ratio and is fitted inside the viewport
+whole; the letterbox is filled with a blurred, dimmed copy of the same frame rather than
+bars. With no cropping the mapping is exact and each hit area is declared as a percentage
+of the artwork. Anywhere else on the frame also starts the operation, so the painted
+buttons never have to be a precise touch target on a short landscape phone.
+
+The variant is chosen by which artwork's shape is closer to the viewport's, crossing over
+at the geometric mean of the two, and re-chosen when the device rotates. Each frame ships
+as WebP with the PNG behind it as the fallback — a tenth of the bytes — and the matching
+one is preloaded from `index.html` so the title screen is the first thing painted rather
+than a black frame. The command menu is built underneath before the title appears, so
+dismissing it fades straight through.
+
 **Requisition.** A new operator is issued two weapons — the Needle-7 and the Bulwark
 SG — and requisitions the rest as command rating rises, on the ladder declared in
 `data/weapons.js` (`WEAPON_UNLOCK_LEVEL`). The armory lists every locked weapon with the
@@ -201,6 +221,7 @@ against tracked run telemetry.
 ## Structure
 
 ```
+assets/   authored art and audio (title screens, music); everything else is procedural
 data/     content registries (operatives, weapons, passives, enemies, bosses, maps, meta)
 src/core/ rng, math + spatial hash, camera, input, synthesized audio
 src/game/ engine, world generation, AI, weapons, abilities, boss, director, fx
@@ -221,4 +242,5 @@ within and across runs as a secondary currency.
 
 All characters, organizations, terminology, lore and gameplay presentation in this
 repository are original to Phantom Protocol. No copyrighted franchise assets or lore are
-included, and no third-party art, audio or code is bundled.
+included, and no third-party art, audio or code is bundled. The title artwork and music
+under `assets/` are the project's own; everything drawn in-game is generated at runtime.
