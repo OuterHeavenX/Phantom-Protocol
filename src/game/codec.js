@@ -125,7 +125,7 @@ export class CodecDirector{
     this.current=next;
     this.timer=next.dwell;
     this.revision++;
-    this.engine.audio?.play('codec',{volume:.5});
+    this.engine.audio?.play('codec');
   }
 
   // Silences the channel and drops anything still waiting — used when the run

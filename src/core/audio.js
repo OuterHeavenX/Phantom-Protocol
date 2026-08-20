@@ -121,9 +121,13 @@ export class AudioEngine{
 
   // Voice budget + per-sound throttle keeps huge waves from turning the
   // mix into mush and from allocating hundreds of nodes per frame.
-  canPlay(name,throttle){
+  // `essential` exempts a cue from the voice budget, not from mute or its own
+  // throttle. The budget exists to stop a hundred simultaneous impacts turning
+  // the mix to mush; a cue that tells the player something they cannot learn
+  // any other way should not be the thing it drops.
+  canPlay(name,throttle,{essential=false}={}){
     if(!this.ready||!this.ctx||this.settings.muted)return false;
-    if(this.voices>=this.maxVoices)return false;
+    if(!essential&&this.voices>=this.maxVoices)return false;
     if(throttle){
       const t=this.ctx.currentTime;
       const last=this.lastPlayed.get(name)||-99;
@@ -264,10 +268,14 @@ export class AudioEngine{
       // The codec opening: two clean tones and a breath of carrier hiss, the
       // sound a channel makes when somebody keys it.
       case 'codec':
-        if(!this.canPlay('codec',.12))return;
-        this.tone({freq:1180,type:'square',duration:.045,gain:.05*volume});
-        this.tone({freq:1570,type:'square',duration:.06,gain:.045*volume,delay:.055});
-        this.noise({duration:.09,gain:.014*volume,freq:3200,filter:'bandpass',q:1.4,delay:.02});
+        // Essential: a transmission opening during a firefight is exactly when
+        // the voice budget is full, and exactly when the callout matters most.
+        // Levelled with the other interface cues — a shade under 'confirm' —
+        // rather than the near-silence it shipped at.
+        if(!this.canPlay('codec',.12,{essential:true}))return;
+        this.tone({freq:1180,type:'square',duration:.045,gain:.1*volume});
+        this.tone({freq:1570,type:'square',duration:.06,gain:.09*volume,delay:.055});
+        this.noise({duration:.09,gain:.028*volume,freq:3200,filter:'bandpass',q:1.4,delay:.02});
         break;
       case 'alarm':
         [0,.28,.56].forEach(d=>this.tone({freq:880,endFreq:560,type:'sawtooth',duration:.26,gain:.14*volume,delay:d}));
