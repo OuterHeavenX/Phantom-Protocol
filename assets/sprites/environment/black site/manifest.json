@@ -1,0 +1,11 @@
+{
+  "theatre": "blacksite",
+  "version": 1,
+  "shadows": true,
+  "sprites": {
+    "floor": {
+      "src": "floor/blacksite-floor-512.png",
+      "world": [128, 128]
+    }
+  }
+}

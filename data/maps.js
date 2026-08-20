@@ -7,6 +7,11 @@ export const MAPS=[
     id:'blacksite',name:'BLACKSITE ZERO',condition:'Subterranean research complex',
     desc:'Tight interior grid. Heavy cover, short sightlines, close-quarters pressure.',
     music:'blacksite',
+    // Authored environment art. The pack directory is named rather than derived
+    // from the id because the uploaded folder does not match it. Only the floor
+    // is painted so far; everything else in this theatre still draws
+    // procedurally, and does so again if the tile fails to load.
+    art:'black site',
     palette:{
       floor:'#0c1f26',floorAlt:'#0e2630',grid:'rgba(118,231,212,.055)',
       wall:'#1a3138',wallEdge:'#4e7d84',accent:'#76e7d4',hazard:'#ffb35c',

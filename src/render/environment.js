@@ -25,14 +25,19 @@
 // Manifest format
 // ---------------------------------------------------------------------------
 //
-// A theatre opts in by setting `art:true` in its `data/maps.js` definition.
-// Without that flag no request is made at all, so the game does not spend a
-// round trip per contract probing for files that do not exist yet. Shipping a
-// pack is therefore two steps: drop the directory in, then set the flag.
+// A theatre opts in by setting `art` in its `data/maps.js` definition. Without
+// it no request is made at all, so the game does not spend a round trip per
+// contract probing for files that do not exist yet. Shipping a pack is
+// therefore two steps: drop the directory in, then set the flag.
+//
+//   art:true      the pack directory is named after the theatre id
+//   art:'a name'  the pack directory is named explicitly, for a directory that
+//                 does not match the id
 //
 // The manifest is looked for at
-// `assets/sprites/environment/<theatre>/manifest.json`. Paths inside it are
-// relative to that directory.
+// `assets/sprites/environment/<pack>/manifest.json`. Paths inside it are
+// relative to that directory, and every URL is passed through `encodeURI`, so
+// a directory or file name containing spaces resolves without being renamed.
 //
 //   {
 //     "theatre": "blacksite",
@@ -93,9 +98,10 @@
 const MANIFEST='manifest.json';
 
 export class EnvironmentArt{
-  constructor(theatre,options={}){
-    this.theatre=theatre||null;
-    this.root=options.root||(this.theatre?`./assets/sprites/environment/${this.theatre}/`:null);
+  constructor(pack,options={}){
+    // The pack directory name, which is usually but not always the theatre id.
+    this.pack=pack||null;
+    this.root=options.root||(this.pack?`./assets/sprites/environment/${this.pack}/`:null);
     this.entries=new Map();
     // idle -> loading -> active | absent. `absent` is terminal and is by far
     // the most common outcome: it means this theatre has no art pack. A theatre
@@ -143,7 +149,7 @@ export class EnvironmentArt{
 
     let manifest=null;
     try{
-      const response=await fetch(this.root+MANIFEST,{cache:'force-cache'});
+      const response=await fetch(encodeURI(this.root+MANIFEST),{cache:'force-cache'});
       if(!response.ok)throw new Error(`manifest ${response.status}`);
       manifest=await response.json();
     }catch(err){
@@ -202,7 +208,7 @@ export class EnvironmentArt{
       // A broken file drops one sprite, never the pack and never the frame.
       image.onload=()=>resolve(image.naturalWidth>0?image:null);
       image.onerror=()=>resolve(null);
-      image.src=this.root+src;
+      image.src=encodeURI(this.root+src);
     });
   }
 

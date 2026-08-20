@@ -51,9 +51,10 @@ export class Renderer{
     this.weather=new Weather(engine.map?.weather,this.settings);
 
     // Authored environment art for this theatre, when a pack has been shipped
-    // for it. A theatre opts in with `art:true` in its map definition; without
-    // it nothing is fetched at all, which is the state every theatre is in
-    // until somebody paints it.
+    // for it. A theatre opts in with `art` in its map definition — `true` to
+    // name the pack directory after the theatre id, or a string to name it
+    // explicitly. Without the flag nothing is fetched at all, which is the
+    // state every unpainted theatre is in.
     //
     // The load is asynchronous and deliberately unawaited: the first frame runs
     // long before any image decodes, and until the whole pack has resolved
@@ -61,7 +62,8 @@ export class Renderer{
     // branch. A frame is therefore either fully procedural or fully authored,
     // never half-dressed.
     this.artFloorPattern=null;
-    this.art=new EnvironmentArt(engine.map?.art?engine.map.id:null);
+    const pack=engine.map?.art===true?engine.map.id:(engine.map?.art||null);
+    this.art=new EnvironmentArt(pack);
     this.art.load().then(()=>{
       if(this.art.active)this.artFloorPattern=this.art.buildFloorPattern(this.ctx);
     });
@@ -183,7 +185,18 @@ export class Renderer{
     const y=clamp(camera.y-halfH,-200,world.height+200);
 
     ctx.save();
-    ctx.fillStyle=this.artFloorPattern||this.floorPattern||world.palette.floor;
+    if(this.artFloorPattern){
+      // An authored tile is authored above world scale and resampled down, so
+      // smoothing is set here rather than inherited from whichever block last
+      // happened to touch it. The pattern is filled under the camera transform,
+      // which puts its origin on world (0,0): the plates stay bolted to the
+      // floor instead of swimming with the camera.
+      ctx.imageSmoothingEnabled=true;
+      ctx.imageSmoothingQuality='high';
+      ctx.fillStyle=this.artFloorPattern;
+    }else{
+      ctx.fillStyle=this.floorPattern||world.palette.floor;
+    }
     ctx.fillRect(x,y,halfW*2,halfH*2);
 
     // Out-of-bounds shading beyond the arena edge.

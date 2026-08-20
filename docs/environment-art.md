@@ -9,9 +9,12 @@ This document only covers wiring.
 
 ## The two steps
 
-1. Put the pack at `assets/sprites/environment/<theatre>/`, with a
+1. Put the pack at `assets/sprites/environment/<pack>/`, with a
    `manifest.json` at its root.
-2. Set `art:true` on that theatre in `data/maps.js`.
+2. Set `art` on that theatre in `data/maps.js` — `true` when the directory is
+   named after the theatre id, or the directory name as a string when it is
+   not. Every URL is passed through `encodeURI`, so a directory or file name
+   containing spaces works without being renamed.
 
 Until step 2 the game makes no request at all — a theatre without the flag never
 probes for files that do not exist. Until step 1 resolves, and forever after if
@@ -75,6 +78,14 @@ the unsuffixed key covers the whole theatre when only one set exists.
 
 Anything not listed keeps drawing procedurally. There is no requirement to ship
 a complete pack, and no penalty for a partial one.
+
+## What is wired up today
+
+Blacksite Zero is opted in with `art:'black site'` and ships one asset: a
+512x512 floor plate mapped to the existing 128-unit tiling period. Everything
+else in that theatre — walls, cover, vaults, hazards, decor — still draws
+procedurally, and the floor does too if the tile fails to load. No other
+theatre has the flag.
 
 ## What the loader guarantees
 
