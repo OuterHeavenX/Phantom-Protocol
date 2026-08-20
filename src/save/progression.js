@@ -381,6 +381,42 @@ export function recruitmentProgress(save,operativeId){
   };
 }
 
+// Real-time hours an operative spends in medical after being extracted from
+// while down. Long enough that leaving somebody behind costs you a choice next
+// contract, short enough that it is not a punishment for playing.
+export const MEDICAL_HOURS=4;
+
+// Mirrors recruitmentProgress: how long until a downed operative is fit again.
+export function medicalProgress(save,operativeId){
+  const record=save.operatives[operativeId];
+  if(!record?.medical)return null;
+  const elapsed=Date.now()-record.medical.startedAt;
+  const total=record.medical.durationMs;
+  const remaining=Math.max(0,total-elapsed);
+  return{remaining,progress:Math.min(1,elapsed/total),complete:remaining===0};
+}
+
+// Called at boot: anyone whose window has closed comes off the list.
+export function clearHealed(save){
+  const healed=[];
+  for(const op of OPERATIVES){
+    const record=save.operatives[op.id];
+    if(!record?.medical)continue;
+    if(Date.now()-record.medical.startedAt<record.medical.durationMs)continue;
+    record.medical=null;
+    healed.push(op);
+  }
+  return healed;
+}
+
+// Extracting while a squadmate is down leaves them in medical.
+export function sendToMedical(save,operativeId,hours=MEDICAL_HOURS){
+  const record=save.operatives[operativeId];
+  if(!record)return false;
+  record.medical={startedAt:Date.now(),durationMs:hours*3600*1000};
+  return true;
+}
+
 export function completeRecruitments(save){
   const completed=[];
   for(const op of OPERATIVES){

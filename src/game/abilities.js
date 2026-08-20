@@ -80,7 +80,7 @@ export const ABILITIES={
     const toX=player.x+Math.cos(bestAngle)*distance;
     const toY=player.y+Math.sin(bestAngle)*distance;
 
-    engine.blinkPlayer(toX,toY);
+    engine.blinkPlayer(toX,toY,player);
     // Damage everything along the traversed line.
     const damage=90*engine.stats.damage;
     const candidates=engine.enemyHash.query((fromX+player.x)/2,(fromY+player.y)/2,distance,scratch);

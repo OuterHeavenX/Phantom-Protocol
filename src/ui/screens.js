@@ -11,7 +11,7 @@ import {
 import {
   readMetric,achievementProgress,milestoneProgress,purchaseDevNode,respecDev,
   unlockedOperatives,unlockedMaps,unlockedDifficulties,
-  recruitmentProgress,startRecruitment,counselHours
+  recruitmentProgress,startRecruitment,counselHours,medicalProgress,MEDICAL_HOURS
 } from '../save/progression.js';
 import {portraitSvg,portraitMarkup,dossierCardMarkup} from '../render/portraits.js';
 import {CAMPAIGN,OBJECTIVE_TYPES,nextOperation,campaignProgress,operationUnlocked} from '../../data/campaign.js';
@@ -43,6 +43,7 @@ export class Screens{
       map:save.profile.lastMap||'blacksite',
       duration:save.profile.lastDuration||10,
       difficulty:save.profile.lastDifficulty??1,
+      squadmate:save.profile.lastSquadmate||null,
       secondWeapon:null
     };
     this.armoryTab='weapons';
@@ -422,6 +423,43 @@ export class Screens{
   }
 
   // Markup for the loadout strip shown before deployment.
+  // The second operative on the ground. Optional — a contract run alone is
+  // still the default — and it lists everyone unlocked except whoever is
+  // deploying and anyone still in medical.
+  squadCandidates(){
+    const save=this.save;
+    return OPERATIVES.filter(op=>{
+      if(op.id===this.deployConfig.operative)return false;
+      return !!save.operatives[op.id]?.unlocked;
+    });
+  }
+
+  squadPickerMarkup(){
+    const candidates=this.squadCandidates();
+    if(!candidates.length)return '';
+    const chosen=this.deployConfig.squadmate;
+    return `
+      <div class="field-group">
+        <label class="eyebrow">SECOND OPERATIVE</label>
+        <div class="chip-row compact" id="squadChips">
+          <button class="chip small ${chosen?'':'active'}" data-squad="">
+            <b>ALONE</b><span>No second on the ground</span>
+          </button>
+          ${candidates.map(op=>{
+            const medical=medicalProgress(this.save,op.id);
+            const blocked=medical&&!medical.complete;
+            return `<button class="chip small ${chosen===op.id?'active':''}"
+                    data-squad="${op.id}" style="--c:${op.color}" ${blocked?'disabled':''}>
+              <b>${op.codename}</b>
+              <span>${blocked
+                ? `IN MEDICAL // ${formatDuration(medical.remaining/1000)}`
+                : escape(op.role)}</span>
+            </button>`;
+          }).join('')}
+        </div>
+      </div>`;
+  }
+
   primaryPickerMarkup(operative){
     const save=this.save;
     const owned=WEAPONS.filter(w=>save.weapons[w.id]?.unlocked);
@@ -665,6 +703,7 @@ export class Screens{
           </div>
 
           ${this.primaryPickerMarkup(OPERATIVES.find(o=>o.id===this.deployConfig.operative))}
+          ${this.squadPickerMarkup()}
 
           <div class="field-group">
             <label class="eyebrow">THEATRE</label>
@@ -725,6 +764,7 @@ export class Screens{
     };
     this.wirePrimaryPicker(()=>this.deploy());
     bind('[data-op]','op','operative');
+    bind('[data-squad]','squad','squadmate');
     bind('[data-map]','map','map');
     bind('[data-dur]','dur','duration',Number);
     bind('[data-diff]','diff','difficulty',Number);
@@ -736,6 +776,7 @@ export class Screens{
       this.save.profile.lastMap=config.map;
       this.save.profile.lastDuration=config.duration;
       this.save.profile.lastDifficulty=config.difficulty;
+      this.save.profile.lastSquadmate=config.squadmate||null;
       this.persist();
       this.teardownBackground();
       this.startGame({
@@ -744,7 +785,8 @@ export class Screens{
         duration:config.duration,
         durationSpec:DURATIONS.find(d=>d.minutes===config.duration),
         difficulty:DIFFICULTIES_BY_ID[config.difficulty],
-        primary:this.currentPrimary()
+        primary:this.currentPrimary(),
+        squadmate:config.squadmate?OPERATIVES.find(o=>o.id===config.squadmate):null
       });
     });
   }
@@ -1518,6 +1560,21 @@ export class Screens{
                   `<div class="stat-cell"><span>${label}</span><b>${value}</b></div>`).join('')}
               </div>
             </section>
+
+            ${summary.squad?.length?`
+            <section>
+              <h3 class="section-title">SECOND OPERATIVE</h3>
+              <div class="loadout-list">
+                ${summary.squad.map(mate=>`
+                  <div class="loadout-row ${mate.downed?'passive':''}" style="--c:${mate.color}">
+                    <span style="color:${mate.color}">${mate.codename}</span>
+                    <i>${mate.downed
+                      ? `LEFT BEHIND // ${MEDICAL_HOURS}H MEDICAL`
+                      : `${mate.kills} ELIM`}</i>
+                    <b>${formatNumber(mate.damageDealt)}</b>
+                  </div>`).join('')}
+              </div>
+            </section>`:''}
 
             <section>
               <h3 class="section-title">FINAL LOADOUT</h3>

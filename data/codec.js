@@ -53,6 +53,9 @@ export const CODEC_EVENTS={
   evolution:{cooldown:30,priority:2},
   critical:{cooldown:35,priority:4},
   halfway:{once:true,priority:1},
+  squadDown:{priority:4},
+  squadRevived:{priority:3},
+  squadAbility:{cooldown:70,priority:1},
   extraction:{priority:4},
   extractionBlocked:{cooldown:25,priority:4},
   combo:{once:true,priority:1}
@@ -103,6 +106,12 @@ const HANDLER={
     'You are about to become a casualty report. Disengage.'],
   halfway:['Halfway. The response scales from here, not the clock.',
     'You are through half of it. It gets heavier, not longer.'],
+  squadDown:['Your second is down. They are not dead. Reach them.',
+    'One of yours is on the ground and still breathing. That is a clock.'],
+  squadRevived:['They are up. Do not make a habit of this.',
+    'Back on their feet. Keep them there.'],
+  squadAbility:['Your second just spent something expensive. Use the room it bought you.',
+    'That was their signature move. It does not come back quickly.'],
   extraction:['Beacon is live. Reach it and you are out.',
     'Extraction window is open. Nothing about it stays open forever.'],
   extractionBlocked:['Beacon will not lift you. The contract is not finished.',
@@ -211,6 +220,17 @@ const SELF={
   halfway:{
     oracle:'The pattern is tightening. They are learning me.',
     default:'Halfway. Still standing.'
+  },
+  squadDown:{
+    bastion:'I told them to stay behind the wall.',
+    mirage:'That is on me. I put them there.',
+    requiem:'Get up. I am not carrying you and the contract.',
+    default:'I see them. Going to get them.'
+  },
+  squadRevived:{
+    ferrous:'Try the other side of the explosion next time.',
+    mirage:'Nobody stays on the ground while I am running this.',
+    default:'They are up.'
   },
   extraction:{
     wraith:'Then you will never see me leave either.',

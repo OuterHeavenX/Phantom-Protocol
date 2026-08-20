@@ -26,9 +26,16 @@ music moved off the AudioContext, which was freezing the track whenever the brow
 suspended the context. And codec traffic: the deployed operative and a handler talking
 over the channel printed on their dossier cards, across twenty events in a contract.
 
+And since: squadmates — a second operative on the ground who fights with their own issue
+weapon and their own ability, whom a share of each wave marks as their target, and who
+goes down rather than dying.
+
 Remaining:
 
-1. Deterministic daily and weekly contracts built on the existing seeded RNG.
+1. Deterministic daily and weekly contracts built on the existing seeded RNG. Blocked
+   on the simulation being reproducible from a seed at all: the director, boss and FX
+   still call bare `Math.random()`, so the same seed does not produce the same contract.
+   Item 4 is blocked on the same thing.
 2. A second development tree branch gated behind account level.
 3. Per-weapon secondary fire modes, as an eighth Gunsmith slot.
 4. Replay capture using the seeded, fixed-timestep simulation.

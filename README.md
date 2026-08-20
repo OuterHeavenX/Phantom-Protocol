@@ -65,6 +65,9 @@ camera lead; auto-target can be disabled in settings.
   personnel files. Roughly 40% come with a garrison sealed in alongside the loot.
 - **Field turrets** planted by the operative, 1× to 3× simultaneously by kit rank, with
   durability that scales with rank and level and depletes under contact.
+- **Squadmates** — take a second operative into a contract. They fight with their own
+  issue weapon and their own signature ability, hostiles treat them as a real target, and
+  they go down rather than die.
 - **Codec traffic** — the operative and whoever is running comms talk over the channel
   printed on their own dossier card, through a contract's worth of events.
 - **Authored operative dossiers** — eight hand-drawn personnel cards, readable in full,
@@ -160,6 +163,33 @@ is still to earn.
 **Loadout.** A primary weapon and its bench build are selected before deployment, on both
 the deploy screen and the campaign briefing. Without a selection the operative carries
 their own issue weapon, stock.
+
+**Squadmates.** A contract can be run with a second operative on the ground
+(`src/game/squadmate.js`). They carry their own issue weapon, hold a working distance
+from what they are shooting rather than standing still, keep a leash on the operative so
+they never wander off to die alone, and fire their own operative's real ability off their
+own cooldown — the ability implementations already take the actor as an argument, so an
+ally running WRAITH's phase strike moves the ally.
+
+They are deliberately not a second player: their rounds land at a fraction of the listed
+damage and their cadence is slower than yours. But they track the operative's level,
+because an ally frozen at their issue weapon's printed damage is a decoration by the
+ten-minute mark — the curve is shallower than yours, so they stay worth having without
+ever being the reason you won.
+
+About a third of each wave deploys with the squadmate as its mark rather than the
+operative. Every steering, sighting and firing decision in the AI reads one target out of
+its context, so pointing a hostile at the ally is a matter of swapping that reference per
+enemy rather than keeping a second behaviour tree; assignment happens once, at spawn, so
+a hostile commits to a mark instead of thrashing between two. Enemy rounds hit whoever
+they physically reach, which is not always who they were aimed at.
+
+A squadmate does not die. At zero health they go down, marked on the ground and by an
+arrow when they are off screen, and stand back up if you hold the ground around them long
+enough. Walking to the beacon without them puts them in medical for a real-time window —
+the same clock the counseling sessions run on — and the deploy screen will not let you
+take them again until it closes. That is the whole cost: not a death, a choice the next
+contract remembers.
 
 **Codec.** Every dossier card carries a CODEC panel with a channel number and CONNECTED
 under it; `data/codec.js` is what comes over it. Two people talk: the operative who

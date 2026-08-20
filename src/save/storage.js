@@ -51,7 +51,7 @@ function defaultWeaponRecord(unlocked=false){
 }
 
 function defaultOperativeRecord(){
-  return{unlocked:false,discovered:false,masteryXp:0,runs:0,wins:0,kills:0,bestTime:0,upgrades:{},recruitment:null};
+  return{unlocked:false,discovered:false,masteryXp:0,runs:0,wins:0,kills:0,bestTime:0,upgrades:{},recruitment:null,medical:null};
 }
 
 export function defaultSave(){

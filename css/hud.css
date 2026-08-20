@@ -475,3 +475,41 @@
 /* The panel is the flash, so reduced-flashing keeps the wash but drops the
    slide; reduced-motion is already handled globally. */
 .reduced-flashing .codec-scan{opacity:.34}
+
+/* ---- Squad strip --------------------------------------------------------
+   The second operative's condition, under the tally on the right so it does
+   not compete with the objective list. Never interactive. */
+.squad-strip{
+  position:absolute;right:0;top:132px;
+  display:flex;flex-direction:column;gap:5px;align-items:flex-end;
+  pointer-events:none;
+}
+.squad-chip{
+  min-width:104px;
+  padding:5px 8px 6px;
+  border:1px solid var(--c,var(--accent));
+  border-right-width:3px;
+  background:rgba(4,12,18,.82);
+}
+.squad-chip b{
+  display:block;
+  font-size:9.5px;letter-spacing:.16em;color:var(--c,var(--accent));
+  margin-bottom:4px;
+}
+.squad-chip .bar{height:3px}
+.squad-chip .bar>i{background:var(--c,var(--accent));box-shadow:none}
+.squad-chip.down{border-color:var(--warn);background:rgba(30,8,10,.82)}
+.squad-chip.down b{color:var(--warn)}
+.squad-chip.down .bar>i{background:var(--good)}
+.squad-state{
+  display:block;font-size:8px;letter-spacing:.2em;color:var(--warn);
+  margin-bottom:3px;
+  animation:squad-pulse 1.1s ease-in-out infinite;
+}
+@keyframes squad-pulse{0%,100%{opacity:.45}50%{opacity:1}}
+
+@media(max-width:760px){
+  .squad-strip{top:auto;bottom:150px;gap:4px}
+  .squad-chip{min-width:84px;padding:4px 6px 5px}
+  .squad-chip b{font-size:8.5px}
+}

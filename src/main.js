@@ -1,5 +1,6 @@
 import {loadSave,saveGame} from './save/storage.js';
-import {commitRun,completeRecruitments,undiscoveredOperatives} from './save/progression.js';
+import {commitRun,completeRecruitments,undiscoveredOperatives,
+  clearHealed,sendToMedical} from './save/progression.js';
 import {Screens} from './ui/screens.js';
 import {Splash} from './ui/splash.js';
 import {Hud} from './ui/hud.js';
@@ -21,7 +22,8 @@ const UI_TOUCH_TARGETS='.overlay,.hud-actions,.stick-aim,button,a,input,select,t
 
 let save=loadSave();
 const completed=completeRecruitments(save);
-if(completed.length>0)saveGame(save);
+const healed=clearHealed(save);
+if(completed.length>0||healed.length>0)saveGame(save);
 let session=null;
 const input=new Input();
 const screens=new Screens(save,startRun,audio);
@@ -93,6 +95,8 @@ function startRun(config){
     masteryXp:operativeRecord.masteryXp||0,
     // Campaign operation, when this run is a story mission.
     objective:config.operation?.objective,
+    // The second operative on the ground, when one was selected.
+    squadmate:config.squadmate||null,
     // Primary weapon and its bench build, resolved into combat modifiers.
     primary:config.primary?{
       weaponId:config.primary.weapon.id,
@@ -226,6 +230,10 @@ function finishRun(summary,config){
   cancelAnimationFrame(session.raf);
 
   summary.operationId=config.operation?.id||null;
+  // A squadmate carried out on their back spends real time in medical. Being
+  // downed is not a death, but walking to the beacon without them is a choice
+  // the next contract remembers.
+  for(const left of summary.squadLeftBehind||[])sendToMedical(save,left);
   const payout=commitRun(save,summary);
   screens.setSave(save);
 

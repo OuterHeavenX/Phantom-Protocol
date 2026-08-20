@@ -9,6 +9,7 @@ import {Boss} from './boss.js';
 import {Objectives} from './objectives.js';
 import {Mission} from './mission.js';
 import {CodecDirector} from './codec.js';
+import {Squadmate} from './squadmate.js';
 import {Fx} from './fx.js';
 import {ABILITIES,TRAITS,distanceToSegment} from './abilities.js';
 import {ENEMIES_BY_ID,STATUS_EFFECTS} from '../../data/enemies.js';
@@ -36,6 +37,9 @@ export const VAULT_SCAN_RADIUS=330;
 // How long a fitted optic keeps its lock on a contact after last acquiring it.
 // Comfortably longer than any weapon's cycle, so the reticle reads as steady.
 export const OPTIC_LOCK_HOLD=1.4;
+
+// Fraction of hostiles that deploy with the squadmate as their mark.
+const SQUAD_AGGRO_SHARE=.34;
 
 // Baseline sustain, in HP per second, before any passive or development-tree
 // regeneration. Enough to recover from chip damage between engagements
@@ -159,6 +163,7 @@ export class Engine{
     this.deployCooldown=0;
 
     this.setupPlayer();
+    this.setupSquad();
     this.setupLoadout();
     this.director=new Director(this,{
       difficulty:this.difficulty,duration:config.duration,map:this.map
@@ -213,6 +218,42 @@ export class Engine{
     this.devBonuses=dev;
     this.masteryBonuses=mastery;
     this.detectionMult=1+(dev.detection||0);
+  }
+
+  // A second operative deploys alongside, when one was selected and is not in
+  // medical. Kept as an array so the shape does not have to change if a
+  // contract ever fields more than one.
+  setupSquad(){
+    this.squad=[];
+    const mate=this.config.squadmate;
+    if(!mate)return;
+    const angle=this.rng.angle();
+    const spawn=this.world.findSpawn(this.rng,{
+      x:this.player.x+Math.cos(angle)*70,
+      y:this.player.y+Math.sin(angle)*70
+    },0,120);
+    this.squad.push(new Squadmate(this,mate,spawn));
+  }
+
+  // Live squadmates, which is what most callers actually mean.
+  get standingSquad(){
+    const out=[];
+    for(const mate of this.squad)if(!mate.downed)out.push(mate);
+    return out;
+  }
+
+  // Who a given hostile is currently working on. Enemies keep the assignment
+  // they were given rather than re-picking every frame, so a squad does not
+  // oscillate between two targets, and it falls back to the operative the
+  // moment their mark goes down.
+  aiTargetFor(enemy){
+    const mark=enemy.aggro;
+    if(mark&&!mark.downed&&this.squad.includes(mark))return mark;
+    return this.player;
+  }
+
+  updateSquad(dt){
+    for(const mate of this.squad)mate.update(dt);
   }
 
   setupLoadout(){
@@ -339,6 +380,7 @@ export class Engine{
 
     const enemyDt=dt*this.timeDilation;
     this.updatePlayer(dt);
+    this.updateSquad(dt);
     this.updateEnemies(enemyDt);
     this.updateBoss(enemyDt);
     this.loadout.update(dt,this);
@@ -588,14 +630,17 @@ export class Engine{
     return healed;
   }
 
-  blinkPlayer(x,y){
-    const player=this.player;
+  // Defaults to the operative, but takes an actor: a squadmate running WRAITH's
+  // phase strike has to move the squadmate, not whoever is holding the pad.
+  blinkPlayer(x,y,actor=this.player){
+    const player=actor;
     const clampedX=clamp(x,30,this.world.width-30);
     const clampedY=clamp(y,30,this.world.height-30);
-    this.spawnBlinkVfx(player.x,player.y,player.radius,this.operative.color);
+    const color=player===this.player?this.operative.color:player.color;
+    this.spawnBlinkVfx(player.x,player.y,player.radius,color);
     player.x=clampedX;player.y=clampedY;
     this.world.resolveCollision(player,player.radius);
-    this.spawnBlinkVfx(player.x,player.y,player.radius,this.operative.color);
+    this.spawnBlinkVfx(player.x,player.y,player.radius,color);
     player.invulnerable=Math.max(player.invulnerable,.3);
   }
 
@@ -649,8 +694,21 @@ export class Engine{
       squad:null
     };
     EnemyBrain.init(enemy,archetype);
+    this.assignAggro(enemy);
     this.enemies.push(enemy);
     return enemy;
+  }
+
+  // A share of each wave is pointed at the squadmate rather than the
+  // operative. Assigned once, at spawn, so a hostile commits to a mark instead
+  // of thrashing between two — and kept well under half, because the squadmate
+  // is support, not a way to make the contract somebody else's problem.
+  assignAggro(enemy){
+    enemy.aggro=null;
+    const standing=this.standingSquad;
+    if(!standing.length)return;
+    if(this.rng.next()>=SQUAD_AGGRO_SHARE)return;
+    enemy.aggro=standing[this.rng.int(0,standing.length-1)];
   }
 
   spawnEliteEnemy(eliteDef,x,y){
@@ -725,6 +783,11 @@ export class Engine{
 
     for(const enemy of this.enemies){
       if(enemy.dead)continue;
+      // Every steering, sighting and firing decision below reads ctx.player.
+      // Swapping it per hostile is what lets a share of them work the
+      // squadmate instead, without a second copy of the behaviour tree.
+      const victim=this.aiTargetFor(enemy);
+      context.player=victim;
       enemy.hitFlash=Math.max(0,enemy.hitFlash-dt);
       enemy.walkPhase+=dt*6;
 
@@ -743,8 +806,8 @@ export class Engine{
         enemy.vy=enemy.chargeVy;
         // Breachers demolish cover they run through.
         if(enemy.breaksCover)this.breakCoverAround(enemy);
-        if(dist(enemy.x,enemy.y,player.x,player.y)<enemy.radius+player.radius+4){
-          this.damagePlayer(enemy.damage*1.5,{source:enemy,fromX:enemy.x,fromY:enemy.y});
+        if(dist(enemy.x,enemy.y,victim.x,victim.y)<enemy.radius+victim.radius+4){
+          this.damageVictim(victim,enemy.damage*1.5,{source:enemy,fromX:enemy.x,fromY:enemy.y});
           enemy.chargeTimer=0;
         }
       }else{
@@ -915,11 +978,19 @@ export class Engine{
   }
 
   enemyMelee(enemy,damage){
-    this.damagePlayer(damage*enemy.buffMult,{source:enemy,fromX:enemy.x,fromY:enemy.y});
+    const victim=this.aiTargetFor(enemy);
+    this.damageVictim(victim,damage*enemy.buffMult,{source:enemy,fromX:enemy.x,fromY:enemy.y});
     this.fx.burst(
-      (enemy.x+this.player.x)/2,(enemy.y+this.player.y)/2,5,
+      (enemy.x+victim.x)/2,(enemy.y+victim.y)/2,5,
       {speed:140,life:.2,color:'#ff8a6b'}
     );
+  }
+
+  // One door for hostile damage, so a caller never has to know whether it is
+  // hitting the operative or somebody standing next to them.
+  damageVictim(victim,amount,options={}){
+    if(victim&&victim!==this.player)return victim.damage(amount,options);
+    return this.damagePlayer(amount,options);
   }
 
   detonateEnemy(enemy){
@@ -1032,7 +1103,8 @@ export class Engine{
       // `angle` is the direction the blow came from, which is the direction
       // the spatter should be thrown.
       else this.killEnemy(target,{
-        weapon:options.weapon,source:options.source,direction:options.angle
+        weapon:options.weapon,source:options.source,direction:options.angle,
+        ally:options.ally
       });
     }
     return applied;
@@ -1107,6 +1179,7 @@ export class Engine{
       if(this.combo>=25)this.codec.fire('combo');
     }
     if(options.weapon)options.weapon.kills++;
+    if(options.ally)options.ally.kills++;
     enemy.squad?.remove(enemy);
 
     this.fx.death(enemy.x,enemy.y,enemy.color,enemy.elite);
@@ -1465,7 +1538,9 @@ export class Engine{
 
         let damage=p.damage;
         if(p.falloff)damage*=clamp(1-p.age*1.4,.35,1);
+        if(p.ally)p.ally.damageDealt+=damage;
         this.damageEnemy(enemy,damage,{
+          ally:p.ally,
           weapon:p.weapon,knockback:p.knockback,critBonus:p.critBonus,
           status:p.status,statusChance:p.statusChance,
           angle:Math.atan2(p.vy,p.vx),fromX:p.px,fromY:p.py,source:'projectile'
@@ -1519,13 +1594,27 @@ export class Engine{
           break;
         }
         if(p.dead)continue;
-      }else if(dist2(p.x,p.y,this.player.x,this.player.y)<(p.radius+this.player.radius)**2){
-        const blocked=this.damagePlayer(p.damage,{
-          source:p.source,fromX:p.px,fromY:p.py,projectile:p
-        });
-        if(!p.reflected)p.dead=true;
-        if(blocked)this.fx.impact(p.x,p.y,Math.atan2(p.vy,p.vx),'#ff7a7a',1);
-        continue;
+      }else{
+        // Whoever the round physically reaches wears it, which is not always
+        // whoever it was aimed at — an ally who steps into the line takes it.
+        let struck=null;
+        if(dist2(p.x,p.y,this.player.x,this.player.y)<(p.radius+this.player.radius)**2){
+          struck=this.player;
+        }else{
+          for(const mate of this.squad){
+            if(mate.downed)continue;
+            if(dist2(p.x,p.y,mate.x,mate.y)>(p.radius+mate.radius)**2)continue;
+            struck=mate;break;
+          }
+        }
+        if(struck){
+          const blocked=this.damageVictim(struck,p.damage,{
+            source:p.source,fromX:p.px,fromY:p.py,projectile:p
+          });
+          if(!p.reflected)p.dead=true;
+          if(blocked)this.fx.impact(p.x,p.y,Math.atan2(p.vy,p.vx),'#ff7a7a',1);
+          continue;
+        }
       }
 
       if(!this.world.isInside(p.x,p.y,-60))p.dead=true;
@@ -2348,6 +2437,13 @@ export class Engine{
       maxCombo:this.maxCombo,maxAlive:this.telemetry.maxAlive,
       credits:Math.round(this.credits),jp:jpEarned,
       discovered:[...this.discovered],
+      // What the second operative was worth, and whether they walked out.
+      squad:this.squad.map(mate=>({
+        id:mate.id,codename:mate.codename,color:mate.color,
+        kills:mate.kills,damageDealt:Math.round(mate.damageDealt),
+        downed:mate.downed
+      })),
+      squadLeftBehind:this.squad.filter(mate=>mate.downed).map(mate=>mate.id),
       objectivesCleared:this.objectives.completed,
       mission:this.mission.summary(),
       vaultsFound:this.telemetry.vaultsFound,

@@ -2,8 +2,9 @@ import {clamp,TAU,dist,formatTime} from '../core/math.js';
 import {Weather} from './weather.js';
 import {drawLandmark} from './landmarks.js';
 import {EXTRACTION_RADIUS,EXTRACTION_HOLD} from '../game/engine.js';
+import {REVIVE_RADIUS} from '../game/squadmate.js';
 import {
-  drawPlayer,drawEnemy,drawBoss,drawPhantom,drawTurret,drawMine,drawPickup,
+  drawPlayer,drawSquadmate,drawEnemy,drawBoss,drawPhantom,drawTurret,drawMine,drawPickup,
   drawShadow,withAlpha,shade,roundedRect
 } from './sprites.js';
 
@@ -118,6 +119,7 @@ export class Renderer{
     this.drawExtractionBeacon(ctx);
     this.drawVaultMarkers(ctx);
     this.drawMissionMarkers(ctx);
+    this.drawSquadMarkers(ctx);
     this.drawOptic(ctx);
 
     ctx.restore();
@@ -640,6 +642,7 @@ export class Renderer{
     for(const turret of engine.turrets)sortable.push(turret);
     for(const phantom of engine.phantoms)sortable.push(phantom);
     if(engine.boss)sortable.push(engine.boss);
+    for(const mate of engine.squad)sortable.push(mate);
     sortable.push(engine.player);
 
     // Painter's algorithm on Y so nearer things overlap further ones.
@@ -648,6 +651,8 @@ export class Renderer{
     for(const entity of sortable){
       if(entity===engine.player){
         drawPlayer(ctx,engine.player,engine.operative,time);
+      }else if(entity.codename!==undefined&&entity.operative!==undefined){
+        drawSquadmate(ctx,entity,time);
       }else if(entity.boss){
         drawBoss(ctx,entity,time);
       }else if(entity.kind){
@@ -998,6 +1003,49 @@ export class Renderer{
   }
 
   // Campaign objective markers: data caches and the escorted asset.
+  // A downed squadmate is only worth reaching if you can find them, and they
+  // go down wherever the fight took them — often off the edge of the screen.
+  // The pull ring marks them on the ground; the arrow finds them when they are
+  // outside it.
+  drawSquadMarkers(ctx){
+    const engine=this.engine;
+    const camera=engine.camera;
+    const time=engine.elapsed;
+    for(const mate of engine.squad){
+      if(!mate.downed)continue;
+      if(camera.isVisible(mate.x,mate.y,120)){
+        ctx.save();
+        ctx.globalAlpha=.16+Math.abs(Math.sin(time*2.4))*.1;
+        ctx.fillStyle='#ff7068';
+        ctx.beginPath();ctx.arc(mate.x,mate.y,REVIVE_RADIUS,0,TAU);ctx.fill();
+        ctx.globalAlpha=.85;
+        ctx.strokeStyle='#ff7068';
+        ctx.lineWidth=2;
+        ctx.setLineDash([7,6]);
+        ctx.lineDashOffset=-time*22;
+        ctx.beginPath();ctx.arc(mate.x,mate.y,REVIVE_RADIUS,0,TAU);ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+        continue;
+      }
+      // Off screen: an arrow pinned inside the frame, pointing at them.
+      const player=engine.player;
+      const angle=Math.atan2(mate.y-player.y,mate.x-player.x);
+      const inset=Math.min(camera.viewHalfWidth(0),camera.viewHalfHeight(0))*.78;
+      const x=player.x+Math.cos(angle)*inset;
+      const y=player.y+Math.sin(angle)*inset;
+      ctx.save();
+      ctx.translate(x,y);
+      ctx.rotate(angle);
+      ctx.globalAlpha=.6+Math.abs(Math.sin(time*4))*.35;
+      ctx.fillStyle='#ff7068';
+      ctx.beginPath();
+      ctx.moveTo(16,0);ctx.lineTo(-8,-9);ctx.lineTo(-8,9);
+      ctx.closePath();ctx.fill();
+      ctx.restore();
+    }
+  }
+
   drawMissionMarkers(ctx){
     const engine=this.engine;
     const mission=engine.mission;

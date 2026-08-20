@@ -170,6 +170,72 @@ export function drawShadow(ctx,x,y,radius,opacity=.34){
 // ---------------------------------------------------------------------------
 // Player
 // ---------------------------------------------------------------------------
+// A squadmate is drawn as the operative they are, one shade quieter than the
+// one you are holding, with a nameplate so you can tell at a glance which of
+// the roster is out there with you. Downed, they read as a body on the ground
+// with a ring that fills while you stand over them.
+export function drawSquadmate(ctx,mate,time){
+  if(mate.downed){
+    drawShadow(ctx,mate.x,mate.y,mate.radius*1.2,.34);
+    ctx.save();
+    ctx.translate(mate.x,mate.y);
+    ctx.globalAlpha=.85;
+    ctx.fillStyle='#1b2226';
+    ctx.strokeStyle=mate.color;
+    ctx.lineWidth=1.4;
+    ctx.beginPath();ctx.ellipse(0,2,mate.radius*1.35,mate.radius*.72,.4,0,TAU);
+    ctx.fill();ctx.stroke();
+    // Revive ring: how much of the pickup is done.
+    if(mate.reviveProgress>0){
+      ctx.globalAlpha=1;
+      ctx.strokeStyle='#8bff9b';
+      ctx.lineWidth=2.6;
+      ctx.beginPath();
+      ctx.arc(0,0,mate.radius*2.1,-Math.PI/2,-Math.PI/2+TAU*mate.reviveProgress);
+      ctx.stroke();
+    }
+    ctx.globalAlpha=.55+Math.sin(time*5)*.2;
+    ctx.strokeStyle='#ff7068';
+    ctx.lineWidth=1.6;
+    ctx.beginPath();ctx.arc(0,0,mate.radius*1.7,0,TAU);ctx.stroke();
+    ctx.restore();
+    nameplate(ctx,mate,'#ff7068',mate.codename+' DOWN');
+    return;
+  }
+
+  drawPlayer(ctx,mate,mate.operative,time);
+  if(mate.invulnerable>0){
+    ctx.save();
+    ctx.globalAlpha=.4+Math.sin(time*14)*.2;
+    ctx.strokeStyle=mate.color;ctx.lineWidth=1.6;
+    ctx.beginPath();ctx.arc(mate.x,mate.y,mate.radius+7,0,TAU);ctx.stroke();
+    ctx.restore();
+  }
+  nameplate(ctx,mate,mate.color,mate.codename);
+}
+
+function nameplate(ctx,mate,color,text){
+  ctx.save();
+  ctx.translate(mate.x,mate.y-mate.radius-16);
+  ctx.font='600 9px ui-monospace,monospace';
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  ctx.fillStyle='rgba(3,10,14,.72)';
+  const width=ctx.measureText(text).width+10;
+  ctx.fillRect(-width/2,-7,width,13);
+  ctx.fillStyle=color;
+  ctx.fillText(text,0,0);
+  // Health, only while it means something.
+  if(!mate.downed&&mate.hp<mate.maxHp){
+    const barWidth=Math.max(26,width);
+    ctx.fillStyle='rgba(255,255,255,.14)';
+    ctx.fillRect(-barWidth/2,7,barWidth,2.4);
+    ctx.fillStyle=color;
+    ctx.fillRect(-barWidth/2,7,barWidth*Math.max(0,mate.hp/mate.maxHp),2.4);
+  }
+  ctx.restore();
+}
+
 export function drawPlayer(ctx,player,operative,time){
   const moving=Math.min(1,Math.hypot(player.vx,player.vy)/120);
   drawShadow(ctx,player.x,player.y,player.radius,.4);

@@ -79,6 +79,8 @@ const template=(operative,ability)=>`
     </div>
   </div>
 
+  <div class="squad-strip" id="squadStrip" hidden></div>
+
   <div class="codec" id="codec" hidden aria-live="polite">
     <div class="codec-portrait">
       <img id="codecPortrait" alt="" decoding="async">
@@ -127,6 +129,7 @@ export class Hud{
       turretBtn:$('turretBtn'),turretFill:$('turretFill'),turretCount:$('turretCount'),
       stickMove:$('stickMove'),knobMove:$('knobMove'),
       stickAim:$('stickAim'),knobAim:$('knobAim'),
+      squadStrip:$('squadStrip'),
       codec:$('codec'),codecPortrait:$('codecPortrait'),codecName:$('codecName'),
       codecChannel:$('codecChannel'),codecText:$('codecText')
     };
@@ -226,6 +229,33 @@ export class Hud{
     this.updateLoadout();
     this.updateStatuses();
     this.updateCodec();
+    this.updateSquad();
+  }
+
+  // The second operative's condition, so you know they need reaching without
+  // having to find them first. Rebuilt only when the readout actually changes.
+  updateSquad(){
+    const squad=this.engine.squad;
+    const el=this.el;
+    if(!squad?.length){
+      if(!el.squadStrip.hidden)el.squadStrip.hidden=true;
+      return;
+    }
+    const signature=squad.map(m=>
+      `${m.id}:${m.downed?'d'+Math.round(m.reviveProgress*20):Math.round(m.hp)}`).join('|');
+    if(signature===this.squadSignature)return;
+    this.squadSignature=signature;
+    el.squadStrip.hidden=false;
+    el.squadStrip.innerHTML=squad.map(mate=>{
+      const pct=Math.max(0,mate.hp/mate.maxHp)*100;
+      return `<div class="squad-chip ${mate.downed?'down':''}" style="--c:${mate.color}">
+        <b>${mate.codename}</b>
+        ${mate.downed
+          ? `<span class="squad-state">DOWN</span>
+             <div class="bar mini"><i style="width:${mate.reviveProgress*100}%"></i></div>`
+          : `<div class="bar mini"><i style="width:${pct}%"></i></div>`}
+      </div>`;
+    }).join('');
   }
 
   // Radio traffic. The director owns what is said and for how long; this only
