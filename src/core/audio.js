@@ -350,7 +350,7 @@ export class AudioEngine{
 
     element.addEventListener('error',()=>{
       entry.failed=true;
-      console.warn('[phantom] music track failed to load',track.file);
+      console.warn('[red-static] music track failed to load',track.file);
       // Losing the authored track mid-session must not leave the run silent.
       if(this.currentTrack===entry)this.startSynthMusic(this.synthKey||'blacksite');
     });
@@ -432,7 +432,7 @@ export class AudioEngine{
         this.fadeTrack(entry,1,resuming?.25:MUSIC_FADE);
         // Autoplay can still be refused before the unlock gesture lands.
         played?.catch?.(err=>{
-          console.warn('[phantom] music playback blocked',err);
+          console.warn('[red-static] music playback blocked',err);
           this.currentTrack=null;
           this.startSynthMusic(fallback);
         });

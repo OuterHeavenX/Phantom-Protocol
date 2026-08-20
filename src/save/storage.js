@@ -2,8 +2,13 @@ import {OPERATIVES} from '../../data/operatives.js';
 import {WEAPONS,weaponUnlockLevel} from '../../data/weapons.js';
 import {MAPS,DIFFICULTIES} from '../../data/maps.js';
 
-const KEY='phantom-protocol-save';
-const LEGACY_KEY='phantom-protocol-save-v1';
+const KEY='red-static-save';
+// Keys this game has written under before, newest first. They are read once so
+// a player who has progress from before the project was renamed keeps it, and
+// never written again — the next save lands under KEY. The old entries are
+// left in place rather than deleted, so rolling back to an older build finds
+// its save where it left it.
+const LEGACY_KEYS=['phantom-protocol-save','phantom-protocol-save-v1'];
 export const SAVE_VERSION=3;
 
 // Every statistic the achievement and unlock engines can read. Keeping the
@@ -187,11 +192,15 @@ export function normalizeSave(raw){
 
 export function loadSave(){
   try{
-    const stored=localStorage.getItem(KEY)||localStorage.getItem(LEGACY_KEY);
+    let stored=localStorage.getItem(KEY);
+    for(const legacy of LEGACY_KEYS){
+      if(stored)break;
+      stored=localStorage.getItem(legacy);
+    }
     if(!stored)return defaultSave();
     return normalizeSave(JSON.parse(stored));
   }catch(err){
-    console.warn('[phantom] save load failed, starting fresh',err);
+    console.warn('[red-static] save load failed, starting fresh',err);
     return defaultSave();
   }
 }
@@ -203,7 +212,7 @@ export function saveGame(save){
     localStorage.setItem(KEY,JSON.stringify(save));
     return true;
   }catch(err){
-    console.warn('[phantom] save write failed',err);
+    console.warn('[red-static] save write failed',err);
     return false;
   }
 }
@@ -226,7 +235,9 @@ export function importSave(code){
 export function resetSave(){
   try{
     localStorage.removeItem(KEY);
-    localStorage.removeItem(LEGACY_KEY);
+    // An explicit wipe clears the old names too, or a reset would silently
+    // restore the pre-rename save on the next load.
+    for(const legacy of LEGACY_KEYS)localStorage.removeItem(legacy);
   }catch{/* storage may be unavailable; the fresh object still works */}
   return defaultSave();
 }

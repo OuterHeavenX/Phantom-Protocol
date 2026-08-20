@@ -43,11 +43,11 @@ export class Splash{
     this.el=document.createElement('div');
     this.el.className='splash';
     this.el.setAttribute('role','dialog');
-    this.el.setAttribute('aria-label','Phantom Protocol title screen');
+    this.el.setAttribute('aria-label','Red Static title screen');
     this.el.innerHTML=`
       <div class="splash-backdrop"></div>
       <div class="splash-stage">
-        <img class="splash-art" alt="Phantom Protocol" decoding="async" fetchpriority="high">
+        <img class="splash-art" alt="Red Static" decoding="async" fetchpriority="high">
         <button class="splash-anywhere" data-splash="start" aria-label="Start"></button>
         <button class="splash-hit" data-splash="start" aria-label="Start"></button>
         <button class="splash-hit" data-splash="settings" aria-label="Settings"></button>

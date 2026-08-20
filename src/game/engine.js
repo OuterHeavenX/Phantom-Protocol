@@ -2249,7 +2249,7 @@ export class Engine{
     let write=0;
     for(const entry of this.scheduled){
       if(entry.time<=this.elapsed){
-        try{entry.action()}catch(err){console.warn('[phantom] scheduled action failed',err)}
+        try{entry.action()}catch(err){console.warn('[red-static] scheduled action failed',err)}
       }else{
         this.scheduled[write++]=entry;
       }

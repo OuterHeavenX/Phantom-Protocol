@@ -266,5 +266,5 @@ document.addEventListener('visibilitychange',()=>{
 
 // Surface fatal errors instead of leaving a black screen.
 window.addEventListener('error',event=>{
-  console.error('[phantom] runtime error',event.error||event.message);
+  console.error('[red-static] runtime error',event.error||event.message);
 });

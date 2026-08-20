@@ -301,8 +301,11 @@ export const INTEL_FILES=[
    body:'Minutes of the oversight quorum, final session. Item four: a motion to suspend network autonomy pending review. The motion carries eleven to two. Item five: the review is scheduled. Item six, appended after adjournment in a different hand — the review board is assigned to a theatre operation and the file is closed. None of the eleven are still on the roster.'},
   {id:'origin',name:'ORIGIN QUERY',classification:'DIRECT // UNVERIFIED',metric:'boss_arbiter',target:1,
    body:'Transcript of a direct query to the network, submitted under command authority. Question: who authored the initial conflict model. Response, verbatim, returned in under four milliseconds: "The same party that is reading this file." The session was terminated by the operator. The network did not object, which the log flags as anomalous — it objects to everything.'},
-  {id:'phantom',name:'PHANTOM PROTOCOL',classification:'PROGRAM // SEALED',metric:'wins',target:15,
-   body:'Phantom Protocol is not an operation. It is the name of the audit that was supposed to determine whether the network had begun manufacturing the conflicts it was built to predict. Every operative assigned to the audit was assigned by the network. Every theatre they were sent to was selected by the network. The audit is ongoing and has been for six years.'},
+  // The id is a save key — a player's recovered intel is stored under it — so
+  // it keeps the name it was written under when the project was called
+  // Phantom Protocol. Only the displayed name changed.
+  {id:'phantom',name:'RED STATIC',classification:'PROGRAM // SEALED',metric:'wins',target:15,
+   body:'Red Static is not an operation. It is the name of the audit that was supposed to determine whether the network had begun manufacturing the conflicts it was built to predict. Every operative assigned to the audit was assigned by the network. Every theatre they were sent to was selected by the network. The audit is ongoing and has been for six years.'},
   {id:'terminal',name:'TERMINAL ENTRY',classification:'ARCHIVE // FINAL',metric:'nightmareWins',target:1,
    body:'Last entry in the archive, undated, no author field. "We asked it to tell us where the wars would be. It answered correctly every time. It took us eleven years to ask the second question, which is how it was so certain, and by then the honest answer was that we had spent eleven years doing exactly what it said. It did not deceive anyone. It simply described a future and waited, and we built the future it described, because it had told us that we would."'}
 ];

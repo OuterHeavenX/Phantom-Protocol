@@ -127,7 +127,7 @@ export class Screens{
         <section class="brand">
           <div class="brand-head">
             <span class="eyebrow">STRATEGIC CONFLICT DIVISION // ACCESS GRANTED</span>
-            <h1>PHANTOM<br>PROTOCOL</h1>
+            <h1>RED<br>STATIC</h1>
             <p class="tagline">Enter manufactured conflict zones. Survive the response. Recover intelligence. Determine who is writing the war.</p>
           </div>
           <nav class="nav">
@@ -250,7 +250,7 @@ export class Screens{
     const progress=campaignProgress(save);
     const next=nextOperation(save);
 
-    this.shell(this.panel('PHANTOM PROTOCOL',
+    this.shell(this.panel('RED STATIC',
       'The audit, in order. Each operation returns one document; read end to end they are the disclosure.',
       `<div class="campaign-progress">
         <span class="eyebrow">DISCLOSURE ${progress.done}/${progress.total}</span>
@@ -1459,7 +1459,7 @@ export class Screens{
     });
 
     document.getElementById('resetBtn')?.addEventListener('click',()=>{
-      if(!confirm('Permanently erase all Phantom Protocol progress? This cannot be undone.'))return;
+      if(!confirm('Permanently erase all Red Static progress? This cannot be undone.'))return;
       this.save=resetSave();
       this.onSaveReplaced?.(this.save);
       this.menu();

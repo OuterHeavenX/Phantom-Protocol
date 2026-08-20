@@ -143,8 +143,12 @@ p{margin:0}
 .brand h1{
   font-family:var(--font);
   /* Sized against the brand column, not the viewport, so the wordmark cannot
-     overflow when the webfont is unavailable and a wider fallback is used. */
-  font-size:clamp(32px,8.5cqw,68px);
+     overflow when the webfont is unavailable and a wider fallback is used.
+     Retuned for RED / STATIC: the longest line is two characters shorter than
+     the name this was first set for, and at the old size it sat marooned in
+     the column. It fills about four fifths of the width, which leaves the
+     headroom a wider fallback face needs. */
+  font-size:clamp(44px,23cqw,108px);
   line-height:.86;margin:16px 0 16px;
   letter-spacing:-.06em;
   overflow-wrap:break-word;

@@ -1,6 +1,6 @@
 # Architecture
 
-Phantom Protocol is a build-free ES-module application. There is no bundler, transpiler
+Red Static is a build-free ES-module application. There is no bundler, transpiler
 or package manager in the runtime path; `index.html` loads `src/main.js` as a native
 module and everything else is reached through relative imports.
 

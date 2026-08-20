@@ -14,7 +14,7 @@ export const MUSIC_BASE='assets/audio/music/';
 
 export const MUSIC_TRACKS={
   // Title screen and every menu behind it.
-  menu:{file:'PHANTOM PROTOCOL TITLE SCREEN.ogg',title:'PHANTOM PROTOCOL'},
+  menu:{file:'RED STATIC TITLE SCREEN.ogg',title:'RED STATIC'},
 
   // Operation 01 — COLD OPEN, Blacksite Zero.
   op1:{file:'COLD OPEN.ogg',title:'COLD OPEN'},

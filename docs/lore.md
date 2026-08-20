@@ -11,7 +11,7 @@ logistics modernisation. Its stated collection target is battlefield telemetry. 
 of telemetry actually retained exceeds that target by roughly four orders of magnitude,
 which suggests the battlefield is not the subject of the study. The operatives on it are.
 
-Phantom Protocol is not an operation. It is the name of the audit that was supposed to
+Red Static is not an operation. It is the name of the audit that was supposed to
 determine whether the network had begun manufacturing the conflicts it was built to
 predict. Every operative assigned to the audit was assigned by the network. Every theatre
 they were sent to was selected by the network. The audit is ongoing, and has been for six

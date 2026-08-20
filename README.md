@@ -1,4 +1,4 @@
-# PHANTOM PROTOCOL
+# RED STATIC
 
 A build-free, static browser survival-action roguelite set in an original near-future
 military espionage universe. No npm, no bundler, no framework — native ES modules and
@@ -194,8 +194,9 @@ black square rather than a person. It doubles as the fallback for a browser that
 decode the WebP art, so the failure mode is a complete picture rather than a broken
 image.
 
-**Title screen.** The boot screen is authored artwork (`assets/images`), shipped in a
-wide frame for desktop and landscape tablets and a tall one for phones. The logo,
+**Title screen.** The boot screen is authored artwork, shipped in a wide frame for
+desktop and landscape tablets (`assets/images/title-screen-wide.webp`, with the `.png`
+behind it) and a tall one for phones (`title-screen-tall.*`). The logo,
 tagline and both buttons are painted into the image, so `src/ui/splash.js` does not draw
 a menu over it — it makes the painted buttons real. That only works if the artwork is
 never cropped, because a crop slides the painted buttons out from under their hit areas,
@@ -258,8 +259,9 @@ missing; recovering it opens a real-time counseling session (2, 4, 8 or 12 hours
 declared per operative) that runs while the game is closed. The operative joins the
 roster when the session closes.
 
-**Progression.** Versioned save with migration from earlier formats
-(`src/save/storage.js`), a 20-node development tree with prerequisites and respec,
+**Progression.** Versioned save with migration from earlier formats and from the
+storage keys the game used before it was renamed, so progress earned under the old name
+survives (`src/save/storage.js`); a 20-node development tree with prerequisites and respec,
 per-operative mastery ranks, account levels, and an evaluation engine
 (`src/save/progression.js`) that resolves achievement, directive and unlock conditions
 against tracked run telemetry.
@@ -284,9 +286,28 @@ resets each operation. JP (job points) is awarded from elites, command signature
 mission performance, and persists for permanent development purchases. Credits accumulate
 within and across runs as a secondary currency.
 
+## Assets that carry the name
+
+The title screens and the operative dossier cards are authored artwork with text painted
+into the pixels, including the project's name across the top of every card. Renaming the
+project does not rename what is inside a PNG, so replacing that art is the one part of a
+rename that has to happen outside the source tree. The paths are stable and the code
+reads no text out of them, so dropping a replacement at the same path is the whole job:
+
+```
+assets/images/title-screen-wide.webp     (and .png)   desktop and landscape tablets
+assets/images/title-screen-tall.webp     (and .png)   phones
+assets/images/Character_profile/<id>.webp             one dossier card per operative
+```
+
+The title art's painted START and SETTINGS buttons are made real by hit areas measured as
+percentages of the artwork (`src/ui/splash.js`), so new art whose buttons sit elsewhere
+needs those percentages re-measured. Tapping anywhere on the frame also starts, so the
+screen stays usable in the meantime.
+
 ## Originality
 
 All characters, organizations, terminology, lore and gameplay presentation in this
-repository are original to Phantom Protocol. No copyrighted franchise assets or lore are
+repository are original to Red Static. No copyrighted franchise assets or lore are
 included, and no third-party art, audio or code is bundled. The title artwork and music
 under `assets/` are the project's own; everything drawn in-game is generated at runtime.

@@ -19,7 +19,9 @@
     overflow-y:auto;
   }
   .brand{padding:26px 20px 20px;border-right:0;border-bottom:1px solid var(--line)}
-  .brand h1{font-size:46px}
+  /* No fixed size here: .brand is a size container, so the clamp in main.css
+     already tracks the column at every width. The fixed overrides that used to
+     sit here were tuned to a longer wordmark and left the new one stranded. */
   .tagline{font-size:11px;max-width:none}
   .nav{margin:20px 0 14px}
   .intel-panel{padding:22px 20px 28px}
@@ -125,7 +127,6 @@
 
 /* ---- Small phone -------------------------------------------------------- */
 @media(max-width:400px){
-  .brand h1{font-size:38px}
   .mission{margin:0 40px}
   .loadout{max-width:46vw}
   .slot-meta b{max-width:48px}
