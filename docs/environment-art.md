@@ -83,13 +83,20 @@ falls back complete rather than showing a gap where a cap should be.
 
 ## What is wired up today
 
-Blacksite Zero is opted in with `art:'black site'` and ships two things: a
-512x512 floor plate mapped to the existing 128-unit tiling period, and the
-horizontal partition wall set — a 104x104 cap at each end and a 128x104 middle
-that tiles at 32 world units. Everything else in that theatre — vertical walls,
-cover, vault chamber walls and seals, hazards, decor — still draws procedurally,
-and so does the floor or the walls if their files fail to load. No other theatre
-has the flag.
+Blacksite Zero is opted in with `art:'black site'` and ships three things: a
+512x512 floor plate mapped to the existing 128-unit tiling period, and both
+partition wall sets — a 104x104 cap at each end with a middle that tiles at 32
+world units, 128x104 for horizontal walls and 104x128 for vertical ones.
+Everything else in that theatre — cover, vault chamber walls and seals, hazards,
+decor — still draws procedurally, and so does any wall whose files fail to load.
+The two orientations fail independently. No other theatre has the flag.
+
+The vertical set is derived from the horizontal one by reflection about the main
+diagonal. That is not the same as rotating it: a diagonal reflection maps the
+upper-left quadrant onto itself, so the theatre's fixed upper-left key light
+survives it, where a 90-degree rotation would have swung the light to the
+upper-right. It also inherits the horizontal middle's seamless tiling, since the
+edge columns that met each other become edge rows that meet each other.
 
 ## What the loader guarantees
 
