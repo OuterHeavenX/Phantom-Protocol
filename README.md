@@ -65,6 +65,8 @@ camera lead; auto-target can be disabled in settings.
   personnel files. Roughly 40% come with a garrison sealed in alongside the loot.
 - **Field turrets** planted by the operative, 1× to 3× simultaneously by kit rank, with
   durability that scales with rank and level and depletes under contact.
+- **Codec traffic** — the operative and whoever is running comms talk over the channel
+  printed on their own dossier card, through a contract's worth of events.
 - **Authored operative dossiers** — eight hand-drawn personnel cards, readable in full,
   with a head-and-shoulders crop carried across the roster and deploy screens. Personnel
   who have not been identified stay procedural black silhouettes.
@@ -158,6 +160,24 @@ is still to earn.
 **Loadout.** A primary weapon and its bench build are selected before deployment, on both
 the deploy screen and the campaign briefing. Without a selection the operative carries
 their own issue weapon, stock.
+
+**Codec.** Every dossier card carries a CODEC panel with a channel number and CONNECTED
+under it; `data/codec.js` is what comes over it. Two people talk: the operative who
+deployed, speaking for themselves, and a handler running comms from the operations room —
+VIPER, the team commander, unless VIPER is the one in the field, in which case RAVEN takes
+the desk. Twenty events across a contract each carry a short exchange, written per
+operative where a voice exists for them and falling back to a shared line where one does
+not, so adding an operative never leaves a gap and writing a line for one never obliges
+writing eight.
+
+`src/game/codec.js` decides what is worth saying. A radio that never stops talking is
+worse than one that never starts, so it holds three kinds of restraint: beats that would
+be false the second time fire once per contract, per-event cooldowns turn a run of elites
+into one callout rather than six, and priority lets an urgent line cut off an idle one
+mid-sentence — which is how a critical-vitals call lands during chatter. Lines dwell for a
+length derived from their own text. Turning the channel off in settings silences it on the
+spot and drops what was queued, because a callout that arrives minutes late is worse than
+one that never came.
 
 **Operative dossiers.** The roster's identities — codename, real name, role, specialty,
 file code and the creed on the CONFIDENTIAL panel — are transcribed from the authored

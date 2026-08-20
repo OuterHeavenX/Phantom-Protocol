@@ -8,6 +8,7 @@ import {Loadout} from './weapons.js';
 import {Boss} from './boss.js';
 import {Objectives} from './objectives.js';
 import {Mission} from './mission.js';
+import {CodecDirector} from './codec.js';
 import {Fx} from './fx.js';
 import {ABILITIES,TRAITS,distanceToSegment} from './abilities.js';
 import {ENEMIES_BY_ID,STATUS_EFFECTS} from '../../data/enemies.js';
@@ -165,7 +166,12 @@ export class Engine{
     this.objectives=new Objectives(this);
     // Campaign operations layer an objective over the survival contract.
     this.mission=new Mission(this,config.objective);
+    // Radio traffic between the operative and whoever is running comms. It
+    // reads engine events and nothing else, so muting it costs the simulation
+    // nothing.
+    this.codec=new CodecDirector(this);
     this.applyTrait('onInit');
+    this.codec.fire('deploy');
 
     this.camera.x=this.player.x;
     this.camera.y=this.player.y;
@@ -308,6 +314,7 @@ export class Engine{
     if(steps>=MAX_STEPS)this.accumulator=0;
 
     this.fx.update(realDt);
+    this.codec.update(realDt);
     this.camera.follow(this.player,this.aimLead,realDt);
     this.camera.update(realDt,this.settings.screenShake??1);
     this.audio.setIntensity(clamp(this.enemies.length/70+(this.boss?.4:0),0,1));
@@ -316,6 +323,7 @@ export class Engine{
   step(dt,input){
     this.elapsed+=dt;
     this.dt=dt;
+    if(this.director.progress>=.5)this.codec.fire('halfway');
 
     this.updateTimers(dt);
     // The optic holds its lock between shots. Clearing it every step would
@@ -563,6 +571,7 @@ export class Engine{
     if(this.settings.damageNumbers)this.fx.text(player.x,player.y-30,`-${Math.round(final)}`,'#ff7a7a',{size:13});
 
     if(player.hp<=0)this.playerDown();
+    else if(player.hp/player.maxHp<=.25)this.codec.fire('critical');
     return final;
   }
 
@@ -686,6 +695,7 @@ export class Engine{
     enemy.miniboss=true;
     enemy.name=spec.name;
     this.announce(`${spec.name} DEPLOYED`,'#ff8b68');
+    this.codec.fire('elite');
     this.audio.play('boss',{volume:.7});
     this.camera.addShake(.3);
     return enemy;
@@ -1091,6 +1101,11 @@ export class Engine{
     this.telemetry.kills++;
     if(enemy.elite)this.telemetry.eliteKills++;
     if(options.source==='hazard')this.telemetry.hazardKills++;
+    if(!options.silent){
+      this.codec.fire('firstContact');
+      if(enemy.elite)this.codec.fire('eliteDown');
+      if(this.combo>=25)this.codec.fire('combo');
+    }
     if(options.weapon)options.weapon.kills++;
     enemy.squad?.remove(enemy);
 
@@ -1159,6 +1174,7 @@ export class Engine{
     this.fx.flash(boss.def.color,.5);
     this.fx.freeze(.12);
     this.announce('COMMAND SIGNATURE TERMINATED',boss.def.color);
+    this.codec.fire('bossDown');
     this.audio.play('victory',{volume:.9});
 
     // Guaranteed reward drops.
@@ -1225,6 +1241,7 @@ export class Engine{
     });
     this.onBossSpawn?.(this.boss);
     this.announce(def.name,def.color,3.4);
+    this.codec.fire('boss');
     this.audio.play('boss',{volume:1});
     this.camera.addShake(.6);
     this.fx.flash(def.color,.35);
@@ -1954,6 +1971,7 @@ export class Engine{
           '#f5d27a',3
         );
         this.fx.ring(vault.x,vault.y,20,VAULT_SCAN_RADIUS,.9,'#f5d27a',2);
+        this.codec.fire('vaultDetected');
         this.audio.play('alarm',{volume:.5});
         continue;
       }
@@ -1970,6 +1988,7 @@ export class Engine{
     this.camera.addShake(.4);
     this.audio.play('unlock',{volume:1});
     this.announce('VAULT BREACHED','#f5d27a',2.6);
+    this.codec.fire('vaultBreached');
 
     const rng=this.rng;
     const scatter=()=>({
@@ -1994,6 +2013,7 @@ export class Engine{
     if(vault.guarded){
       // The garrison was sealed in with the cache. Opening it lets them out.
       this.announce('VAULT GARRISON ACTIVE','#ff7068',2.4);
+      this.codec.fire('garrison');
       this.audio.play('alarm',{volume:.8});
       const count=rng.int(2,4);
       for(let i=0;i<count;i++){
@@ -2026,6 +2046,7 @@ export class Engine{
     this.dossiersSpawned++;
     this.spawnPickup('dossier',x+this.rng.range(-24,24),y+this.rng.range(-24,24),0);
     this.announce('PERSONNEL CACHE DETECTED','#f5d27a',2.4);
+    this.codec.fire('personnelCache');
     this.audio.play('alarm',{volume:.45});
     return true;
   }
@@ -2123,6 +2144,7 @@ export class Engine{
         this.fx.ring(pickup.x,pickup.y,10,240,.8,'#f5d27a',3);
         this.fx.flash('#f5d27a',.25);
         this.announce(`PERSONNEL FILE RECOVERED // ${found.codename}`,'#f5d27a',4);
+        this.codec.fire('personnelFound');
         this.audio.play('unlock',{volume:1});
         break;
       }
@@ -2181,6 +2203,7 @@ export class Engine{
     for(const evolution of forged){
       this.telemetry.evolutions.push(evolution.id);
       this.announce(`EVOLUTION // ${evolution.name}`,'#ffb35c',3);
+      this.codec.fire('evolution');
       this.fx.flash('#ffb35c',.4);
       this.audio.play('unlock',{volume:1});
       this.onEvolution?.(evolution);
@@ -2256,6 +2279,7 @@ export class Engine{
     this.extractionTimer=60;
     this.extractionPoint=this.world.extractionPoint(this.player);
     this.announce('EXTRACTION WINDOW OPEN // REACH THE BEACON','#f5d27a',4);
+    this.codec.fire('extraction');
     this.announce('EXFIL PROTOCOL // MOVEMENT BOOSTED','#8bff9b',3);
     this.audio.play('alarm',{volume:.9});
     this.fx.flash('#f5d27a',.3);
@@ -2274,6 +2298,7 @@ export class Engine{
           if(!this._blockedNotice||this.elapsed-this._blockedNotice>4){
             this._blockedNotice=this.elapsed;
             this.announce(`OBJECTIVE INCOMPLETE // ${this.mission.blockedReason}`,'#ff7068',2.4);
+            this.codec.fire('extractionBlocked');
           }
           return;
         }
@@ -2293,6 +2318,9 @@ export class Engine{
     this.endReason=reason;
     this.maxCombo=Math.max(this.maxCombo,this.combo);
     this.audio.stopMusic();
+    // Nothing more comes over the channel once the contract closes, so a
+    // callout cannot arrive over the results screen.
+    this.codec.clear();
     this.audio.play(victory?'victory':'defeat',{volume:1});
     this.onEnd?.(this.summary());
   }

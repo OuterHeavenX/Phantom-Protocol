@@ -120,6 +120,7 @@ export class Mission{
               : `CACHE RECOVERED // ${this.recovered}/${this.caches.length}`,
             '#8fd8ff',2.4
           );
+          engine.codec?.fire('missionProgress');
         }
       }else{
         cache.progress=Math.max(0,cache.progress-dt*.2);
@@ -138,6 +139,7 @@ export class Mission{
         asset.found=true;
         asset.aboard=true;
         engine.announce('ASSET SECURED // WALK THEM OUT','#8bff9b',3);
+        engine.codec?.fire('missionProgress');
         engine.fx.ring(asset.x,asset.y,10,150,.6,'#8bff9b',3);
         engine.audio.play('unlock',{volume:.8});
       }

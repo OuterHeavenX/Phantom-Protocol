@@ -79,6 +79,20 @@ const template=(operative,ability)=>`
     </div>
   </div>
 
+  <div class="codec" id="codec" hidden aria-live="polite">
+    <div class="codec-portrait">
+      <img id="codecPortrait" alt="" decoding="async">
+      <span class="codec-scan"></span>
+    </div>
+    <div class="codec-body">
+      <div class="codec-head">
+        <b id="codecName">—</b>
+        <span id="codecChannel">CHANNEL 00</span>
+      </div>
+      <p class="codec-text" id="codecText"></p>
+    </div>
+  </div>
+
   <div class="status-strip" id="statusStrip"></div>
 </div>
 
@@ -112,7 +126,9 @@ export class Hud{
       dashBtn:$('dashBtn'),dashFill:$('dashFill'),pauseBtn:$('pauseBtn'),
       turretBtn:$('turretBtn'),turretFill:$('turretFill'),turretCount:$('turretCount'),
       stickMove:$('stickMove'),knobMove:$('knobMove'),
-      stickAim:$('stickAim'),knobAim:$('knobAim')
+      stickAim:$('stickAim'),knobAim:$('knobAim'),
+      codec:$('codec'),codecPortrait:$('codecPortrait'),codecName:$('codecName'),
+      codecChannel:$('codecChannel'),codecText:$('codecText')
     };
 
     this.el.mapName.textContent=engine.map.name;
@@ -209,6 +225,38 @@ export class Hud{
     this.updateObjectives();
     this.updateLoadout();
     this.updateStatuses();
+    this.updateCodec();
+  }
+
+  // Radio traffic. The director owns what is said and for how long; this only
+  // mirrors whatever line is currently open, keyed on its revision so the same
+  // line is never re-typed into the DOM frame after frame.
+  updateCodec(){
+    const codec=this.engine.codec;
+    const el=this.el;
+    if(!codec)return;
+    const line=codec.current;
+    if(!line){
+      if(!el.codec.hidden){el.codec.hidden=true;this.codecRevision=null}
+      return;
+    }
+    if(this.codecRevision===codec.revision)return;
+    this.codecRevision=codec.revision;
+    const speaker=line.speaker;
+    el.codec.hidden=false;
+    el.codec.style.setProperty('--c',speaker.color);
+    this.set('codecName',el.codecName,speaker.codename);
+    this.set('codecChannel',el.codecChannel,`CHANNEL ${speaker.channel}`);
+    this.set('codecText',el.codecText,line.text);
+    if(speaker.portrait&&el.codecPortrait.dataset.op!==speaker.id){
+      el.codecPortrait.dataset.op=speaker.id;
+      el.codecPortrait.src=speaker.portrait;
+    }
+    // Restarting the animation is what makes a second line in the same beat
+    // read as a new transmission rather than a text swap.
+    el.codec.classList.remove('open');
+    void el.codec.offsetWidth;
+    el.codec.classList.add('open');
   }
 
   // The campaign objective, when the operation has one beyond extraction.

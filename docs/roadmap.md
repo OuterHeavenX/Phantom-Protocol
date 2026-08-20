@@ -23,7 +23,8 @@ than drawn from the deployment pool. Plus an authored boot title screen in a wid
 tall frame, with the artwork's own painted buttons wired up as the real ones; authored
 dossier cards for all eight operatives, readable in full and cropped for the roster; and
 music moved off the AudioContext, which was freezing the track whenever the browser
-suspended the context.
+suspended the context. And codec traffic: the deployed operative and a handler talking
+over the channel printed on their dossier cards, across twenty events in a contract.
 
 Remaining:
 

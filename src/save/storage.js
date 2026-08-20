@@ -32,6 +32,7 @@ export function defaultSettings(){
     screenShake:1,damageNumbers:true,particles:'high',
     showMinimap:true,showHealthBars:true,showThreatIndicators:true,
     autoAim:true,holdToFire:false,
+    codec:true,
     uiScale:1,touchSize:1,leftHanded:false,
     colorblind:'none',reducedFlashing:false,
     performanceMode:false,targetFps:60,showFps:false

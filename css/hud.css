@@ -413,3 +413,65 @@
   right:auto;
   left:calc(22px + env(safe-area-inset-left));
 }
+
+/* ---- Codec --------------------------------------------------------------
+   Radio traffic, bottom-left above the loadout strip. Never interactive: on a
+   touch device the move stick lives under here, so the panel must let every
+   touch straight through to it. */
+.codec{
+  position:absolute;left:0;bottom:96px;
+  display:flex;align-items:stretch;gap:0;
+  max-width:min(520px,72vw);
+  pointer-events:none;
+  border:1px solid var(--c,var(--accent));
+  border-left:3px solid var(--c,var(--accent));
+  background:linear-gradient(100deg,rgba(3,10,14,.94),rgba(4,16,20,.86));
+  box-shadow:0 0 34px rgba(0,0,0,.6);
+}
+.codec.open{animation:codec-in .26s cubic-bezier(.2,.9,.3,1) both}
+@keyframes codec-in{
+  from{opacity:0;transform:translateX(-14px)}
+  to{opacity:1;transform:none}
+}
+
+.codec-portrait{
+  position:relative;flex:0 0 auto;
+  width:64px;height:64px;overflow:hidden;
+  border-right:1px solid var(--c,var(--accent));
+  background:#050b0d;
+}
+.codec-portrait img{
+  display:block;width:100%;height:100%;object-fit:cover;
+  /* The roster crop is head and shoulders; at 64px the face needs to be most
+     of the frame, so it is pushed in and up to sit on the eyes. */
+  object-position:50% 26%;
+  transform:scale(1.3);
+  filter:saturate(.6) contrast(1.15) brightness(1.05);
+}
+/* The scanline wash is what makes a still photograph read as a live feed. */
+.codec-scan{
+  position:absolute;inset:0;
+  background:
+    repeating-linear-gradient(0deg,rgba(0,0,0,.34) 0 1px,transparent 1px 3px),
+    linear-gradient(180deg,transparent 40%,color-mix(in srgb,var(--c,#76e7d4) 22%,transparent));
+  mix-blend-mode:screen;opacity:.55;
+}
+
+.codec-body{display:flex;flex-direction:column;justify-content:center;gap:3px;padding:8px 12px;min-width:0}
+.codec-head{display:flex;align-items:baseline;gap:8px}
+.codec-head b{font-size:11px;letter-spacing:.18em;color:var(--c,var(--accent))}
+.codec-head span{font-size:8.5px;letter-spacing:.14em;color:var(--muted)}
+.codec-text{
+  font-size:11px;line-height:1.5;color:var(--ink);
+  overflow-wrap:break-word;
+}
+
+@media(max-width:760px){
+  .codec{bottom:112px;max-width:82vw}
+  .codec-portrait{width:48px;height:48px}
+  .codec-text{font-size:10px;line-height:1.45}
+}
+
+/* The panel is the flash, so reduced-flashing keeps the wash but drops the
+   slide; reduced-motion is already handled globally. */
+.reduced-flashing .codec-scan{opacity:.34}

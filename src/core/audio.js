@@ -261,6 +261,14 @@ export class AudioEngine{
       case 'deny':
         this.tone({freq:220,endFreq:120,type:'square',duration:.18,gain:.1*volume});
         break;
+      // The codec opening: two clean tones and a breath of carrier hiss, the
+      // sound a channel makes when somebody keys it.
+      case 'codec':
+        if(!this.canPlay('codec',.12))return;
+        this.tone({freq:1180,type:'square',duration:.045,gain:.05*volume});
+        this.tone({freq:1570,type:'square',duration:.06,gain:.045*volume,delay:.055});
+        this.noise({duration:.09,gain:.014*volume,freq:3200,filter:'bandpass',q:1.4,delay:.02});
+        break;
       case 'alarm':
         [0,.28,.56].forEach(d=>this.tone({freq:880,endFreq:560,type:'sawtooth',duration:.26,gain:.14*volume,delay:d}));
         break;

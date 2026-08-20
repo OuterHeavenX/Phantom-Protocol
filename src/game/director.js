@@ -312,6 +312,7 @@ export class Director{
       '#c8d2d6',3.4
     );
     engine.audio.play('alarm',{volume:.85});
+    engine.codec?.fire('gunship');
   }
 
   runScriptedEvents(){

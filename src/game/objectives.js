@@ -97,6 +97,7 @@ export class Objectives{
     engine.announce(`OBJECTIVE CLEARED // +${slot.reward.credits} CR`,'#8bff9b',1.8);
     engine.fx.text(engine.player.x,engine.player.y-40,'OBJECTIVE CLEARED','#8bff9b',{size:13,life:1.6});
     engine.audio.play('unlock',{volume:.6});
+    engine.codec?.fire('objectiveCleared');
 
     // Every third clearance surfaces a personnel cache, which is the only
     // way an unrecovered operative file enters the run.

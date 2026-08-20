@@ -1340,6 +1340,7 @@ export class Screens{
           ${toggle('showHealthBars','Hostile health bars',settings.showHealthBars)}
           ${toggle('showThreatIndicators','Threat & awareness markers',settings.showThreatIndicators)}
           ${toggle('showFps','Performance readout',settings.showFps)}
+          ${toggle('codec','Codec traffic',settings.codec!==false,'Radio chatter between the operative and command during a contract')}
         </section>
 
         <section class="settings-block">
@@ -1409,7 +1410,7 @@ export class Screens{
     }
 
     for(const id of ['muted','damageNumbers','showMinimap','showHealthBars',
-                     'showThreatIndicators','showFps','reducedFlashing',
+                     'showThreatIndicators','showFps','codec','reducedFlashing',
                      'performanceMode','autoAim','leftHanded']){
       const button=document.getElementById(id);
       if(!button)continue;
