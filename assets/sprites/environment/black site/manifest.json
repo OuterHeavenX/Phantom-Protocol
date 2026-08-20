@@ -6,6 +6,15 @@
     "floor": {
       "src": "floor/blacksite-floor-512.png",
       "world": [128, 128]
+    },
+    "wall.h": {
+      "cap": 26,
+      "world": [32, 26],
+      "slice": {
+        "capA": "walls/blacksite-wall-h-cap-l-104x104-FINAL.png",
+        "mid": "walls/blacksite-wall-h-mid-128x104.png",
+        "capB": "walls/blacksite-wall-h-cap-r-104x104-FINAL.png"
+      }
     }
   }
 }

@@ -282,31 +282,51 @@ export function drawSprite(ctx,image,x,y,w,h){
 // at up to 27:1, so the middle piece tiles at its authored world step and the
 // last tile is cut with a source rect rather than squashed.
 //
-// Short segments are the awkward case: when the two caps do not fit, they are
-// shrunk to half the length each and the middle is skipped entirely.
+// Short segments are the awkward case. Blacksite generates horizontal walls as
+// short as 35 world units, well under the 26 + 32 + 26 a full three-slice needs,
+// so a pair of caps has to fit somewhere that cannot hold them. They are cut
+// rather than squashed: each cap keeps its authored pixels-per-unit scale and
+// its outer end — the end that reads as the end of a wall — and gives up its
+// inner edge to a source rect. The middle is skipped entirely.
 export function drawSlicedWall(ctx,entry,x,y,w,h,horizontal){
   if(!entry)return false;
   const length=horizontal?w:h;
   const thickness=horizontal?h:w;
   if(!(length>0)||!(thickness>0))return false;
 
+  // The blit is never an upscale — a slice is authored at four source pixels
+  // per world unit and the camera tops out at four device pixels per world
+  // unit — so smoothing is wanted on every path, and is set here rather than
+  // inherited from whichever block last happened to touch it. Saved and
+  // restored so the geometry pass hands back the state it was given.
+  ctx.save();
   ctx.imageSmoothingEnabled=true;
+  ctx.imageSmoothingQuality='high';
 
-  const cap=Math.min(entry.cap>0?entry.cap:thickness,length/2);
+  const capWorld=entry.cap>0?entry.cap:thickness;
+  const cap=Math.min(capWorld,length/2);
   const span=length-cap*2;
 
-  if(horizontal){
-    if(cap>0){
-      ctx.drawImage(entry.capA,x,y,cap,h);
-      ctx.drawImage(entry.capB,x+length-cap,y,cap,h);
-    }
-  }else{
-    if(cap>0){
-      ctx.drawImage(entry.capA,x,y,w,cap);
-      ctx.drawImage(entry.capB,x,y+length-cap,w,cap);
+  if(cap>0){
+    const capA=entry.capA,capB=entry.capB;
+    // Full-size caps blit whole; a cap that had to be trimmed takes the same
+    // fraction off its source, keeping the art at its authored scale.
+    const fraction=cap/capWorld;
+    const sa=horizontal?capA.naturalWidth:capA.naturalHeight;
+    const sb=horizontal?capB.naturalWidth:capB.naturalHeight;
+    const cutA=Math.min(sa,sa*fraction);
+    const cutB=Math.min(sb,sb*fraction);
+    if(horizontal){
+      ctx.drawImage(capA,0,0,cutA,capA.naturalHeight,x,y,cap,h);
+      // capB keeps its right-hand end, so the source window starts at its far
+      // edge and runs back to meet the middle.
+      ctx.drawImage(capB,sb-cutB,0,cutB,capB.naturalHeight,x+length-cap,y,cap,h);
+    }else{
+      ctx.drawImage(capA,0,0,capA.naturalWidth,cutA,x,y,w,cap);
+      ctx.drawImage(capB,0,sb-cutB,capB.naturalWidth,cutB,x,y+length-cap,w,cap);
     }
   }
-  if(!(span>0))return true;
+  if(!(span>0)){ctx.restore();return true}
 
   const mid=entry.mid;
   const step=entry.world?(horizontal?entry.world[0]:entry.world[1]):thickness;
@@ -315,6 +335,7 @@ export function drawSlicedWall(ctx,entry,x,y,w,h,horizontal){
   if(!(step>0)){
     if(horizontal)ctx.drawImage(mid,x+cap,y,span,h);
     else ctx.drawImage(mid,x,y+cap,w,span);
+    ctx.restore();
     return true;
   }
 
@@ -330,5 +351,6 @@ export function drawSlicedWall(ctx,entry,x,y,w,h,horizontal){
     else ctx.drawImage(mid,0,0,sw,sh,x,y+cap+drawn,w,piece);
     drawn+=piece;
   }
+  ctx.restore();
   return true;
 }

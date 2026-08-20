@@ -77,15 +77,19 @@ Wall slices may also be shipped per variant as `wall.h.0`, `wall.h.1` and so on;
 the unsuffixed key covers the whole theatre when only one set exists.
 
 Anything not listed keeps drawing procedurally. There is no requirement to ship
-a complete pack, and no penalty for a partial one.
+a complete pack, and no penalty for a partial one. A slice set is all-or-nothing:
+if any of its three pieces fails to decode the whole key is dropped, so a wall
+falls back complete rather than showing a gap where a cap should be.
 
 ## What is wired up today
 
-Blacksite Zero is opted in with `art:'black site'` and ships one asset: a
-512x512 floor plate mapped to the existing 128-unit tiling period. Everything
-else in that theatre — walls, cover, vaults, hazards, decor — still draws
-procedurally, and the floor does too if the tile fails to load. No other
-theatre has the flag.
+Blacksite Zero is opted in with `art:'black site'` and ships two things: a
+512x512 floor plate mapped to the existing 128-unit tiling period, and the
+horizontal partition wall set — a 104x104 cap at each end and a 128x104 middle
+that tiles at 32 world units. Everything else in that theatre — vertical walls,
+cover, vault chamber walls and seals, hazards, decor — still draws procedurally,
+and so does the floor or the walls if their files fail to load. No other theatre
+has the flag.
 
 ## What the loader guarantees
 
@@ -100,7 +104,10 @@ theatre has the flag.
   back whole rather than shipping a gap.
 - **Walls tile, they do not stretch.** Generated segments run from roughly 35 to
   695 world units at a fixed thickness, so the middle piece repeats at its
-  authored step and the last tile is cut with a source rect.
+  authored step and the last tile is cut with a source rect. Nothing is ever
+  scaled off its authored pixels-per-unit — on a wall too short to hold two full
+  caps, each cap keeps its outer end and gives up its inner edge to a source
+  rect rather than being squashed to fit.
 
 ## Two things to watch in the art
 
