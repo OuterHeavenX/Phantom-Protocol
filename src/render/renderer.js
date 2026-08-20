@@ -1,6 +1,7 @@
 import {clamp,TAU,dist,formatTime} from '../core/math.js';
 import {Weather} from './weather.js';
 import {drawLandmark} from './landmarks.js';
+import {EnvironmentArt,drawSprite,drawSlicedWall} from './environment.js';
 import {EXTRACTION_RADIUS,EXTRACTION_HOLD} from '../game/engine.js';
 import {REVIVE_RADIUS} from '../game/squadmate.js';
 import {
@@ -48,6 +49,22 @@ export class Renderer{
     this.buildFloorPattern();
     // Per-theatre ambient weather; theatres without a profile cost nothing.
     this.weather=new Weather(engine.map?.weather,this.settings);
+
+    // Authored environment art for this theatre, when a pack has been shipped
+    // for it. A theatre opts in with `art:true` in its map definition; without
+    // it nothing is fetched at all, which is the state every theatre is in
+    // until somebody paints it.
+    //
+    // The load is asynchronous and deliberately unawaited: the first frame runs
+    // long before any image decodes, and until the whole pack has resolved
+    // `art.active` stays false and every draw path below takes its procedural
+    // branch. A frame is therefore either fully procedural or fully authored,
+    // never half-dressed.
+    this.artFloorPattern=null;
+    this.art=new EnvironmentArt(engine.map?.art?engine.map.id:null);
+    this.art.load().then(()=>{
+      if(this.art.active)this.artFloorPattern=this.art.buildFloorPattern(this.ctx);
+    });
   }
 
   get lightingEnabled(){
@@ -57,6 +74,13 @@ export class Renderer{
   resize(width,height){
     this.lightCanvas.width=Math.ceil(width/2);
     this.lightCanvas.height=Math.ceil(height/2);
+  }
+
+  // Called when a session tears down, so an art pack still in flight cannot
+  // build a pattern on a context that has already been released.
+  destroy(){
+    this.art?.dispose();
+    this.artFloorPattern=null;
   }
 
   // A small tiling texture beats drawing thousands of grid lines each frame.
@@ -159,7 +183,7 @@ export class Renderer{
     const y=clamp(camera.y-halfH,-200,world.height+200);
 
     ctx.save();
-    ctx.fillStyle=this.floorPattern||world.palette.floor;
+    ctx.fillStyle=this.artFloorPattern||this.floorPattern||world.palette.floor;
     ctx.fillRect(x,y,halfW*2,halfH*2);
 
     // Out-of-bounds shading beyond the arena edge.
@@ -232,7 +256,13 @@ export class Renderer{
       ctx.save();
       ctx.translate(item.x,item.y);
       ctx.rotate(item.rotation);
-      switch(item.kind){
+      // Decor is scattered at arbitrary rotation, so its art has to be
+      // light-neutral: the sprite is blitted under the same transform the
+      // vector form uses rather than being given an upright pass of its own.
+      const sprite=this.art.active?this.art.image(`decor.${item.kind}`):null;
+      if(sprite){
+        drawSprite(ctx,sprite,-item.size/2,-item.size/2,item.size,item.size);
+      }else switch(item.kind){
         case 0:ctx.fillRect(-item.size/2,-item.size/6,item.size,item.size/3);break;
         case 1:ctx.beginPath();ctx.arc(0,0,item.size/3,0,TAU);ctx.stroke();break;
         case 2:
@@ -348,14 +378,18 @@ export class Renderer{
         ctx.beginPath();ctx.arc(hazard.x,hazard.y,hazard.radius*progress,0,TAU);ctx.fill();
       }else if(hazard.active){
         ctx.globalAlpha=.6;
-        ctx.fillStyle=hazard.color;
-        ctx.beginPath();ctx.arc(hazard.x,hazard.y,hazard.radius,0,TAU);ctx.fill();
+        if(!this.drawAuthoredHazard(ctx,hazard,'active',hazard.radius)){
+          ctx.fillStyle=hazard.color;
+          ctx.beginPath();ctx.arc(hazard.x,hazard.y,hazard.radius,0,TAU);ctx.fill();
+        }
       }else{
         // Dormant marker so the player learns where hazards live.
         ctx.globalAlpha=.1;
-        ctx.strokeStyle=hazard.color;
-        ctx.lineWidth=1;
-        ctx.beginPath();ctx.arc(hazard.x,hazard.y,hazard.radius*.8,0,TAU);ctx.stroke();
+        if(!this.drawAuthoredHazard(ctx,hazard,'dormant',hazard.radius*.8)){
+          ctx.strokeStyle=hazard.color;
+          ctx.lineWidth=1;
+          ctx.beginPath();ctx.arc(hazard.x,hazard.y,hazard.radius*.8,0,TAU);ctx.stroke();
+        }
       }
     }
     ctx.restore();
@@ -370,9 +404,14 @@ export class Renderer{
     for(const wall of this.engine.world.walls){
       if(wall.type==='perimeter')continue;
       if(!camera.isVisible(wall.x,wall.y,Math.max(wall.hw,wall.hh)))continue;
-      // Faux height: a dark base offset down, then the lit top face.
-      ctx.fillStyle='rgba(0,0,0,.45)';
-      ctx.fillRect(wall.x-wall.hw+4,wall.y-wall.hh+7,wall.w,wall.h);
+      // Faux height: a dark base offset down, then the lit top face. A pack
+      // that bakes its own shadows switches this off in its manifest so the
+      // two do not stack.
+      if(this.art.shadows){
+        ctx.fillStyle='rgba(0,0,0,.45)';
+        ctx.fillRect(wall.x-wall.hw+4,wall.y-wall.hh+7,wall.w,wall.h);
+      }
+      if(this.drawAuthoredWall(ctx,wall))continue;
       ctx.fillStyle=palette.wall;
       ctx.fillRect(wall.x-wall.hw,wall.y-wall.hh,wall.w,wall.h);
       ctx.strokeStyle=palette.wallEdge;
@@ -410,17 +449,67 @@ export class Renderer{
     ctx.restore();
   }
 
+  // Authored art for one wall, or false when this theatre has no pack — or
+  // none for this kind of wall — and the caller should draw its rectangle.
+  //
+  // A chamber wall is one of exactly two sizes, 148x16 or 16x148, so it is a
+  // plain blit. A partition segment is an arbitrary length at a fixed 26-unit
+  // thickness, so it is three-sliced along its long axis instead: stretching
+  // one sprite across the generated range would smear it at up to 27:1.
+  drawAuthoredWall(ctx,wall){
+    if(!this.art.active)return false;
+    const x=wall.x-wall.hw,y=wall.y-wall.hh;
+    const horizontal=wall.w>=wall.h;
+    if(wall.type==='vault'){
+      return drawSprite(ctx,this.art.image(horizontal?'vault.wall.h':'vault.wall.v',wall.variant),
+        x,y,wall.w,wall.h);
+    }
+    return drawSlicedWall(ctx,this.art.slice(horizontal?'wall.h':'wall.v',wall.variant),
+      x,y,wall.w,wall.h,horizontal);
+  }
+
+  // Authored art for one cover piece, or false to fall through to the vector
+  // form. Cover is the easy half of the theatre: six fixed footprints, never
+  // scaled and never rotated, so each is a single stretch-to-collider blit and
+  // `variant` picks the face the generator already chose for this piece.
+  //
+  // The vault seal is the exception. It has two orientations and swaps art once
+  // the scanner has resolved what is behind it, and if a pack ships the sealed
+  // state but not the found one the whole seal falls back rather than losing
+  // the indicator that tells the operative it is worth breaching.
+  drawAuthoredCover(ctx,cover,x,y){
+    if(!this.art.active)return false;
+    let key=`cover.${cover.type}`;
+    if(cover.type==='vaultSeal'){
+      key=`vault.seal.${cover.w>cover.h?'h':'v'}`;
+      if(cover.vault?.discovered)key+='.found';
+    }
+    return drawSprite(ctx,this.art.image(key,cover.variant),x,y,cover.w,cover.h);
+  }
+
+  // Authored hazard art, or false for the vector ring. The engine's alpha is
+  // left in place over the blit so an authored vent sits in the same visual
+  // register as the ring it replaces — a pack compensates in the art rather
+  // than by quietly changing how loudly hazards read.
+  drawAuthoredHazard(ctx,hazard,state,radius){
+    if(!this.art.active)return false;
+    return drawSprite(ctx,this.art.image(`hazard.${hazard.id}.${state}`),
+      hazard.x-radius,hazard.y-radius,radius*2,radius*2);
+  }
+
   drawCoverPiece(ctx,cover,palette){
     // Some cover exists only to give a landmark its collision footprint; the
     // prop itself is drawn from world.landmarks, so drawing a generic box here
     // would sit a grey rectangle on top of the aircraft or the tree.
     if(LANDMARK_COLLIDERS.has(cover.type))return;
     const x=cover.x-cover.hw,y=cover.y-cover.hh;
-    // Shadow.
-    ctx.fillStyle='rgba(0,0,0,.4)';
-    ctx.fillRect(x+3,y+5,cover.w,cover.h);
+    // Shadow. As with walls, a pack that bakes its own switches this off.
+    if(this.art.shadows){
+      ctx.fillStyle='rgba(0,0,0,.4)';
+      ctx.fillRect(x+3,y+5,cover.w,cover.h);
+    }
 
-    switch(cover.type){
+    if(!this.drawAuthoredCover(ctx,cover,x,y))switch(cover.type){
       case 'vaultSeal':{
         // Reads as heavy blast door either way; only the live indicator strip
         // tells the operative the scanner has resolved what is behind it.
@@ -898,8 +987,12 @@ export class Renderer{
       ctx.save();
       // Floor sigil inside the chamber.
       ctx.globalAlpha=open?.18:.12+Math.abs(Math.sin(time*2+vault.pulse))*.1;
-      ctx.fillStyle=color;
-      ctx.beginPath();ctx.arc(vault.x,vault.y,vault.half*.7,0,TAU);ctx.fill();
+      const sigilRadius=vault.half*.7;
+      const sigil=this.art.active?this.art.image(open?'vault.sigil.open':'vault.sigil'):null;
+      if(!drawSprite(ctx,sigil,vault.x-sigilRadius,vault.y-sigilRadius,sigilRadius*2,sigilRadius*2)){
+        ctx.fillStyle=color;
+        ctx.beginPath();ctx.arc(vault.x,vault.y,sigilRadius,0,TAU);ctx.fill();
+      }
 
       ctx.globalAlpha=1;
       ctx.strokeStyle=color;

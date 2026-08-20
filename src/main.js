@@ -269,6 +269,7 @@ function teardownSession(){
   window.removeEventListener('resize',session.onResize);
   for(const detach of session.detachSticks)detach?.();
   session.hud?.destroy();
+  session.renderer?.destroy();
   session.engine?.destroy();
   input.releaseAll();
   session=null;
