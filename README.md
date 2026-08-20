@@ -65,6 +65,8 @@ camera lead; auto-target can be disabled in settings.
   personnel files. Roughly 40% come with a garrison sealed in alongside the loot.
 - **Field turrets** planted by the operative, 1× to 3× simultaneously by kit rank, with
   durability that scales with rank and level and depletes under contact.
+- **Carriers** — armoured transports that park at standoff and keep unloading infantry
+  until the hull is opened. The vehicle is the problem, not what comes out of it.
 - **A Nemesis** — a bipedal walker commissioned against you personally. It withdraws
   rather than dying, and comes back heavier, better armed, and wearing the holes you put
   in it.
@@ -166,6 +168,19 @@ is still to earn.
 **Loadout.** A primary weapon and its bench build are selected before deployment, on both
 the deploy screen and the campaign briefing. Without a selection the operative carries
 their own issue weapon, stock.
+
+**Carriers.** The Drayman is not a fighter, it is a delivery system: it drives in, parks
+at standoff, and puts three infantry on the ground every five and a half seconds until
+somebody opens the hull. Each carrier tracks what it has unloaded and stops at nine alive,
+so destroying it is what ends the stream rather than the global hostile cap quietly doing
+it instead. Shooting what it produces is the tempting answer and the wrong one.
+
+It has no pathfinding — the AI steers locally — so two things keep it from becoming
+scenery. It crushes light cover rather than steering around it, which is what an armoured
+vehicle would do anyway; and if it stops making ground for four seconds, it parks where it
+stands and opens the ramp there. A carrier parked badly is still a carrier. It is
+scheduled by the director rather than drawn from the deployment pool: one at the midpoint
+of a ten-minute contract, two more later on twenty and up.
 
 **The Nemesis.** A bipedal hunter-killer the network commissions against one operator
 (`data/nemesis.js`, `src/game/nemesis.js`). It is not drawn from the deployment pool and

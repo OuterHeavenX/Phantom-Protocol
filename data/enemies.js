@@ -109,6 +109,26 @@ export const CHOPPER={
   desc:'Rotary gunship on overwatch. Holds standoff, walks fire across the deck, and ignores every wall between you.'
 };
 
+// Armoured personnel carrier. Not a fighter — a delivery system. It rolls in,
+// parks at standoff, and keeps putting infantry on the ground until somebody
+// destroys it. Shooting what it unloads is the tempting answer and the wrong
+// one; the box is the problem.
+//
+// Weight zero, like the gunship: it is scheduled by the director rather than
+// drawn from the deployment pool.
+export const CARRIER={
+  id:'carrier',name:'Drayman Carrier',ai:'carrier',render:'apc',tier:4,weight:0,
+  hp:900,speed:96,damage:8,radius:30,xp:120,credits:44,jp:7,armor:9,color:'#8d8468',
+  machine:true,heavy:true,knockbackResist:1,crushesCover:true,
+  // Where it stops and starts unloading.
+  standoff:430,
+  // A drop every `deployInterval` seconds, `deployCount` at a time, up to
+  // `deployCap` alive at once from this carrier.
+  deployInterval:5.5,deployCount:3,deployCap:9,deployUnit:'rifle',
+  range:0,
+  desc:'Armoured carrier. Parks at standoff and keeps unloading infantry until the hull is opened.'
+};
+
 export const ELITES=[
   {
     id:'nullhunter',name:'Null Hunter',base:'hunter',ai:'diveBomber',render:'drone',

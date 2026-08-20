@@ -1,4 +1,4 @@
-import {ENEMIES,ENEMIES_BY_ID,ELITES,CHOPPER} from '../../data/enemies.js';
+import {ENEMIES,ENEMIES_BY_ID,ELITES,CHOPPER,CARRIER} from '../../data/enemies.js';
 import {MINIBOSSES} from '../../data/bosses.js';
 import {clamp,TAU} from '../core/math.js';
 import {Squad} from './ai.js';
@@ -88,6 +88,10 @@ export class Director{
     // Air support. One gunship on the way in; a flight of two or three once
     // the sector has had time to call it in properly.
     events.push({at:total*.36,type:'gunship',count:1});
+    // Carriers: one mid-contract on anything meaningful, a second pair later.
+    // Scheduled rather than drawn from the pool, like the gunship.
+    if(durationMinutes>=10)events.push({at:total*.52,type:'carrier',count:1});
+    if(durationMinutes>=20)events.push({at:total*.72,type:'carrier',count:2});
     if(durationMinutes>=10)events.push({at:total*.66,type:'gunship',count:2});
     if(durationMinutes>=20)events.push({at:total*.82,type:'gunship',count:3});
     // The walker, when the operator's record says it is due. Early enough in
@@ -319,6 +323,38 @@ export class Director{
     engine.codec?.fire('gunship');
   }
 
+  spawnCarriers(count){
+    const engine=this.engine;
+    const rng=engine.rng;
+    const bearing=rng.angle();
+    let deployed=0;
+    for(let i=0;i<count;i++){
+      const angle=bearing+(i-(count-1)/2)*.7;
+      // Just beyond the edge of view. A carrier has to drive in on the ground
+      // with only local avoidance to steer by, so every extra metre of
+      // geometry between it and the operative is another chance to wedge.
+      const distance=engine.camera.viewHalfWidth(60)+rng.range(20,90);
+      const point=engine.world.findSpawn(rng,{
+        x:engine.player.x+Math.cos(angle)*distance,
+        y:engine.player.y+Math.sin(angle)*distance
+      },0,220);
+      const carrier=engine.spawnEnemy(CARRIER,point.x,point.y,{});
+      if(!carrier)continue;
+      carrier.awareness=1;
+      carrier.memory=30;
+      carrier.lastKnownX=engine.player.x;
+      carrier.lastKnownY=engine.player.y;
+      deployed++;
+    }
+    if(!deployed)return;
+    engine.announce(
+      deployed>1?`CARRIERS INBOUND // ${deployed}`:'CARRIER INBOUND',
+      '#d8c98a',3.2
+    );
+    engine.audio.play('alarm',{volume:.7});
+    engine.codec?.fire('carrier');
+  }
+
   runScriptedEvents(){
     while(this.eventIndex<this.scriptedEvents.length&&
           this.engine.elapsed>=this.scriptedEvents[this.eventIndex].at){
@@ -349,6 +385,10 @@ export class Director{
         engine.audio.play('alarm',{volume:1});
         this.queueSurge();
         this.queueSurge();
+        break;
+      }
+      case 'carrier':{
+        this.spawnCarriers(event.count||1);
         break;
       }
       case 'nemesis':{

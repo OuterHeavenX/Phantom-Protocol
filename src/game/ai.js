@@ -542,6 +542,60 @@ const PROFILES={
     }
   },
 
+  // The carrier does not fight. It drives to standoff, parks, and opens its
+  // ramp on a timer. Everything dangerous about it is what comes out.
+  carrier:{
+    preferredRange:320,detection:1200,memory:14,strafe:0,rangeBand:50,separation:.6,reaction:.6,
+    decide(enemy,ctx){
+      if(enemy.awareness<.2)return AI_STATES.SEARCH;
+      // The standoff has to sit outside where the steering settles — a
+      // preferred range with a band around it never closes to its own centre,
+      // so a threshold set at the centre is one the carrier never crosses.
+      if(ctx.distanceToPlayer<=(enemy.standoff||430)){
+        if(!enemy.parked){
+          enemy.parked=true;
+          enemy.rollingSpeed=enemy.speed;
+          // Parked means parked: a carrier that keeps nudging around while it
+          // unloads reads as indecisive rather than deliberate.
+          enemy.speed=0;
+          enemy.vx=0;enemy.vy=0;
+        }
+        return AI_STATES.SUPPRESS;
+      }
+      if(enemy.parked){
+        enemy.parked=false;
+        enemy.speed=enemy.rollingSpeed??enemy.speed;
+      }
+
+      // The steering is local — it has no path around a wall, and a carrier
+      // pinned on one would sit out of reach unloading nothing for the rest of
+      // the contract. If it stops making ground, it stops where it is and
+      // opens the ramp there. A carrier parked badly is still a carrier.
+      const last=enemy.approachMark;
+      if(last===undefined||last-ctx.distanceToPlayer>24){
+        enemy.approachMark=ctx.distanceToPlayer;
+        enemy.stalledFor=0;
+      }else{
+        enemy.stalledFor=(enemy.stalledFor||0)+ctx.dt;
+        if(enemy.stalledFor>4){
+          enemy.parked=true;
+          enemy.rollingSpeed=enemy.speed;
+          enemy.speed=0;
+          enemy.vx=0;enemy.vy=0;
+          return AI_STATES.SUPPRESS;
+        }
+      }
+      return AI_STATES.ENGAGE;
+    },
+    attack(enemy,ctx){
+      // `attack` is the behaviour tree's per-unit tick with a cooldown on it,
+      // which is exactly the shape a deployment cycle wants.
+      if(!enemy.parked)return;
+      enemy.attackCooldown=(enemy.deployInterval||5.5)*ctx.fireRateMult;
+      ctx.deployFrom?.(enemy);
+    }
+  },
+
   sniper:{
     preferredRange:440,detection:900,memory:5,strafe:.25,rangeBand:80,separation:1.1,reaction:.5,
     decide(enemy,ctx){

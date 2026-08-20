@@ -39,6 +39,7 @@ export const CODEC_EVENTS={
   deploy:{once:true,priority:2},
   firstContact:{once:true,priority:1},
   gunship:{cooldown:45,priority:3},
+  carrier:{cooldown:50,priority:3},
   elite:{cooldown:40,priority:2},
   eliteDown:{cooldown:50,priority:1},
   boss:{priority:4},
@@ -82,6 +83,8 @@ const HANDLER={
     'Rotary signature inbound. Gunship — it will hold off your range and work you over.',
     'Air support, theirs. It will not close. You will have to reach for it.'
   ],
+  carrier:['Carrier on the approach. It will park and start unloading — the vehicle is the problem, not what comes out of it.',
+    'Armoured transport inbound. Shoot the infantry all day and it will keep printing more.'],
   elite:['Elite signature on the net. That one has a file.',
     'Command-grade hostile. Treat it like it has read yours.'],
   eliteDown:['Elite signature terminated. Their net just got quieter.',
@@ -162,6 +165,13 @@ const SELF={
     cipher:'It is a machine. Machines can be argued with.',
     requiem:'Then it can come lower.',
     default:'I see it. Working the angle.'
+  },
+  carrier:{
+    ferrous:'A big metal box that stops moving. I could not ask for more.',
+    bastion:'It is armoured for a reason. So am I.',
+    oracle:'Kill the door and the room stops filling.',
+    cipher:'Its dispatch log is talking to me. Nine aboard, and it is not shy about it.',
+    default:'I see it. Going for the vehicle.'
   },
   elite:{
     oracle:'That one moves like it was trained by whoever trained us.',

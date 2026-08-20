@@ -26,7 +26,8 @@ music moved off the AudioContext, which was freezing the track whenever the brow
 suspended the context. And codec traffic: the deployed operative and a handler talking
 over the channel printed on their dossier cards, across twenty events in a contract.
 
-And since: the Nemesis — a bipedal walker commissioned against the operator, which
+And since: the Drayman carrier, an armoured transport that parks and unloads infantry
+until it is destroyed. Plus the Nemesis — a bipedal walker commissioned against the operator, which
 withdraws rather than dying and returns with another hardpoint and the scars from the
 last meeting. Plus squadmates — a second operative on the ground who fights with their own issue
 weapon and their own ability, whom a share of each wave marks as their target, and who

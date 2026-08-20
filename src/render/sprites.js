@@ -334,6 +334,83 @@ export function drawEnemy(ctx,enemy,time,settings){
 }
 
 // Rotary gunship, drawn nose-forward along its facing.
+// The carrier. A slab with road wheels and a rear ramp that drops when it
+// unloads — the ramp is the tell, so a player learns to read the moment more
+// infantry are about to arrive.
+function drawApc(ctx,enemy,scale,time){
+  const s=scale*1.05;
+  const hull=enemy.hitFlash>0?'#ffffff':'#5b5647';
+  const dark=enemy.hitFlash>0?'#dddddd':'#2b2a24';
+  const trim=enemy.color||'#8d8468';
+
+  // Road wheels, drawn under the hull and rolling while it moves.
+  const roll=(enemy.walkPhase||0)*1.4;
+  ctx.fillStyle=dark;
+  for(const side of [-1,1]){
+    for(let i=-1;i<=1;i++){
+      ctx.save();
+      ctx.translate(i*13*s,side*15*s);
+      ctx.rotate(roll);
+      ctx.beginPath();ctx.arc(0,0,6*s,0,TAU);ctx.fill();
+      ctx.strokeStyle=trim;ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(-4*s,0);ctx.lineTo(4*s,0);ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // Hull: a wedge-nosed box.
+  ctx.fillStyle=hull;
+  ctx.strokeStyle=trim;
+  ctx.lineWidth=1.6;
+  ctx.beginPath();
+  ctx.moveTo(28*s,0);
+  ctx.lineTo(18*s,-13*s);
+  ctx.lineTo(-22*s,-13*s);
+  ctx.lineTo(-22*s,13*s);
+  ctx.lineTo(18*s,13*s);
+  ctx.closePath();ctx.fill();ctx.stroke();
+
+  // Plating.
+  ctx.strokeStyle=withAlpha('#000000',.3);
+  ctx.lineWidth=1.2;
+  for(const x of [-12,-2,8]){
+    ctx.beginPath();ctx.moveTo(x*s,-12*s);ctx.lineTo(x*s,12*s);ctx.stroke();
+  }
+
+  // Cupola.
+  ctx.fillStyle=dark;
+  ctx.strokeStyle=trim;ctx.lineWidth=1.2;
+  ctx.beginPath();ctx.arc(2*s,0,7*s,0,TAU);ctx.fill();ctx.stroke();
+  ctx.fillStyle=trim;
+  ctx.fillRect(6*s,-1.4*s,12*s,2.8*s);
+
+  // Rear ramp, down while it is unloading.
+  const ramp=Math.max(0,enemy.rampTimer||0);
+  const drop=Math.min(1,ramp/.9);
+  ctx.save();
+  ctx.translate(-22*s,0);
+  ctx.fillStyle=drop>0?'#6f6a55':dark;
+  ctx.strokeStyle=trim;ctx.lineWidth=1.4;
+  ctx.beginPath();
+  roundedRect(ctx,-16*s*drop,-11*s,16*s*drop+3*s,22*s,2*s);
+  ctx.fill();ctx.stroke();
+  if(drop>0){
+    ctx.fillStyle=withAlpha('#ffd08a',.35*drop);
+    ctx.fillRect(-2*s,-9*s,4*s,18*s);
+  }
+  ctx.restore();
+
+  // Parked marker: a slow pulse, so a stationary carrier still reads as live.
+  if(enemy.parked){
+    ctx.save();
+    ctx.globalAlpha=.25+Math.abs(Math.sin(time*2))*.2;
+    ctx.strokeStyle=trim;ctx.lineWidth=1.4;
+    ctx.setLineDash([5,5]);
+    ctx.beginPath();ctx.arc(0,0,enemy.radius*1.5,0,TAU);ctx.stroke();
+    ctx.restore();
+  }
+}
+
 function drawChopper(ctx,enemy,scale,time){
   const s=scale*.92;
   const body=enemy.color||'#c8d2d6';
@@ -409,6 +486,7 @@ function drawChopper(ctx,enemy,scale,time){
 
 const ENEMY_RENDERERS={
   chopper:drawChopper,
+  apc:drawApc,
   soldier(ctx,enemy,scale,time){
     drawHumanoid(ctx,{
       bodyColor:enemy.color,accentColor:shade(enemy.color,.3),

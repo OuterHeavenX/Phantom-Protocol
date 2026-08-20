@@ -760,6 +760,40 @@ export class Engine{
     return enemy;
   }
 
+  // A carrier putting infantry on the ground. Each carrier tracks what it has
+  // unloaded and stops at its own cap, so destroying one is what ends the
+  // stream rather than the global enemy cap quietly doing it for you.
+  deployFromCarrier(carrier){
+    const archetype=ENEMIES_BY_ID[carrier.deployUnit||'rifle'];
+    if(!archetype)return;
+    carrier.deployed=(carrier.deployed||[]).filter(unit=>!unit.dead);
+    const room=(carrier.deployCap||9)-carrier.deployed.length;
+    if(room<=0)return;
+
+    const count=Math.min(room,carrier.deployCount||3);
+    let dropped=0;
+    for(let i=0;i<count;i++){
+      // Out of the back, away from whoever the carrier is facing.
+      const angle=carrier.angle+Math.PI+this.rng.range(-.6,.6);
+      const point=this.world.findSpawn(this.rng,{
+        x:carrier.x+Math.cos(angle)*(carrier.radius+24),
+        y:carrier.y+Math.sin(angle)*(carrier.radius+24)
+      },0,90);
+      const unit=this.spawnEnemy(archetype,point.x,point.y);
+      if(!unit)continue;
+      unit.awareness=1;
+      unit.memory=10;
+      unit.lastKnownX=this.player.x;
+      unit.lastKnownY=this.player.y;
+      carrier.deployed.push(unit);
+      dropped++;
+    }
+    if(!dropped)return;
+    carrier.rampTimer=.9;
+    this.fx.ring(carrier.x,carrier.y,carrier.radius,carrier.radius+40,.35,'#d8c98a',2);
+    this.audio.play('reload',{volume:.55});
+  }
+
   spawnEscortSquad(unitId,count,origin){
     const archetype=ENEMIES_BY_ID[unitId];
     if(!archetype)return;
@@ -815,6 +849,13 @@ export class Engine{
         EnemyBrain.update(enemy,dt,context);
       }
 
+      // A tracked vehicle drives through light cover rather than around it.
+      // Without this the carrier wedges itself on the first crate it meets and
+      // never reaches its standoff — the AI steers locally and cannot path.
+      if(enemy.crushesCover&&!enemy.parked&&Math.hypot(enemy.vx,enemy.vy)>12){
+        this.breakCoverAround(enemy);
+      }
+
       enemy.x+=enemy.vx*dt;
       enemy.y+=enemy.vy*dt;
       // Aircraft are over the sector, not in it: geometry neither stops them
@@ -859,6 +900,7 @@ export class Engine{
       fireEnemyShot:(enemy,spec)=>this.fireEnemyShot(enemy,spec),
       fireMortar:(enemy,spec)=>this.fireMortar(enemy,spec),
       meleeHit:(enemy,damage)=>this.enemyMelee(enemy,damage),
+      deployFrom:enemy=>this.deployFromCarrier(enemy),
       detonateEnemy:enemy=>this.detonateEnemy(enemy),
       blinkEnemy:(enemy,range)=>this.blinkEnemy(enemy,range),
       onWindup:(enemy,action,duration)=>this.onEnemyWindup(enemy,action,duration),
