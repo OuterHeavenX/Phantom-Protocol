@@ -288,11 +288,10 @@ within and across runs as a secondary currency.
 
 ## Assets that carry the name
 
-The title screens and the operative dossier cards are authored artwork with text painted
-into the pixels, including the project's name across the top of every card. Renaming the
-project does not rename what is inside a PNG, so replacing that art is the one part of a
-rename that has to happen outside the source tree. The paths are stable and the code
-reads no text out of them, so dropping a replacement at the same path is the whole job:
+Authored artwork has text painted into the pixels, so renaming the project does not
+rename what is inside a PNG — replacing that art is the one part of a rename that has to
+happen outside the source tree. The paths are stable and the code reads no text out of
+them, so dropping a replacement at the same path is the whole job:
 
 ```
 assets/images/title-screen-wide.webp     (and .png)   desktop and landscape tablets
@@ -300,10 +299,14 @@ assets/images/title-screen-tall.webp     (and .png)   phones
 assets/images/Character_profile/<id>.webp             one dossier card per operative
 ```
 
+The title screens carry the current name. The dossier cards still print the project's
+former name across the top of each file, and are the last art outstanding.
+
 The title art's painted START and SETTINGS buttons are made real by hit areas measured as
 percentages of the artwork (`src/ui/splash.js`), so new art whose buttons sit elsewhere
-needs those percentages re-measured. Tapping anywhere on the frame also starts, so the
-screen stays usable in the meantime.
+needs those percentages re-measured — they moved when the artwork was replaced, and were
+re-measured off the new frames. Tapping anywhere on the frame also starts, so the screen
+stays usable even before that happens.
 
 ## Originality
 

@@ -14,12 +14,12 @@ const ART={
     ratio:1448/1086,
     base:'assets/images/title-screen-wide',
     // left / top / width / height, as percentages of the artwork.
-    buttons:{start:[37.4,76.9,25.2,6.9],settings:[37.4,84.4,25.2,6.7]}
+    buttons:{start:[34.1,75.6,29.8,6.2],settings:[34.1,83.7,29.8,6.4]}
   },
   tall:{
     ratio:853/1844,
     base:'assets/images/title-screen-tall',
-    buttons:{start:[22.1,79.1,55.9,5.4],settings:[22.1,85.4,55.9,5.4]}
+    buttons:{start:[17.9,82.1,64.6,4.9],settings:[17.9,87.8,64.6,4.9]}
   }
 };
 
