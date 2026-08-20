@@ -10,6 +10,7 @@ import {Objectives} from './objectives.js';
 import {Mission} from './mission.js';
 import {CodecDirector} from './codec.js';
 import {Squadmate} from './squadmate.js';
+import {Nemesis,nemesisScaling} from './nemesis.js';
 import {Fx} from './fx.js';
 import {ABILITIES,TRAITS,distanceToSegment} from './abilities.js';
 import {ENEMIES_BY_ID,STATUS_EFFECTS} from '../../data/enemies.js';
@@ -1024,6 +1025,13 @@ export class Engine{
   damageEnemy(target,amount,options={}){
     if(!target||target.dead)return 0;
 
+    // Where the walker was hit, so the hole is on the same plate next time.
+    // Recorded on the way in rather than after mitigation, because a shot that
+    // was absorbed still scored the armour.
+    if(target.nemesis&&options.hitX!==undefined){
+      target.markScar(options.hitX,options.hitY);
+    }
+
     const stats=this.stats;
     let damage=amount*this.player.damageBuff;
 
@@ -1224,6 +1232,10 @@ export class Engine{
   killBoss(boss){
     if(boss.dead&&this.bossesDefeated.includes(boss.id))return;
     boss.dead=true;
+    if(boss.nemesis){
+      boss.destroyed=true;
+      this.codec.fire('nemesisDown');
+    }
     this.bossesDefeated.push(boss.id);
     this.boss=null;
 
@@ -1319,6 +1331,40 @@ export class Engine{
     this.camera.addShake(.6);
     this.fx.flash(def.color,.35);
     return this.boss;
+  }
+
+  // The walker deploys from the operator's own record rather than from the
+  // theatre's boss table, and it arrives closer than a command signature: it
+  // is not guarding anything, it walked here to find you.
+  spawnNemesis(){
+    if(this.boss)return null;
+    const record=this.config.nemesis;
+    if(!record)return null;
+    const angle=this.rng.angle();
+    const point=this.world.findSpawn(this.rng,{
+      x:this.player.x+Math.cos(angle)*420,
+      y:this.player.y+Math.sin(angle)*420
+    },0,240);
+    this.boss=new Nemesis(record,point.x,point.y,nemesisScaling(record,this));
+    // Held separately from `this.boss`, which is cleared the moment it dies or
+    // walks out — the outcome still has to be readable at the end of the run.
+    this.nemesisRef=this.boss;
+    this.onBossSpawn?.(this.boss);
+    this.announce(record.designation,this.boss.def.color,3.6);
+    this.codec.fire(record.encounters===0?'nemesisFirst':'nemesisReturn');
+    this.audio.play('boss',{volume:1});
+    this.camera.addShake(.7);
+    this.fx.flash(this.boss.def.color,.4);
+    return this.boss;
+  }
+
+  // What the contract writes back about the walker, if it showed up at all.
+  nemesisOutcome(){
+    const walker=this.nemesisRef;
+    if(!walker)return null;
+    if(walker.destroyed)return{outcome:'destroyed'};
+    // Broke contact, or the contract simply ended with it still standing.
+    return{outcome:walker.escaped?'escaped':'survived',scars:walker.allScars()};
   }
 
   updateBoss(dt){
@@ -1543,7 +1589,8 @@ export class Engine{
           ally:p.ally,
           weapon:p.weapon,knockback:p.knockback,critBonus:p.critBonus,
           status:p.status,statusChance:p.statusChance,
-          angle:Math.atan2(p.vy,p.vx),fromX:p.px,fromY:p.py,source:'projectile'
+          angle:Math.atan2(p.vy,p.vx),fromX:p.px,fromY:p.py,source:'projectile',
+          hitX:p.x,hitY:p.y
         });
 
         if(p.pierceLeft>0){
@@ -2444,6 +2491,7 @@ export class Engine{
         downed:mate.downed
       })),
       squadLeftBehind:this.squad.filter(mate=>mate.downed).map(mate=>mate.id),
+      nemesis:this.nemesisOutcome(),
       objectivesCleared:this.objectives.completed,
       mission:this.mission.summary(),
       vaultsFound:this.telemetry.vaultsFound,

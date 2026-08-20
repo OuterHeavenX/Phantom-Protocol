@@ -1,6 +1,7 @@
 import {OPERATIVES} from '../../data/operatives.js';
 import {WEAPONS,weaponUnlockLevel} from '../../data/weapons.js';
 import {MAPS,DIFFICULTIES} from '../../data/maps.js';
+import {defaultNemesisRecord} from '../../data/nemesis.js';
 
 const KEY='red-static-save';
 // Keys this game has written under before, newest first. They are read once so
@@ -84,6 +85,10 @@ export function defaultSave(){
     intelligence:{},
     statistics:defaultStatistics(),
     settings:defaultSettings(),
+    // Declared rather than created on first contact, so the merge in
+    // normalizeSave recurses into it and a record written by an older build
+    // keeps whatever fields it had.
+    nemesis:defaultNemesisRecord(),
     runHistory:[]
   };
 }

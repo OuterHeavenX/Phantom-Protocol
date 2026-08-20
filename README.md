@@ -65,6 +65,9 @@ camera lead; auto-target can be disabled in settings.
   personnel files. Roughly 40% come with a garrison sealed in alongside the loot.
 - **Field turrets** planted by the operative, 1× to 3× simultaneously by kit rank, with
   durability that scales with rank and level and depletes under contact.
+- **A Nemesis** — a bipedal walker commissioned against you personally. It withdraws
+  rather than dying, and comes back heavier, better armed, and wearing the holes you put
+  in it.
 - **Squadmates** — take a second operative into a contract. They fight with their own
   issue weapon and their own signature ability, hostiles treat them as a real target, and
   they go down rather than die.
@@ -163,6 +166,27 @@ is still to earn.
 **Loadout.** A primary weapon and its bench build are selected before deployment, on both
 the deploy screen and the campaign briefing. Without a selection the operative carries
 their own issue weapon, stock.
+
+**The Nemesis.** A bipedal hunter-killer the network commissions against one operator
+(`data/nemesis.js`, `src/game/nemesis.js`). It is not drawn from the deployment pool and
+it is not a command signature guarding a sector — it walked here to find you, and the
+whole point of it is that it persists.
+
+Underneath it is a Boss: the same phase machine, weighted patterns and telegraphed
+windups every command signature uses. What it adds is that below a health threshold it
+breaks contact and walks out of the sector instead of dying, and everything that happened
+to it is written back to the save. The next one is the same machine — another hardpoint
+bolted on, more armour, and the hits you scored recorded in chassis-local coordinates so
+each hole is on the same plate it was last time. It holds on longer with each meeting,
+from 45% of its health down to nothing, and only at the final tier can it actually be
+destroyed. Kill it and the network issues a successor under the next designation.
+
+Drawing a biped from overhead is the hard part: legs tucked under a hull just look like a
+tank. So the leg rails sit outboard of the chassis and each foot travels only fore and
+aft along its own rail — letting them swing laterally as well reads as flailing, because
+there is no vertical axis to sell the arc. The legs align to travel while the hull tracks
+whatever it is shooting at, which is what stops something that size from appearing to
+slide.
 
 **Squadmates.** A contract can be run with a second operative on the ground
 (`src/game/squadmate.js`). They carry their own issue weapon, hold a working distance

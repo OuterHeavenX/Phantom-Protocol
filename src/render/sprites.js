@@ -759,6 +759,146 @@ export function drawBoss(ctx,boss,time){
 }
 
 const BOSS_RENDERERS={
+  // The Nemesis walker.
+  //
+  // Read from above, a biped only reads as a biped if its feet clear the hull:
+  // legs tucked under a torso just look like a tank. So the leg span is wider
+  // than the chassis and the stride carries each foot well past the nose and
+  // tail, where the eye can see them alternate. The legs align to travel and
+  // the torso to whatever it is shooting at, which is what stops something
+  // this size from appearing to slide.
+  nemesis(ctx,boss,time,body){
+    const s=boss.radius/54;
+    const accent=boss.def.accent||'#ffb35c';
+    const hot=boss.def.color||'#e0533f';
+    const flash=boss.hitFlash>0;
+    const shell=flash?'#ffffff':'#333b41';
+    const plate=flash?'#ffffff':'#454e55';
+    const dark=flash?'#dddddd':'#1d2429';
+
+    const moving=Math.min(1,Math.hypot(boss.vx,boss.vy)/40);
+    const limp=boss.strideLimp?.5:1;
+    boss.stridePhase=(boss.stridePhase||0)+(.7+moving*3)*.016*limp;
+    const stride=boss.stridePhase;
+
+    // ---- Legs: outboard of the hull, aligned to travel ----
+    // Each foot travels fore and aft along its own rail. Letting them swing
+    // laterally as well read as flailing rather than walking, because from
+    // overhead there is no vertical axis to sell the arc. The limbs are filled
+    // and outlined rather than stroked in the hull's own value, or they
+    // disappear into it at any distance.
+    ctx.save();
+    const speed=Math.hypot(boss.vx,boss.vy);
+    ctx.rotate((speed>6?Math.atan2(boss.vy,boss.vx):boss.angle)-boss.angle);
+    for(const side of [-1,1]){
+      const swing=Math.sin(stride+(side>0?0:Math.PI));
+      const planted=swing<0;
+      const reach=swing*32*s;
+      const rail=side*34*s;
+
+      // Thigh: a tapered plate from the hip out to the rail.
+      ctx.fillStyle=planted?plate:shell;
+      ctx.strokeStyle=accent;
+      ctx.lineWidth=1.6;
+      ctx.beginPath();
+      ctx.moveTo(-6*s,side*10*s);
+      ctx.lineTo(8*s,side*10*s);
+      ctx.lineTo(reach+9*s,rail);
+      ctx.lineTo(reach-9*s,rail);
+      ctx.closePath();ctx.fill();ctx.stroke();
+
+      // Foot, square to the rail and clearly outboard of the hull. The planted
+      // one is lit, which is what makes the alternation legible.
+      ctx.save();
+      ctx.translate(reach,rail);
+      ctx.fillStyle=planted?plate:dark;
+      ctx.strokeStyle=planted?'#ffd9a8':accent;
+      ctx.lineWidth=2;
+      ctx.beginPath();roundedRect(ctx,-19*s,-12*s,38*s,24*s,3*s);ctx.fill();ctx.stroke();
+      ctx.fillStyle=dark;
+      ctx.fillRect(-14*s,-7*s,9*s,14*s);
+      ctx.fillRect(5*s,-7*s,9*s,14*s);
+      // Toe lights, so a planted foot reads even in the dark.
+      if(planted){
+        ctx.fillStyle=withAlpha(hot,.7);
+        ctx.fillRect(15*s,-3*s,3*s,6*s);
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+
+    // ---- Hull: angular, and narrower than the leg span ----
+    ctx.fillStyle=shell;
+    ctx.strokeStyle=accent;
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(32*s,-5*s);
+    ctx.lineTo(17*s,-17*s);
+    ctx.lineTo(-16*s,-18*s);
+    ctx.lineTo(-30*s,-9*s);
+    ctx.lineTo(-30*s,9*s);
+    ctx.lineTo(-16*s,18*s);
+    ctx.lineTo(17*s,17*s);
+    ctx.lineTo(32*s,5*s);
+    ctx.closePath();ctx.fill();ctx.stroke();
+
+    // Spine plating, to give the hull some read at a distance.
+    ctx.strokeStyle=withAlpha('#000000',.35);
+    ctx.lineWidth=1.4;
+    for(const x of [-16,-6,4]){
+      ctx.beginPath();ctx.moveTo(x*s,-14*s);ctx.lineTo(x*s,14*s);ctx.stroke();
+    }
+
+    // ---- Shoulder hardpoints, one box per bolted-on weapon ----
+    const fitted=Math.min(4,boss.record?.hardpoints?.length||1);
+    for(let i=0;i<fitted;i++){
+      const side=i%2?1:-1;
+      const back=-6*s-Math.floor(i/2)*13*s;
+      ctx.save();
+      ctx.translate(back,side*19*s);
+      ctx.fillStyle=plate;
+      ctx.strokeStyle=accent;ctx.lineWidth=1.4;
+      ctx.beginPath();roundedRect(ctx,-9*s,-7*s,22*s,14*s,2*s);ctx.fill();ctx.stroke();
+      // Muzzle, pointed the way the hull faces.
+      ctx.fillStyle=dark;
+      ctx.fillRect(11*s,-2.5*s,9*s,5*s);
+      ctx.restore();
+    }
+
+    // ---- Cockpit: the lit thing on an otherwise dead machine ----
+    ctx.save();
+    ctx.translate(19*s,0);
+    ctx.fillStyle=dark;
+    ctx.strokeStyle=accent;ctx.lineWidth=1.6;
+    ctx.beginPath();
+    ctx.moveTo(11*s,0);ctx.lineTo(2*s,-9*s);ctx.lineTo(-9*s,-8*s);
+    ctx.lineTo(-9*s,8*s);ctx.lineTo(2*s,9*s);
+    ctx.closePath();ctx.fill();ctx.stroke();
+    ctx.fillStyle=withAlpha(hot,.5+Math.sin(time*2.6)*.28);
+    ctx.beginPath();
+    ctx.moveTo(8*s,0);ctx.lineTo(1*s,-6*s);ctx.lineTo(-6*s,-5*s);
+    ctx.lineTo(-6*s,5*s);ctx.lineTo(1*s,6*s);
+    ctx.closePath();ctx.fill();
+    ctx.restore();
+
+    // ---- Scars: small, sparse, and on the hull rather than over it ----
+    if(boss.scars?.length){
+      ctx.save();
+      ctx.globalAlpha=.9;
+      for(const scar of boss.scars.slice(0,10)){
+        const x=Math.cos(scar.a)*scar.r*17*s;
+        const y=Math.sin(scar.a)*scar.r*14*s;
+        const size=1.6*s+scar.r*1.4*s;
+        ctx.fillStyle='#15191d';
+        ctx.beginPath();ctx.arc(x,y,size,0,TAU);ctx.fill();
+        ctx.strokeStyle=withAlpha('#c08a5a',.45);
+        ctx.lineWidth=.9;
+        ctx.beginPath();ctx.arc(x,y,size+1.1,0,TAU);ctx.stroke();
+      }
+      ctx.restore();
+    }
+  },
+
   manticore(ctx,boss,time,body){
     const r=boss.radius;
     ctx.save();

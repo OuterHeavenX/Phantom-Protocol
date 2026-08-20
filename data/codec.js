@@ -53,6 +53,10 @@ export const CODEC_EVENTS={
   evolution:{cooldown:30,priority:2},
   critical:{cooldown:35,priority:4},
   halfway:{once:true,priority:1},
+  nemesisFirst:{priority:5},
+  nemesisReturn:{priority:5},
+  nemesisWithdraw:{priority:5},
+  nemesisDown:{priority:5},
   squadDown:{priority:4},
   squadRevived:{priority:3},
   squadAbility:{cooldown:70,priority:1},
@@ -106,6 +110,14 @@ const HANDLER={
     'You are about to become a casualty report. Disengage.'],
   halfway:['Halfway. The response scales from here, not the clock.',
     'You are through half of it. It gets heavier, not longer.'],
+  nemesisFirst:['That is not sector defence. It walked here, and it walked here for you.',
+    'Bipedal chassis, no garrison markings. It is not protecting anything. It is hunting.'],
+  nemesisReturn:['It is the same machine. Look at the holes — you put those there.',
+    'Same designation, heavier loadout. It has been refitted since you last met.'],
+  nemesisWithdraw:['It is disengaging. That is not mercy, that is it deciding it has learned enough.',
+    'Breaking contact under its own power. Whatever it takes home, it comes back with.'],
+  nemesisDown:['It is down and it is staying down. That one does not get refitted.',
+    'Chassis destroyed. Somebody just lost a very expensive argument.'],
   squadDown:['Your second is down. They are not dead. Reach them.',
     'One of yours is on the ground and still breathing. That is a clock.'],
   squadRevived:['They are up. Do not make a habit of this.',
@@ -220,6 +232,31 @@ const SELF={
   halfway:{
     oracle:'The pattern is tightening. They are learning me.',
     default:'Halfway. Still standing.'
+  },
+  nemesisFirst:{
+    bastion:'Big. Good. I have been waiting for something worth bracing against.',
+    wraith:'It is too large to hide from and too slow to catch me. I like those odds.',
+    requiem:'It came all this way. The least I can do is meet it.',
+    oracle:'Two legs. Two legs means a gait, and a gait means a rhythm.',
+    default:'I see it. Big, and walking straight at me.'
+  },
+  nemesisReturn:{
+    ferrous:'I remember where I opened it. Let us do that again.',
+    oracle:'Same gait, more weight on it. It has been fed.',
+    requiem:'Back for the rest of it, then.',
+    default:'It is the same one. Fine.'
+  },
+  nemesisWithdraw:{
+    requiem:'Do not walk away from me.',
+    ferrous:'It is leaving under its own power. That is my fault.',
+    bastion:'Let it go. It will be somebody else\'s problem for a while.',
+    default:'It is pulling out. I could not finish it.'
+  },
+  nemesisDown:{
+    requiem:'Now it is finished.',
+    ferrous:'That is the sound a very large budget makes.',
+    bastion:'It fell where it stood. Good.',
+    default:'It is down. Confirmed.'
   },
   squadDown:{
     bastion:'I told them to stay behind the wall.',

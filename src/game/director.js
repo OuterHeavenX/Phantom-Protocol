@@ -90,6 +90,10 @@ export class Director{
     events.push({at:total*.36,type:'gunship',count:1});
     if(durationMinutes>=10)events.push({at:total*.66,type:'gunship',count:2});
     if(durationMinutes>=20)events.push({at:total*.82,type:'gunship',count:3});
+    // The walker, when the operator's record says it is due. Early enough in
+    // the contract that breaking contact with it is a loss you have to live
+    // with rather than something the clock decides for you.
+    if(this.engine.config.nemesis)events.push({at:total*.44,type:'nemesis'});
     if(durationMinutes>=10)events.push({at:total*.30,type:'miniboss'});
     if(durationMinutes>=20)events.push({at:total*.42,type:'boss'});
     if(durationMinutes>=15)events.push({at:total*.50,type:'eliteSquad'});
@@ -345,6 +349,10 @@ export class Director{
         engine.audio.play('alarm',{volume:1});
         this.queueSurge();
         this.queueSurge();
+        break;
+      }
+      case 'nemesis':{
+        engine.spawnNemesis();
         break;
       }
       case 'boss':

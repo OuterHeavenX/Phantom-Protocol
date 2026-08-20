@@ -1,6 +1,8 @@
 import {loadSave,saveGame} from './save/storage.js';
 import {commitRun,completeRecruitments,undiscoveredOperatives,
   clearHealed,sendToMedical} from './save/progression.js';
+import {nemesisRecord,commitNemesis} from './game/nemesis.js';
+import {nemesisDue} from '../data/nemesis.js';
 import {Screens} from './ui/screens.js';
 import {Splash} from './ui/splash.js';
 import {Hud} from './ui/hud.js';
@@ -97,6 +99,10 @@ function startRun(config){
     objective:config.operation?.objective,
     // The second operative on the ground, when one was selected.
     squadmate:config.squadmate||null,
+    // The walker's record, passed in only on contracts where it is due — the
+    // director tests for its presence to decide whether to schedule it.
+    nemesis:nemesisDue(nemesisRecord(save),save.statistics.missions||0)
+      ?nemesisRecord(save):null,
     // Primary weapon and its bench build, resolved into combat modifiers.
     primary:config.primary?{
       weaponId:config.primary.weapon.id,
@@ -234,6 +240,10 @@ function finishRun(summary,config){
   // downed is not a death, but walking to the beacon without them is a choice
   // the next contract remembers.
   for(const left of summary.squadLeftBehind||[])sendToMedical(save,left);
+  // The walker's record is written before the run is committed, so its
+  // `lastContract` marker is measured against the contract count it fought in
+  // rather than the one after it.
+  if(summary.nemesis)commitNemesis(save,summary.nemesis);
   const payout=commitRun(save,summary);
   screens.setSave(save);
 
