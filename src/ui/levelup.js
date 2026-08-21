@@ -185,7 +185,7 @@ export class LevelUpScreen{
           <button class="tool-btn" id="rerollBtn" ${engine.rerolls>0?'':'disabled'}>
             REROLL <b>${engine.rerolls}</b>
           </button>
-          <span class="adapt-hint">1–4 or click to select${engine.banishes>0?` · ✕ to banish (${engine.banishes})`:''}</span>
+          <span class="adapt-hint">1–4, click, or D-pad + A${engine.banishes>0?` · ✕ to banish (${engine.banishes})`:''}</span>
           <button class="tool-btn ghost" id="skipBtn">SKIP (+120 CR)</button>
         </div>
       </div>`;

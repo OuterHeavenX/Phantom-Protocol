@@ -60,6 +60,30 @@ the same open ground:
    a sealed chamber must not contain a hazard the player is forced to walk into or a
    hostile that cannot path out.
 
+## Input
+
+One `Input` object folds keyboard, mouse, touch and gamepad into a movement vector, an
+aim vector and a set of edge-triggered actions. Two pieces sit beside it:
+
+* **`src/core/gamepad.js`** normalises what the Gamepad API actually returns. Everything
+  in it exists because some real device does it differently: non-standard `mapping`, where
+  the button order is the manufacturer's own; phantom pads reported alongside the real one;
+  a D-pad that lives on a hat axis rather than in the standard button block; triggers that
+  report analog on one driver and digital on another. Sticks get a radial, rescaling
+  deadzone rather than a per-axis cutoff, so diagonals need no more push than cardinals and
+  the live band stretches back out to a full 0..1.
+* **`src/ui/focusnav.js`** navigates menus by driving the browser's own focus. Every
+  control in this project is a real `<button>`, so the navigable set is whatever is
+  focusable and visible in the topmost layer, and activating one is `.click()`. Direction
+  is geometric, not document order. Screens written later are navigable the day they ship
+  without knowing this exists.
+
+`main.js` runs a poller for the life of the page. When no run is in progress — or one is
+in progress with the adaptation cards or the pause menu on top of it — the pad drives
+focus; otherwise it drives the operative. Arrow keys route to the same focus model outside
+a run and to the operative's legs inside one, so a television remote reporting as a
+keyboard lands in the same place as one reporting as a pad.
+
 ## Aiming
 
 Where the rounds go and where the operative is drawn facing are one decision, resolved in

@@ -1,4 +1,5 @@
 import {clamp} from './math.js';
+import {GamepadReader,BUTTON} from './gamepad.js';
 
 const MOVE_KEYS={
   w:[0,-1],arrowup:[0,-1],
@@ -20,10 +21,14 @@ export class Input{
     this.firing=false;
     this.stickMove={x:0,y:0,active:false};
     this.stickAim={x:0,y:0,active:false};
-    this.gamepadIndex=null;
+    this.pad=new GamepadReader();
     this.lastScheme='keyboard';
     this.actions={dash:false,ability:false,pause:false,interact:false,swap:false,deploy:false,secondary:false,kit:false};
-    this.padDeployHeld=false;
+    // Every gamepad action is edge-triggered through the reader, so holding a
+    // button does one thing rather than one thing per frame. Pause used to be
+    // read level-high, which strobed the pause menu open and shut for as long
+    // as START was down.
+    this.padState=null;
     this.consumed=new Set();
     this.enabled=true;
     this._bound=[];
@@ -54,8 +59,16 @@ export class Input{
     });
     on(window,'mousedown',e=>{if(e.button===0)this.firing=true});
     on(window,'mouseup',e=>{if(e.button===0)this.firing=false});
-    on(window,'gamepadconnected',e=>{this.gamepadIndex=e.gamepad.index});
-    on(window,'gamepaddisconnected',()=>{this.gamepadIndex=null});
+    on(window,'gamepadconnected',e=>{
+      this.pad.index=e.gamepad.index;
+      // A pad that arrives mid-session has no press history, and inheriting
+      // the last one's would swallow the first button.
+      this.pad.clearEdges();
+    });
+    on(window,'gamepaddisconnected',()=>{
+      this.pad.index=null;
+      this.pad.clearEdges();
+    });
   }
 
   detach(){
@@ -97,7 +110,7 @@ export class Input{
     // Aim priority: touch aim stick > gamepad right stick > mouse pointer.
     if(this.stickAim.active){
       this.aimX=this.stickAim.x;this.aimY=this.stickAim.y;this.aimActive=true;
-    }else if(pad&&Math.hypot(pad.aimX,pad.aimY)>.25){
+    }else if(pad&&pad.aimM>0){
       this.aimX=pad.aimX;this.aimY=pad.aimY;this.aimActive=true;
     }else{
       this.aimActive=false;
@@ -116,13 +129,15 @@ export class Input{
     // button on touch — the same three routes the other actives use.
     if(this.pressedThisFrame.has('r'))this.setAction('secondary');
     if(pad){
+      // Dash and ability may repeat while held — their cooldowns govern them
+      // and holding the button to dash again the moment it is ready is what a
+      // player expects. Everything else fires once per press.
       if(pad.dash)this.setAction('dash');
       if(pad.ability)this.setAction('ability');
-      if(pad.pause)this.setAction('pause');
-      if(pad.deploy&&!this.padDeployHeld)this.setAction('deploy');
-      if(pad.secondary&&!this.padSecondaryHeld)this.setAction('secondary');
-      this.padSecondaryHeld=!!pad.secondary;
-      this.padDeployHeld=pad.deploy;
+      if(this.pad.edge('pause',pad.pause))this.setAction('pause');
+      if(this.pad.edge('deploy',pad.deploy))this.setAction('deploy');
+      if(this.pad.edge('secondary',pad.secondary))this.setAction('secondary');
+      if(this.pad.edge('kit',pad.kit))this.setAction('kit');
     }
 
     this.pressedThisFrame.clear();
@@ -137,28 +152,38 @@ export class Input{
     return true;
   }
 
+  // The pad as the simulation wants it: a movement vector that includes the
+  // d-pad, an aim vector, and actions that have already been edged.
   readGamepad(){
-    if(typeof navigator==='undefined'||!navigator.getGamepads)return null;
-    const pads=navigator.getGamepads();
-    let pad=this.gamepadIndex!=null?pads[this.gamepadIndex]:null;
-    if(!pad)for(const candidate of pads)if(candidate){pad=candidate;this.gamepadIndex=candidate.index;break}
+    const pad=this.pad.read();
+    this.padState=pad;
     if(!pad)return null;
+    const held=pad.button;
 
-    const dead=v=>Math.abs(v)<.22?0:v;
-    const axes=pad.axes||[];
-    const buttons=pad.buttons||[];
-    const held=i=>!!(buttons[i]&&buttons[i].pressed);
-    const moveX=dead(axes[0]||0),moveY=dead(axes[1]||0);
-    if(moveX||moveY)this.lastScheme='gamepad';
+    // The d-pad drives movement alongside the stick. Plenty of third-party
+    // controllers have a stick nobody wants to use, and a television remote
+    // has nothing else at all.
+    let moveX=pad.moveX,moveY=pad.moveY;
+    if(pad.dpad.left)moveX-=1;
+    if(pad.dpad.right)moveX+=1;
+    if(pad.dpad.up)moveY-=1;
+    if(pad.dpad.down)moveY+=1;
+    const m=Math.hypot(moveX,moveY);
+    if(m>1){moveX/=m;moveY/=m}
+    if(moveX||moveY||pad.aimM>0)this.lastScheme='gamepad';
+
     return{
       moveX,moveY,
-      aimX:dead(axes[2]||0),aimY:dead(axes[3]||0),
-      dash:held(0)||held(6),
-      ability:held(2)||held(7),
-      deploy:held(1)||held(4),
-      secondary:held(5)||held(3),
-      pause:held(9),
-      fire:held(5)||held(7)
+      aimX:pad.aimX,aimY:pad.aimY,aimM:pad.aimM,
+      // Face and shoulder buttons both, because which of the two a player
+      // reaches for is a matter of what they grew up holding.
+      dash:held(BUTTON.a)||held(BUTTON.lt),
+      ability:held(BUTTON.x)||held(BUTTON.rt),
+      deploy:held(BUTTON.b)||held(BUTTON.lb),
+      secondary:held(BUTTON.rb)||held(BUTTON.y),
+      kit:held(BUTTON.l3),
+      pause:held(BUTTON.start)||held(BUTTON.back),
+      fire:held(BUTTON.rb)||held(BUTTON.rt)
     };
   }
 

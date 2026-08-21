@@ -12,6 +12,8 @@ import {PauseMenu} from './ui/pause.js';
 import {Engine} from './game/engine.js';
 import {Renderer} from './render/renderer.js';
 import {Input,isTouchDevice} from './core/input.js';
+import {BUTTON} from './core/gamepad.js';
+import {FocusNav} from './ui/focusnav.js';
 import {audio} from './core/audio.js';
 import {profiler} from './core/profiler.js';
 import {resolveBuild} from './game/gunsmith.js';
@@ -327,6 +329,127 @@ function teardownSession(){
   session=null;
   window.__pp=null;
 }
+
+// ---------------------------------------------------------------------------
+// Menu navigation from a controller or a remote
+// ---------------------------------------------------------------------------
+//
+// The simulation reads the pad through `input.poll()`, which only runs inside a
+// run. Everything else — the title screen, every menu, the adaptation cards,
+// the pause menu — was mouse and keyboard only, which on a console or a
+// television box meant the game could not be started at all.
+//
+// This loop runs for the life of the page and drives DOM focus whenever the
+// player is not actually driving an operative. Because it moves real focus and
+// activates with `.click()`, it works on every screen without any of them
+// knowing it exists.
+
+const focusNav=new FocusNav();
+
+// Held directions repeat, or a long rack is a lot of separate presses. Slow
+// enough on the first repeat to not overshoot a short list.
+const NAV_FIRST_REPEAT=420;
+const NAV_REPEAT=120;
+let navRepeatAt=0;
+let navDirection=null;
+// Whether a controller is currently the thing being used. Drives the focus
+// ring: a mouse player should never see one, and a player across the room
+// needs it to be unmissable.
+let padActive=false;
+
+function setPadActive(active){
+  if(padActive===active)return;
+  padActive=active;
+  document.documentElement.classList.toggle('pad-nav',active);
+}
+window.addEventListener('mousemove',()=>setPadActive(false),{passive:true});
+window.addEventListener('touchstart',()=>setPadActive(false),{passive:true});
+
+// True when the pad should be working menus rather than the operative: no run
+// at all, or a run with something on top of it.
+function uiHasFocus(){
+  if(!session)return true;
+  return !!(session.levelUp?.element||session.pause?.open||session.engine?.ended);
+}
+
+function navigate(direction,now){
+  if(direction!==navDirection){
+    navDirection=direction;
+    navRepeatAt=now+NAV_FIRST_REPEAT;
+    return true;
+  }
+  if(now<navRepeatAt)return false;
+  navRepeatAt=now+NAV_REPEAT;
+  return true;
+}
+
+function pollMenuGamepad(now){
+  const pad=input.pad.read();
+  if(!pad){navDirection=null;return}
+  if(!uiHasFocus()){
+    // The simulation owns the pad. Keep the edge history warm so a button
+    // still held when a menu opens does not immediately fire in it.
+    navDirection=null;
+    return;
+  }
+
+  if(pad.moveM>0||pad.aimM>0||pad.dpad.up||pad.dpad.down||pad.dpad.left||pad.dpad.right||
+     pad.button(BUTTON.a)||pad.button(BUTTON.b)||pad.button(BUTTON.start)||pad.button(BUTTON.back)){
+    setPadActive(true);
+  }
+  // A freshly rendered screen has focus on nothing. Anchoring it here rather
+  // than in the screens means every screen gets it, including ones written
+  // later that never heard of any of this.
+  if(padActive&&!focusNav.focused())focusNav.focusFirst();
+
+  const up=pad.dpad.up||pad.moveY<-.5||pad.aimY<-.5;
+  const down=pad.dpad.down||pad.moveY>.5||pad.aimY>.5;
+  const left=pad.dpad.left||pad.moveX<-.5||pad.aimX<-.5;
+  const right=pad.dpad.right||pad.moveX>.5||pad.aimX>.5;
+  const direction=up?'up':down?'down':left?'left':right?'right':null;
+
+  if(direction){
+    if(navigate(direction,now)){
+      if(focusNav.move(direction))audio.play('select',{volume:.3});
+    }
+  }else{
+    navDirection=null;
+  }
+
+  // A confirms, B goes back. Start also confirms, because a remote's only
+  // other button tends to be its menu key.
+  if(input.pad.edge('uiConfirm',pad.button(BUTTON.a)||pad.button(BUTTON.start))){
+    if(!focusNav.focused())focusNav.focusFirst();
+    else{audio.play('confirm',{volume:.5});focusNav.activate()}
+  }
+  if(input.pad.edge('uiBack',pad.button(BUTTON.b)||pad.button(BUTTON.back))){
+    if(focusNav.back())audio.play('deny',{volume:.4});
+  }
+}
+
+function menuLoop(now){
+  pollMenuGamepad(now);
+  requestAnimationFrame(menuLoop);
+}
+requestAnimationFrame(menuLoop);
+
+// Arrow keys and Enter drive the same focus model, so a television remote that
+// reports as a keyboard lands in exactly the same place as one that reports as
+// a pad. Only outside a run: in one, the arrows are the operative's legs.
+window.addEventListener('keydown',event=>{
+  if(!uiHasFocus())return;
+  const map={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
+  const direction=map[event.key];
+  if(direction){
+    // Let a real text field have its own arrows.
+    if(document.activeElement?.matches?.('input,textarea,select'))return;
+    if(focusNav.move(direction))event.preventDefault();
+    return;
+  }
+  if(event.key==='Enter'&&!focusNav.focused()){
+    if(focusNav.focusFirst())event.preventDefault();
+  }
+});
 
 // Pause automatically when the tab loses focus so runs are not lost.
 document.addEventListener('visibilitychange',()=>{

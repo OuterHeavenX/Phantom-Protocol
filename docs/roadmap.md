@@ -62,6 +62,17 @@ now turns to face what they are engaging rather than the way they are walking, a
 to nothing at all — now means aim assist inside a 38-degree cone, which brings the body
 round with the shot so a wide cone never shows as a mismatch.
 
+And since: full controller support. Nothing outside a run had ever polled the gamepad, so
+on a console or a television box — where a controller is the only input there is — the
+game could not be started at all. Menus now navigate by focus, geometrically, on every
+screen; a run can be configured and launched from a pad alone. Third-party controllers get
+the same path as first-party ones: non-standard mappings, a D-pad read from a hat axis when
+there is no button block, and a radial rescaling deadzone so a worn stick neither walks on
+its own nor forces a lurch to a fifth of top speed. Fixed on the way through: holding START
+strobed the pause menu open and shut, because gamepad pause was read level-high rather than
+on the rising edge; and cycling the field kit had no controller binding at all, which was a
+gap I introduced when I added it as a keyboard shortcut.
+
 Remaining:
 
 1. ~~Deterministic daily and weekly contracts.~~ Shipped. Thirty-one draws across the

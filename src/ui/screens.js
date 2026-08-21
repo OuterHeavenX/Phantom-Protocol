@@ -257,7 +257,6 @@ export class Screens{
         this.route(button.dataset.route);
       });
     });
-    this.enableKeyboardNav('.nav-item');
   }
 
   route(name){
@@ -273,37 +272,12 @@ export class Screens{
     (routes[name]||(()=>this.menu()))();
   }
 
-  // Arrow/enter navigation for a list of buttons.
-  enableKeyboardNav(selector){
-    const items=[...root().querySelectorAll(selector)];
-    if(!items.length)return;
-    let index=0;
-    items[0].classList.add('focused');
-    const move=step=>{
-      items[index].classList.remove('focused');
-      index=(index+step+items.length)%items.length;
-      items[index].classList.add('focused');
-      items[index].scrollIntoView({block:'nearest'});
-    };
-    const handler=event=>{
-      if(event.key==='ArrowDown'||event.key==='ArrowRight'){move(1);event.preventDefault()}
-      else if(event.key==='ArrowUp'||event.key==='ArrowLeft'){move(-1);event.preventDefault()}
-      else if(event.key==='Enter'){items[index].click();event.preventDefault()}
-      else if(event.key==='Escape'){
-        const back=root().querySelector('[data-back]');
-        if(back)back.click();
-      }
-    };
-    this.teardownKeyboardNav();
-    window.addEventListener('keydown',handler);
-    this.navHandler=handler;
-  }
-
-  teardownKeyboardNav(){
-    if(!this.navHandler)return;
-    window.removeEventListener('keydown',this.navHandler);
-    this.navHandler=null;
-  }
+  // Menu navigation used to be a bespoke handler installed by exactly one
+  // screen, with its own `.focused` class and its own idea of where it was.
+  // Focus navigation in src/ui/focusnav.js replaced it: it drives the
+  // browser's own focus, so it works on every screen and on a gamepad, and
+  // there is no second system to leave a handler behind on `window`.
+  teardownKeyboardNav(){}
 
   // ---- rotating contracts -------------------------------------------------
 

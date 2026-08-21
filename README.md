@@ -17,18 +17,40 @@ python3 -m http.server 8080     # then open http://localhost:8080
 
 | Action | Keyboard / Mouse | Gamepad | Touch |
 | --- | --- | --- | --- |
-| Move | `WASD` / arrows | Left stick | Left half of screen (dynamic stick) |
+| Move | `WASD` / arrows | Left stick or D-pad | Left half of screen (dynamic stick) |
 | Aim | Mouse pointer | Right stick | Right stick |
-| Dash | `Shift` / `Space` | A / LB | On-screen button |
+| Dash | `Shift` / `Space` | A / LT | On-screen button |
 | Ability | `E` / `Q` | X / RT | On-screen button |
 | Deploy field kit | `F` | B / LB | On-screen button |
-| Cycle field kit | `G` | — | On-screen button (⟳) |
-| Pause | `Esc` / `P` | Start | HUD button |
-| Select adaptation | `1`–`4` | — | Tap card |
-| Reroll adaptation | `R` | — | Tap button |
+| Cycle field kit | `G` | L3 (left stick click) | On-screen button (⟳) |
+| Secondary fire | `R` / right mouse | RB / Y | On-screen button |
+| Pause | `Esc` / `P` | Start / Back | HUD button |
+| Menu: move | Arrow keys | D-pad or either stick | Tap |
+| Menu: confirm | `Enter` / click | A / Start | Tap |
+| Menu: back | `Esc` | B / Back | Tap ← COMMAND |
+| Select adaptation | `1`–`4` | D-pad, then A | Tap card |
+| Reroll adaptation | `R` | Navigate to REROLL, then A | Tap button |
 
 Weapons fire automatically at acquired targets. Aiming manually biases targeting and
 camera lead; auto-target can be disabled in settings.
+
+### Controllers and television remotes
+
+Every screen is navigable with a controller alone — the game can be started, configured
+and played without a keyboard or a mouse. Navigation drives the browser's own focus and
+moves geometrically, so "right" means the control to the right rather than the next one
+in the source, and a visible focus ring appears the moment a controller is used and
+disappears again on the first mouse movement.
+
+Third-party controllers are handled on the same path as first-party ones. The D-pad is
+read from the standard button block when the pad reports one and from a hat axis when it
+does not, which is where most unmapped pads and television remotes keep it. Sticks use a
+radial, rescaling deadzone, so a worn stick that rests off centre does not walk on its
+own and a gentle push is a slow walk rather than a lurch.
+
+Two known limits: a remote with no Start or Back button cannot open the pause menu from
+the controller, and naming a Gunsmith preset needs a keyboard — saving one without a name
+falls back to `BUILD 1`, `BUILD 2` and so on.
 
 ## Content
 
