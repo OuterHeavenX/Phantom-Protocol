@@ -928,3 +928,11 @@ input[type=range]::-moz-range-thumb{
 /* Secondary fire — the HUD's ordnance button. */
 .ordnance-btn span{letter-spacing:.12em}
 .ordnance-btn.ready{border-color:rgba(255,179,92,.55)}
+
+/* Campaign acts — twelve operations need a spine to hang off. */
+.act-block{margin-bottom:2rem}
+.act-head{margin-bottom:.9rem;padding-bottom:.6rem;border-bottom:1px solid rgba(118,231,212,.16)}
+.act-head h2{margin:.2rem 0 .3rem;font-size:1.15rem;letter-spacing:.1em}
+.act-head p{margin:0;max-width:62ch}
+.act-block.locked .act-head h2{color:rgba(220,238,242,.35)}
+.act-block.locked{opacity:.72}

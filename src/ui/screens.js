@@ -14,7 +14,8 @@ import {
   recruitmentProgress,startRecruitment,counselHours,medicalProgress,MEDICAL_HOURS
 } from '../save/progression.js';
 import {portraitSvg,portraitMarkup,dossierCardMarkup} from '../render/portraits.js';
-import {CAMPAIGN,OBJECTIVE_TYPES,nextOperation,campaignProgress,operationUnlocked} from '../../data/campaign.js';
+import {CAMPAIGN,ACTS,OBJECTIVE_TYPES,nextOperation,campaignProgress,operationUnlocked,
+  operationsInAct,actUnlocked} from '../../data/campaign.js';
 import {activeContracts,resolveDifficulty,timeRemaining} from '../../data/contracts.js';
 import {ORDNANCE,ORDNANCE_BY_ID,ORDNANCE_UNLOCK,ordnanceUnlocked} from '../../data/ordnance.js';
 import {contractRecord} from '../save/contracts.js';
@@ -325,8 +326,19 @@ export class Screens{
         <span class="eyebrow">DISCLOSURE ${progress.done}/${progress.total}</span>
         <div class="bar mini"><i style="width:${progress.pct*100}%"></i></div>
       </div>
-      <div class="op-list">
-        ${CAMPAIGN.map(op=>{
+      ${ACTS.map(act=>{
+        const open=actUnlocked(save,act.number);
+        const ops=operationsInAct(act.number);
+        const closed=ops.filter(op=>save.campaign?.[op.id]?.completed).length;
+        return `<div class="act-block ${open?'':'locked'}">
+        <header class="act-head">
+          <span class="eyebrow">ACT ${act.number} · ${closed}/${ops.length}</span>
+          <h2>${open?escape(act.name):'SEALED'}</h2>
+          <p class="muted">${open?escape(act.blurb)
+            :'The preceding act must be closed before these files open.'}</p>
+        </header>
+        ${open?`<div class="op-list">
+        ${ops.map(op=>{
           const record=save.campaign?.[op.id];
           const done=!!record?.completed;
           const unlocked=operationUnlocked(save,op);
@@ -356,7 +368,9 @@ export class Screens{
             </div>
           </article>`;
         }).join('')}
-      </div>
+        </div>`:''}
+        </div>`;
+      }).join('')}
       ${progress.complete?`<p class="campaign-closing muted">
         Every document is recovered. The audit is closed, which is not the same as finished.
       </p>`:''}`,

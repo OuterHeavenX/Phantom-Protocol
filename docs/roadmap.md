@@ -53,9 +53,15 @@ Remaining:
    simulation now reproduces exactly from its seed, so a replay is an input log plus a
    seed rather than a state dump.
 5. Performance profiling on low-end mobile hardware.
+   Note: duel operations crashed on construction until this act shipped — the codec was
+   built after the mission, and a duel spawns its boss during mission setup, which fires
+   a codec cue. Worth assuming other order-dependent construction bugs are lurking.
 6. Vault variants beyond the loot-and-garrison pair — timed holds, terminal hacks.
 7. Turret variants (shield pylon, slow field) selectable from the deployment kit.
-8. A second campaign act following the CONTROL designation past trial eleven.
+8. ~~A second campaign act following the CONTROL designation past trial eleven.~~ Shipped
+   as THE GLASSHOUSE: six operations across the four theatres the campaign had never
+   used, escalating to twenty minutes on GHOST, with SIGNAL finally forming sentences.
+   Fixing it turned up that op6 had never been launchable — see below.
 9. Voice or typewriter pacing on briefing dialogue rather than a straight fade-in.
 10. Weapon camouflage and charm cosmetics earned at the higher weapon ranks.
 11. Saved Gunsmith presets, so one weapon can carry several named builds.

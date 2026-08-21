@@ -172,12 +172,17 @@ export class Engine{
       difficulty:this.difficulty,duration:config.duration,map:this.map
     });
     this.objectives=new Objectives(this);
-    // Campaign operations layer an objective over the survival contract.
-    this.mission=new Mission(this,config.objective);
     // Radio traffic between the operative and whoever is running comms. It
     // reads engine events and nothing else, so muting it costs the simulation
     // nothing.
+    //
+    // Built before the mission, not after: a duel objective spawns its boss
+    // during Mission setup, and spawnBoss fires a codec cue. With the codec
+    // constructed afterwards that cue hit undefined and threw, which made
+    // every duel operation crash the moment it was launched.
     this.codec=new CodecDirector(this);
+    // Campaign operations layer an objective over the survival contract.
+    this.mission=new Mission(this,config.objective);
     this.applyTrait('onInit');
     this.codec.fire('deploy');
 
