@@ -860,6 +860,41 @@ input[type=range]::-moz-range-thumb{
 .gs-axis span{font-size:8.5px;color:var(--muted);letter-spacing:.12em}
 .gs-axis .bar{margin:0}
 
+/* ---- Gunsmith presets ----------------------------------------------------
+   A weapon's bench state is three things — attachments, secondary module and
+   livery — and a preset is one named copy of all of it. Sits above the bench
+   buttons because loading one is a bigger action than stripping a slot. */
+.gs-presets{
+  display:flex;flex-direction:column;gap:6px;
+  padding:10px 0;margin:10px 0;
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+}
+.gs-preset-list{display:flex;flex-direction:column;gap:4px}
+.gs-preset{display:flex;gap:4px;align-items:stretch}
+.gs-preset-load{
+  flex:1;min-width:0;text-align:left;cursor:pointer;
+  display:flex;flex-direction:column;gap:1px;
+  padding:5px 8px;
+  border:1px solid var(--line);background:rgba(6,17,24,.5);color:var(--ink);
+  transition:border-color .14s,background .14s;
+}
+.gs-preset-load:hover{border-color:var(--accent);background:rgba(12,32,40,.6)}
+.gs-preset-load b{font-size:10px;letter-spacing:.12em}
+.gs-preset-load span{
+  font-size:8.5px;letter-spacing:.06em;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.gs-preset-save{display:flex;gap:4px}
+.gs-preset-save input{
+  flex:1;min-width:0;
+  padding:5px 8px;font:inherit;font-size:9.5px;letter-spacing:.12em;
+  text-transform:uppercase;
+  border:1px solid var(--line);background:rgba(3,10,14,.7);color:var(--ink);
+}
+.gs-preset-save input:focus{outline:none;border-color:var(--accent)}
+.gs-preset-note{font-size:8px;letter-spacing:.14em;color:var(--muted)}
+.muted.small{font-size:9px;line-height:1.5}
+
 .gs-record{display:flex;flex-direction:column;gap:3px;font-size:9.5px;color:var(--muted)}
 .gs-record b{color:#eafffc;float:right}
 .gs-primary-note{display:block;margin-top:8px;font-size:9.5px;color:var(--good)}

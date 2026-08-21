@@ -28,7 +28,8 @@ import {
 } from '../../data/attachments.js';
 import {
   resolveBuild,sanitizeBuild,previewStats,buildProfile,
-  weaponRank,weaponRankProgress,attachmentUnlocked
+  weaponRank,weaponRankProgress,attachmentUnlocked,
+  makePreset,storePreset,deletePreset,applyPreset,MAX_PRESETS
 } from '../game/gunsmith.js';
 import {saveGame,exportSave,importSave,resetSave,defaultSettings} from '../save/storage.js';
 import {formatDuration,formatNumber,formatTime,clamp} from '../core/math.js';
@@ -36,6 +37,23 @@ import {MenuBackground} from './menuBackground.js';
 
 const root=()=>document.querySelector('#app');
 const escape=text=>String(text).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// One line describing what a saved build actually fits, so the list is
+// readable without loading each entry to find out what it was. Only the slots
+// that differ from stock are worth naming — a build is what it changed.
+const presetSummary=(weapon,preset)=>{
+  const stock=defaultBuild(weapon);
+  const parts=[];
+  for(const slot of SLOTS){
+    const id=preset.build?.[slot.id];
+    if(!id||id===stock[slot.id])continue;
+    const attachment=ATTACHMENTS_BY_ID[id];
+    if(attachment)parts.push(attachment.short||attachment.name);
+  }
+  const module=preset.ordnance?ORDNANCE_BY_ID[preset.ordnance]:null;
+  if(module)parts.push(module.short);
+  return parts.length?parts.join(' · '):'Stock';
+};
 
 // Menu system. Every screen is a small render function plus a wiring function;
 // navigation is keyboard/gamepad friendly and all state changes are persisted.
@@ -782,6 +800,33 @@ export class Screens{
                 <span>DEPLOYMENTS <b>${record.timesTaken||0}</b></span>
                 <span>TOTAL XP <b>${formatNumber(record.xp||0)}</b></span>
               </div>
+              <div class="gs-presets">
+                <span class="eyebrow">SAVED BUILDS</span>
+                ${(record.presets||[]).length?`
+                  <div class="gs-preset-list">
+                    ${record.presets.map(preset=>`
+                      <div class="gs-preset">
+                        <button class="gs-preset-load" data-preset="${escape(preset.id)}"
+                                title="Fit this build, module and livery">
+                          <b>${escape(preset.name)}</b>
+                          <span>${escape(presetSummary(weapon,preset))}</span>
+                        </button>
+                        <button class="btn small ghost" data-preset-drop="${escape(preset.id)}"
+                                title="Delete">✕</button>
+                      </div>`).join('')}
+                  </div>`
+                  :'<p class="muted small">Nothing saved yet. A build keeps its attachments, its secondary module and its livery together.</p>'}
+                <div class="gs-preset-save">
+                  <input id="gsPresetName" type="text" maxlength="24" placeholder="NAME THIS BUILD"
+                         aria-label="Preset name">
+                  <button class="btn small" id="gsPresetSave"
+                          ${(record.presets||[]).length>=MAX_PRESETS?'title="Saving replaces the oldest"':''}>
+                    SAVE
+                  </button>
+                </div>
+                <span class="gs-preset-note">${(record.presets||[]).length}/${MAX_PRESETS} saved · a matching name overwrites</span>
+              </div>
+
               <div class="button-row">
                 <button class="btn small" id="gsReset">STRIP TO STOCK</button>
                 <button class="btn small primary" id="gsPrimary">SET AS PRIMARY</button>
@@ -837,6 +882,54 @@ export class Screens{
         this.persist();
         this.gunsmith(weapon.id);
       });
+    });
+
+    // A build that is currently deploying has to follow the bench, the same
+    // rule the fit buttons use — otherwise loading a preset changes the screen
+    // and not the weapon that walks out the door.
+    const syncPrimary=()=>{
+      if(save.profile.lastPrimary?.weaponId===weapon.id){
+        save.profile.lastPrimary={weaponId:weapon.id,build:record.build};
+      }
+    };
+
+    root().querySelectorAll('[data-preset]').forEach(button=>{
+      button.addEventListener('click',()=>{
+        const preset=(record.presets||[]).find(p=>p.id===button.dataset.preset);
+        if(!preset)return;
+        this.audio?.play('tech');
+        applyPreset(weapon,record,preset,rank);
+        syncPrimary();
+        this.persist();
+        this.gunsmith(weapon.id);
+      });
+    });
+
+    root().querySelectorAll('[data-preset-drop]').forEach(button=>{
+      button.addEventListener('click',()=>{
+        this.click();
+        if(deletePreset(record,button.dataset.presetDrop)){
+          this.persist();
+          this.gunsmith(weapon.id);
+        }
+      });
+    });
+
+    const nameField=root().querySelector('#gsPresetName');
+    const savePreset=()=>{
+      this.audio?.play('confirm');
+      storePreset(record,makePreset(weapon,record,rank,nameField?.value));
+      this.persist();
+      this.gunsmith(weapon.id);
+    };
+    root().querySelector('#gsPresetSave')?.addEventListener('click',savePreset);
+    nameField?.addEventListener('keydown',event=>{
+      if(event.key!=='Enter')return;
+      event.preventDefault();
+      // Enter in the name field is the obvious way to commit it, and the
+      // screen's list navigation would otherwise swallow it.
+      event.stopPropagation();
+      savePreset();
     });
 
     root().querySelector('#gsReset')?.addEventListener('click',()=>{

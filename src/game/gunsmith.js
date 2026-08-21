@@ -148,3 +148,65 @@ export function newlyUnlocked(weapon,record){
 }
 
 export function weaponFor(id){return WEAPONS_BY_ID[id]||null}
+
+// ---- Presets ---------------------------------------------------------------
+//
+// A weapon's bench state is three separate things — the attachment build, the
+// secondary-fire module and the livery — and switching between two ways of
+// carrying the same gun meant re-fitting all of them a slot at a time. A preset
+// is one named copy of the lot.
+//
+// Presets are stored on the weapon record rather than on the profile, because
+// that is where everything else about a weapon already lives: experience, rank
+// and the build itself are account-wide and belong to the weapon, not to
+// whoever is carrying it.
+
+export const MAX_PRESETS=4;
+
+// A snapshot of how the weapon is set up right now. The build is sanitised on
+// the way in so a preset can never carry an attachment the weapon has not
+// earned, even if the record it was taken from somehow did.
+export function makePreset(weapon,record,rank,name){
+  // Upper-cased to match every other label on the bench; the list and the
+  // name field would otherwise disagree about how a build is written.
+  const clean=String(name||'').trim().slice(0,24).toUpperCase();
+  return{
+    id:`p${Date.now().toString(36)}${Math.floor(Math.random()*1e4).toString(36)}`,
+    name:clean||`BUILD ${((record?.presets?.length)||0)+1}`,
+    build:sanitizeBuild(weapon,record?.build,rank),
+    ordnance:record?.ordnance||null,
+    livery:record?.livery||null,
+    savedAt:Date.now()
+  };
+}
+
+// Stores a preset, newest first, dropping the oldest past the cap. A preset
+// whose name matches an existing one replaces it rather than adding a
+// near-duplicate, so re-saving after a tweak does what it looks like it does.
+export function storePreset(record,preset){
+  if(!Array.isArray(record.presets))record.presets=[];
+  const key=preset.name.toLowerCase();
+  const existing=record.presets.findIndex(p=>p.name.toLowerCase()===key);
+  if(existing>=0)record.presets.splice(existing,1);
+  record.presets.unshift(preset);
+  record.presets.length=Math.min(record.presets.length,MAX_PRESETS);
+  return preset;
+}
+
+export function deletePreset(record,id){
+  if(!Array.isArray(record.presets))return false;
+  const before=record.presets.length;
+  record.presets=record.presets.filter(p=>p.id!==id);
+  return record.presets.length!==before;
+}
+
+// Writes a preset back onto the record. Sanitised again on the way out: a
+// preset saved before a data change might name an attachment that no longer
+// exists, and a build is the one thing here that reaches the simulation.
+export function applyPreset(weapon,record,preset,rank){
+  if(!preset)return false;
+  record.build=sanitizeBuild(weapon,preset.build,rank);
+  if(preset.ordnance)record.ordnance=preset.ordnance;
+  if(preset.livery)record.livery=preset.livery;
+  return true;
+}

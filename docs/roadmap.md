@@ -83,8 +83,9 @@ Remaining:
    keyboard play is a fraction of that. Saving is offered, not automatic, and a save
    write that hits the origin's quota now sheds replays oldest-first and retries rather
    than losing the whole session's progression.
-5. Performance profiling on low-end mobile hardware. The instrumentation half is
-   shipped: SETTINGS > show fps now draws frame percentiles, the sim/render split, live
+5. Performance profiling on low-end mobile hardware — **the only item on this list
+   that cannot be closed from here**, because it needs a physical phone. The
+   instrumentation half is shipped: SETTINGS > show fps now draws frame percentiles, the sim/render split, live
    entity and world counts, heap, and — the point of it — a step-clamp counter that goes
    red when the simulation starts discarding contract time. `window.__profile()` returns
    the same numbers as an object. What remains is running it on an actual phone; every
@@ -133,7 +134,16 @@ Remaining:
    rotating with the operative — there is no surface for a pattern and a charm would be
    sub-pixel. A livery paints the tracer and the weapon tint instead, which is visible on
    every trigger pull at any zoom.
-11. Saved Gunsmith presets, so one weapon can carry several named builds.
+11. ~~Saved Gunsmith presets, so one weapon can carry several named builds.~~ Shipped.
+   A weapon's bench state is three separate things — the attachment build, the
+   secondary-fire module and the livery — and switching between two ways of carrying
+   the same gun meant re-fitting all of them a slot at a time. A preset is one named
+   copy of the lot, four per weapon, stored on the weapon record because that is where
+   experience and rank already live: they belong to the weapon, not to whoever is
+   carrying it. Saving under a name that already exists replaces it rather than adding
+   a near-duplicate, and loading one follows through to the deploying loadout the same
+   way fitting a slot does. Builds are sanitised on the way in and again on the way
+   out, so a preset can never carry an attachment the weapon has not earned.
 12. ~~A sweep for the order-dependent construction bugs the duel crash implied were
    lurking.~~ Done, and the sweep is now a checked-in tool rather than a one-off:
    `tools/check.sh` runs eslint's `no-undef` and `tools/construction-order.py` over

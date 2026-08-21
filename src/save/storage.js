@@ -48,7 +48,11 @@ export function defaultSettings(){
 // Weapon records are account-wide: experience earned on a weapon belongs to
 // the weapon, not to whoever was carrying it.
 function defaultWeaponRecord(unlocked=false){
-  return{unlocked,maxLevel:0,timesTaken:0,kills:0,xp:0,damage:0,build:null,ordnance:'breach',livery:'issue',seenAttachments:[]};
+  return{unlocked,maxLevel:0,timesTaken:0,kills:0,xp:0,damage:0,build:null,ordnance:'breach',livery:'issue',
+    seenAttachments:[],
+    // Named bench snapshots. Declared here rather than created on first
+    // save so the merge in normalizeSave finds an array to replace.
+    presets:[]};
 }
 
 function defaultOperativeRecord(){
