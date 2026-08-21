@@ -710,6 +710,42 @@ input[type=range]::-moz-range-thumb{
 }
 .dialogue .line b{font-size:10px;letter-spacing:.18em;color:var(--muted)}
 .dialogue .line p{font-size:13px;line-height:1.65;margin:0;color:#dceceb}
+
+/* Typed dialogue. Every line carries its full text as an invisible ghost that
+   sets the box height before a character is typed, and the visible text is
+   painted over the top — otherwise the container grows line by line and walks
+   the DEPLOY button down the screen while the player is reading. The ghost is
+   also the copy assistive tech reads, so a screen reader gets the whole
+   briefing at once instead of waiting out the animation. */
+.dialogue.typing .line,.dialogue.typed-out .line{
+  animation:none;opacity:0;transition:opacity .3s ease;
+}
+.dialogue.typing .line.revealed,.dialogue.typed-out .line.revealed{opacity:1}
+.dialogue .line p{position:relative}
+.dialogue .ghost{visibility:hidden}
+.dialogue .typed{position:absolute;left:0;top:0;width:100%}
+
+/* Caret on the line currently being typed. */
+.dialogue .line.typing .typed::after{
+  content:'';display:inline-block;
+  width:.5em;height:1em;margin-left:1px;
+  vertical-align:-.15em;
+  background:currentColor;opacity:.75;
+  animation:caret-blink .9s steps(1,end) infinite;
+}
+@keyframes caret-blink{0%,49%{opacity:.75}50%,100%{opacity:0}}
+
+.dialogue-skip{
+  font-size:9px;letter-spacing:.2em;color:var(--muted);
+  margin:-14px 0 20px;text-align:right;opacity:.7;
+  transition:opacity .3s ease;
+}
+.dialogue-skip.spent{opacity:0}
+@media(prefers-reduced-motion:reduce){
+  /* Nothing types, so nothing to skip and nothing to blink. */
+  .dialogue-skip{display:none}
+  .dialogue .line.typing .typed::after{animation:none;opacity:0}
+}
 .dialogue .speaker-vector{border-left-color:var(--accent)}
 .dialogue .speaker-vector b{color:var(--accent)}
 .dialogue .speaker-archivist{border-left-color:#7db2ff}

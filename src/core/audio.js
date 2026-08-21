@@ -259,6 +259,13 @@ export class AudioEngine{
         if(!this.canPlay('select',.02))return;
         this.tone({freq:660,type:'square',duration:.05,gain:.055*volume});
         break;
+      // A dry key click under typed briefing dialogue. Deliberately near the
+      // floor and throttled hard: it is a texture under the reading, and a
+      // per-character tick at any real volume is unbearable within a sentence.
+      case 'type':
+        if(!this.canPlay('type',.032))return;
+        this.noise({duration:.016,gain:.022*volume,freq:2400,filter:'bandpass',q:2.2});
+        break;
       case 'confirm':
         this.tone({freq:520,endFreq:880,type:'square',duration:.12,gain:.09*volume});
         break;

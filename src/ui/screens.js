@@ -14,6 +14,7 @@ import {
   recruitmentProgress,startRecruitment,counselHours,medicalProgress,MEDICAL_HOURS
 } from '../save/progression.js';
 import {portraitSvg,portraitMarkup,dossierCardMarkup} from '../render/portraits.js';
+import {Typewriter} from './typewriter.js';
 import {CAMPAIGN,ACTS,OBJECTIVE_TYPES,nextOperation,campaignProgress,operationUnlocked,
   operationsInAct,actUnlocked} from '../../data/campaign.js';
 import {activeContracts,resolveDifficulty,timeRemaining} from '../../data/contracts.js';
@@ -65,6 +66,11 @@ export class Screens{
 
   shell(content,options={}){
     this.teardownBackground();
+    this.teardownDialogue();
+    // Every screen renders through here, and only some of them install list
+    // navigation. Without this the previous screen's handler stays on window
+    // and Enter keeps clicking a button that is no longer in the document.
+    this.teardownKeyboardNav();
     root().innerHTML=`
       <div class="screen menu-screen ${options.scan===false?'':'scanlines'}">
         <canvas class="menu-bg" id="menuBg"></canvas>
@@ -77,6 +83,28 @@ export class Screens{
   teardownBackground(){
     this.background?.destroy();
     this.background=null;
+  }
+
+  // Types a briefing or debrief out into the dialogue container the screen
+  // just rendered. Silently does nothing when the screen has no dialogue, so
+  // callers never have to check.
+  playDialogue(lines){
+    this.teardownDialogue();
+    const host=root().querySelector('#briefingDialogue');
+    if(!host||!lines?.length)return null;
+    const skip=root().querySelector('#dialogueSkip');
+    this.dialogue=new Typewriter(host,lines,{
+      audio:this.audio,
+      // Faded, not removed: hiding it outright reclaims its height and
+      // nudges the whole button row up the moment the dialogue lands.
+      onDone:()=>skip?.classList.add('spent')
+    });
+    return this.dialogue;
+  }
+
+  teardownDialogue(){
+    this.dialogue?.destroy();
+    this.dialogue=null;
   }
 
   panel(title,subtitle,body,options={}){
@@ -246,9 +274,15 @@ export class Screens{
         if(back)back.click();
       }
     };
+    this.teardownKeyboardNav();
     window.addEventListener('keydown',handler);
-    this.navHandler&&window.removeEventListener('keydown',this.navHandler);
     this.navHandler=handler;
+  }
+
+  teardownKeyboardNav(){
+    if(!this.navHandler)return;
+    window.removeEventListener('keydown',this.navHandler);
+    this.navHandler=null;
   }
 
   // ---- rotating contracts -------------------------------------------------
@@ -403,13 +437,8 @@ export class Screens{
         <div class="briefing-inner">
           <span class="eyebrow">OPERATION ${String(op.index).padStart(2,'0')} // ${escape(map?.name||'')}</span>
           <h1>${escape(op.name)}</h1>
-          <div class="dialogue">
-            ${op.briefing.map((line,index)=>`
-              <div class="line speaker-${line.speaker.toLowerCase()}" style="animation-delay:${index*.5}s">
-                <b>${line.speaker}</b>
-                <p>${escape(line.text)}</p>
-              </div>`).join('')}
-          </div>
+          <div class="dialogue" id="briefingDialogue"></div>
+          <p class="dialogue-skip" id="dialogueSkip">PRESS ANY KEY TO SKIP</p>
           <div class="objective-card">
             <span class="eyebrow">OBJECTIVE // ${objective.name}</span>
             <p>${escape(objective.summary)}</p>
@@ -430,6 +459,7 @@ export class Screens{
         </div>
       </div>`,{scan:false});
 
+    this.playDialogue(op.briefing);
     this.wirePrimaryPicker(()=>this.briefing(op));
     root().querySelector('#abortOp').addEventListener('click',()=>{this.click();this.campaign()});
     root().querySelector('#launchOp').addEventListener('click',()=>{
@@ -455,18 +485,14 @@ export class Screens{
         <div class="briefing-inner">
           <span class="eyebrow">DEBRIEF // OPERATION ${String(op.index).padStart(2,'0')}</span>
           <h1>${escape(op.name)}</h1>
-          <div class="dialogue">
-            ${op.debrief.map((line,index)=>`
-              <div class="line speaker-${line.speaker.toLowerCase()}" style="animation-delay:${index*.5}s">
-                <b>${line.speaker}</b>
-                <p>${escape(line.text)}</p>
-              </div>`).join('')}
-          </div>
+          <div class="dialogue" id="briefingDialogue"></div>
+          <p class="dialogue-skip" id="dialogueSkip">PRESS ANY KEY TO SKIP</p>
           <div class="button-row center">
             <button class="btn primary large" id="readDoc">OPEN RECOVERED FILE</button>
           </div>
         </div>
       </div>`,{scan:false});
+    this.playDialogue(op.debrief);
     root().querySelector('#readDoc').addEventListener('click',()=>{
       this.audio?.play('confirm');
       this.documentScreen(op,onDone);

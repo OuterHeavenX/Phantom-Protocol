@@ -96,7 +96,20 @@ Remaining:
    as THE GLASSHOUSE: six operations across the four theatres the campaign had never
    used, escalating to twenty minutes on GHOST, with SIGNAL finally forming sentences.
    Fixing it turned up that op6 had never been launchable — see below.
-9. Voice or typewriter pacing on briefing dialogue rather than a straight fade-in.
+9. ~~Voice or typewriter pacing on briefing dialogue rather than a straight fade-in.~~
+   Shipped as typing. Voice was never available — there is no recorded audio in this
+   project and nothing here synthesises speech. Three things make typed text read as
+   speech rather than as a printer, and all three are in: speakers have their own
+   cadence (VECTOR is brisk, the ARCHIVIST thinks out loud, the OPERATIVE says as
+   little as possible, SIGNAL comes out unevenly), punctuation holds, and the gap
+   before a reply is longer when the speaker changes. Any key or tap finishes the
+   whole briefing; `prefers-reduced-motion` renders it instantly. Each line reserves
+   its final height before a character is typed, so the DEPLOY button never walks down
+   the screen — and the reserved copy is what a screen reader gets, so assistive tech
+   is handed the whole briefing at once rather than made to wait out an animation.
+   Fixed on the way through: `enableKeyboardNav` left its keydown handler on `window`
+   for screens that did not install their own, so Enter on a briefing re-clicked a
+   campaign button that was no longer in the document.
 10. ~~Weapon camouflage and charm cosmetics earned at the higher weapon ranks.~~ Shipped
    as liveries instead. Camouflage does not survive this camera: the weapon is a 15x3.2
    world-unit sliver, roughly forty by nine device pixels, drawn in two flat colours and

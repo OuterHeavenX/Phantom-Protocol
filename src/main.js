@@ -31,6 +31,10 @@ if(completed.length>0||healed.length>0)saveGame(save);
 let session=null;
 const input=new Input();
 const screens=new Screens(save,startRun,audio);
+// Exposed for the same reason window.__pp is: a menu screen can only be
+// checked by rendering it, and three of this project's worst bugs were
+// invisible to anything that did not go through the real UI.
+window.__screens=screens;
 
 screens.onSaveReplaced=next=>{
   save=next;
