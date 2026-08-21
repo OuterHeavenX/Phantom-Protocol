@@ -16,6 +16,8 @@ import {Fx} from './fx.js';
 import {ORDNANCE_FIRE} from './ordnance.js';
 import {ORDNANCE_BY_ID} from '../../data/ordnance.js';
 import {liveryFor} from '../../data/liveries.js';
+import {DEPLOY_KITS,deployKit} from '../../data/deploykits.js';
+import {vaultKind} from '../../data/vaults.js';
 import {ABILITIES,TRAITS,distanceToSegment} from './abilities.js';
 import {ENEMIES_BY_ID,STATUS_EFFECTS} from '../../data/enemies.js';
 import {BOSSES_BY_ID,MINIBOSSES} from '../../data/bosses.js';
@@ -177,6 +179,9 @@ export class Engine{
     // ---- Field turret kit --------------------------------------------------
     this.deployRank=1+(this.devBonuses.deployRank||0);
     this.deployCooldown=0;
+    // Which kit the next plant uses. Run state, not save state: every
+    // operative carries all three and swaps between them in the field.
+    this.deployKitIndex=0;
 
     this.setupPlayer();
     this.setupSquad();
@@ -494,6 +499,7 @@ export class Engine{
     this.deployCooldown=Math.max(0,this.deployCooldown-dt);
 
     if(input.takeAction('deploy'))this.deployTurret();
+    if(input.takeAction('kit'))this.cycleDeployKit();
 
     const aim=input.aimVector(this.camera,player);
     this.manualAim=aim.manual&&!this.settings.autoAim===false?aim.manual:aim.manual;
@@ -667,6 +673,15 @@ export class Engine{
       ?Math.max(amount*.15,amount-armor)
       :amount*(1-clamp(armor/(armor+42),0,.72));
     final*=this.playerDamageTakenMult;
+
+    // A shield pylon's field is the last thing between the armour maths and
+    // the health bar, so it is worth exactly what it says on the kit.
+    const shelter=this.turretField(player.x,player.y,'shelter');
+    if(shelter>0){
+      final*=1-shelter;
+      this.fx.ring(player.x,player.y,player.radius+4,player.radius+18,.18,'#8fd8ff',2);
+    }
+
     final=Math.max(1,final);
 
     player.hp-=final;
@@ -1042,6 +1057,13 @@ export class Engine{
     }
     if(terrain?.slow)enemy.speedMult=1-terrain.slow*.6;
     else if(!enemy.enraged)enemy.speedMult=1;
+
+    // Snare fields get their own multiplier rather than sharing speedMult:
+    // that one is deliberately never reset on an enraged hostile, so writing a
+    // field into it would leave the slow behind after the hostile walked out.
+    // This is assigned every frame, so it cannot accumulate a residue.
+    const snare=this.turretField(enemy.x,enemy.y,'slow');
+    enemy.snareMult=snare>0?1-snare:1;
   }
 
   applySupportAuras(){
@@ -1898,6 +1920,10 @@ export class Engine{
         t.x=damp(t.x,targetX,6,dt);
         t.y=damp(t.y,targetY,6,dt);
       }
+      // Unarmed kits project a field instead of shooting. The field is read
+      // where it lands — damagePlayer for a pylon, applyEnemyAuras for a
+      // snare — so there is nothing to do for one here.
+      if(t.unarmed)continue;
       t.fireTimer-=dt;
       if(t.fireTimer>0)continue;
       const target=this.enemyHash.nearest(t.x,t.y,t.range,e=>!e.dead)||
@@ -2168,6 +2194,35 @@ export class Engine{
 
   get deploySpec(){return deploySpec(this.deployRank)}
 
+  get deployKit(){return deployKit(this.deployKitIndex)}
+
+  // Swaps the kit the next plant will use. Free and instant — the cost of
+  // switching is the cooldown already running, not a second one — because a
+  // kit choice is only interesting if it can answer what is happening now.
+  cycleDeployKit(){
+    this.deployKitIndex=(this.deployKitIndex+1)%DEPLOY_KITS.length;
+    const kit=this.deployKit;
+    this.announce(`FIELD KIT // ${kit.name}`,kit.color,1.4);
+    this.audio.play('select',{volume:.45});
+    return kit;
+  }
+
+  // The strongest field of a given kind covering a point, or 0. Only unarmed
+  // kits carry fields, so a sentry-only loadout pays one dead property read
+  // per planted turret and nothing else.
+  turretField(x,y,key){
+    let best=0;
+    for(const turret of this.turrets){
+      if(turret.dead)continue;
+      const strength=turret[key];
+      if(!strength||strength<=best)continue;
+      const radius=turret.fieldRadius;
+      if(!radius||dist2(x,y,turret.x,turret.y)>radius*radius)continue;
+      best=strength;
+    }
+    return best;
+  }
+
   // Whether the deploy button should read as available.
   get canDeploy(){
     return this.deployCooldown<=0&&this.deployedTurrets<this.deploySpec.turrets;
@@ -2191,26 +2246,39 @@ export class Engine{
 
     // Durability scales with kit rank and how far into the run the operative
     // is, so a rank 3 chassis late in a contract genuinely holds a corridor.
-    const maxHp=Math.round((spec.hp+this.level*8)*(1+(this.stats.area||1)-1));
+    // The kit then trades on top of that: a pylon is meant to be stood behind
+    // and is built for it, a snare emitter is fragile bait.
+    const kit=this.deployKit;
+    const maxHp=Math.round((spec.hp+this.level*8)*(1+(this.stats.area||1)-1)*(kit.hpMult||1));
+    // A sentry keeps the operative's own colour, the way it always has. The
+    // unarmed kits take the kit colour instead, because with no barrel to
+    // rotate the colour is the only thing telling three planted discs apart.
+    const color=kit.id==='sentry'?this.operative.color:kit.color;
     const turret=this.spawnTurret({
       x,y,
+      kit:kit.id,
+      unarmed:kit.id!=='sentry',
       damage:spec.damage*(this.stats.damage||1),
       fireRate:spec.fireRate*(this.stats.cooldown||1),
       range:300*(this.stats.area||1),
+      // Area governs a field's reach the same way it governs a sentry's.
+      fieldRadius:kit.fieldRadius?kit.fieldRadius*(this.stats.area||1):0,
+      shelter:kit.shelter||0,
+      slow:kit.slow||0,
       life:Infinity,
       projectileSpeed:560*(this.stats.projectileSpeed||1),
-      color:this.operative.color,
+      color,
       weapon:null
     });
     turret.planted=true;
     turret.hp=turret.maxHp=maxHp;
     turret.rank=this.deployRank;
 
-    this.deployCooldown=spec.cooldown*(this.stats.cooldown||1);
+    this.deployCooldown=spec.cooldown*(this.stats.cooldown||1)*(kit.cooldownMult||1);
     this.telemetry.turretsDeployed++;
-    this.fx.ring(x,y,6,44,.35,this.operative.color,2);
+    this.fx.ring(x,y,6,turret.fieldRadius||44,.35,color,2);
     this.audio.play('unlock',{volume:.45});
-    this.announce(`TURRET DEPLOYED // ${this.deployedTurrets}/${spec.turrets}`,this.operative.color,1.3);
+    this.announce(`${kit.name} // ${this.deployedTurrets}/${spec.turrets}`,color,1.3);
     return true;
   }
 
@@ -2235,26 +2303,101 @@ export class Engine{
     }
   }
 
-  // Sealed vaults: scan on approach, pay out on breach.
+  // Sealed vaults: scan on approach, work the lock, pay out on breach.
   updateVaults(dt){
     const player=this.player;
     for(const vault of this.world.vaults){
+      const kind=vaultKind(vault.kind);
       if(!vault.discovered){
         if(dist2(player.x,player.y,vault.x,vault.y)>VAULT_SCAN_RADIUS**2)continue;
         vault.discovered=true;
         this.telemetry.vaultsFound++;
-        this.announce(
-          vault.guarded?'SEALED VAULT // GARRISON SIGNATURE':'SEALED VAULT DETECTED',
-          '#f5d27a',3
-        );
+        this.announce(kind.detect,kind.color,3);
         this.fx.ring(vault.x,vault.y,20,VAULT_SCAN_RADIUS,.9,'#f5d27a',2);
         this.codec.fire('vaultDetected');
         this.audio.play('alarm',{volume:.5});
         continue;
       }
-      // The seal is ordinary destructible cover, so any weapon can open it.
-      if(!vault.breached&&vault.seal.broken)this.breachVault(vault);
+      if(vault.breached)continue;
+      if(!vault.seal.broken)this.updateVaultLock(vault,kind,dt);
+      // Every lock ends the same way: once the plate is off, the chamber pays
+      // out. An unsealed plate gets there by taking damage like any other
+      // cover; a sealed one is retracted by openVaultSeal.
+      if(vault.seal.broken)this.breachVault(vault);
     }
+  }
+
+  // The part of a vault that differs by lock. Only ever called on a discovered
+  // chamber whose plate is still shut.
+  updateVaultLock(vault,kind,dt){
+    if(!kind.sealed)return;
+    const player=this.player;
+
+    if(vault.kind==='terminal'){
+      // Nothing to do until the console goes down — wherever it is, and
+      // whatever put it down.
+      if(vault.terminal?.broken)this.openVaultSeal(vault,'REMOTE LOCK RELEASED');
+      return;
+    }
+
+    if(vault.kind==='hold'){
+      const inside=dist2(player.x,player.y,vault.x,vault.y)<=vault.holdRadius**2;
+      if(inside){
+        if(!vault.holding)this.beginVaultHold(vault);
+        vault.hold=Math.min(vault.holdTime,vault.hold+dt);
+        // The override is loud for as long as it is running.
+        if(this.rng.next()<dt*6){
+          this.fx.particle({
+            x:vault.x+this.rng.range(-vault.half,vault.half),
+            y:vault.y+this.rng.range(-vault.half,vault.half),
+            vx:0,vy:-40,life:.5,size:2.2,color:'#8fd8ff',glow:true
+          });
+        }
+        if(vault.hold>=vault.holdTime){
+          vault.holding=false;
+          this.openVaultSeal(vault,'OVERRIDE COMPLETE');
+        }
+      }else if(vault.hold>0){
+        // Walking away does not reset the override, but it does bleed it back
+        // faster than it filled — leaving is a real cost, not a free pause.
+        vault.hold=Math.max(0,vault.hold-dt*1.5);
+        if(vault.hold<=0&&vault.holding){
+          vault.holding=false;
+          this.announce('OVERRIDE LOST','#ff7068',1.6);
+          this.audio.play('deny',{volume:.5});
+        }
+      }
+    }
+  }
+
+  // Starts a manual override. The chamber broadcasts while it runs, which is
+  // the whole trade: the operative is standing still, in the open, advertising
+  // exactly where they are.
+  beginVaultHold(vault){
+    vault.holding=true;
+    this.announce('MANUAL OVERRIDE ENGAGED // HOLD THE DOOR','#8fd8ff',2.2);
+    this.audio.play('alarm',{volume:.6});
+    for(const enemy of this.enemies){
+      if(enemy.dead)continue;
+      if(dist2(enemy.x,enemy.y,vault.x,vault.y)>900*900)continue;
+      enemy.awareness=1;
+      enemy.lastKnownX=this.player.x;
+      enemy.lastKnownY=this.player.y;
+    }
+  }
+
+  // Retracts a plate that damage was never going to open. From here the normal
+  // breach path takes over, so a sealed lock and a shot-off one pay out
+  // through exactly one piece of code.
+  openVaultSeal(vault,message){
+    if(vault.seal.broken)return;
+    vault.seal.broken=true;
+    // The plate stopped being geometry, and the AI's cover reads have to know.
+    this.world.rebuildHash();
+    this.world.buildCoverPoints();
+    this.announce(message,'#8fd8ff',2);
+    this.fx.ring(vault.seal.x,vault.seal.y,8,Math.max(vault.seal.w,vault.seal.h),.5,'#8fd8ff',3);
+    this.audio.play('tech',{volume:.6});
   }
 
   breachVault(vault){
@@ -2267,6 +2410,7 @@ export class Engine{
     this.announce('VAULT BREACHED','#f5d27a',2.6);
     this.codec.fire('vaultBreached');
 
+    const kind=vaultKind(vault.kind);
     const rng=this.rng;
     const scatter=()=>({
       x:vault.x+rng.range(-vault.half*.6,vault.half*.6),
@@ -2309,9 +2453,11 @@ export class Engine{
           enemy.lastKnownY=this.player.y;
         }
       }
-      // Guarded vaults pay the risk back in credits.
-      this.credits+=Math.round(220*this.creditGainMult);
     }
+
+    // Every lock but the plain cache asks for something the cache does not,
+    // and pays the difference back in credits.
+    if(kind.bonusCredits)this.credits+=Math.round(kind.bonusCredits*this.creditGainMult);
   }
 
   // Drops a personnel cache near the operative. Silently does nothing when

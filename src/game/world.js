@@ -1,6 +1,7 @@
 import {Rng} from '../core/rng.js';
 import {clamp,dist2,segmentIntersectsRect,resolveCircleRect,pointInRect,SpatialHash} from '../core/math.js';
 import {HAZARDS} from '../../data/maps.js';
+import {vaultKind,rollVaultKind} from '../../data/vaults.js';
 
 // Procedural sector generation. The world is a finite, fully-authored bounded
 // arena built from rooms and corridors rather than the previous build's
@@ -162,24 +163,68 @@ export class World{
         walls.push(this.addWall(x+side.dx,y+side.dy,side.w,side.h,{type:'vault'}));
       });
 
+      // Which lock this chamber carries. Drawn from the world's own seeded
+      // stream and nothing else — two operatives running the same contract
+      // seed have to be handed the same sector, whatever their progression.
+      let kindId=rollVaultKind(rng);
+
+      // A remote lock needs a console the operative can actually reach. When
+      // there is nowhere to put one the chamber falls back to a plain cache
+      // rather than shipping a vault that cannot be opened at all.
+      let terminal=null;
+      if(kindId==='terminal'){
+        terminal=this.placeVaultTerminal(x,y,rng);
+        if(!terminal)kindId='cache';
+      }
+      const kind=vaultKind(kindId);
+
+      // A sealed lock's plate does not take damage: shooting it is not the
+      // route in, so it must not read as destructible to weapons, breachers
+      // or the AI's cover logic.
       const door=sides[facing];
       const seal=this.addCover(x+door.dx,y+door.dy,{
         type:'vaultSeal',w:door.w,h:door.h,
-        hp:520,blocksSight:true,destructible:true
+        hp:kind.sealed?0:520,blocksSight:true,destructible:!kind.sealed
       });
       seal.vaultSeal=true;
 
       const vault={
         x,y,half,seal,walls,facing,
+        kind:kindId,terminal,
         // A guarded vault trades a bigger payout for a garrison on breach.
-        guarded:rng.next()<.4,
+        guarded:kindId==='garrison',
+        // Manual-override progress, in seconds. Unused by the other locks.
+        hold:0,holding:false,
+        holdTime:kind.holdTime||0,holdRadius:kind.holdRadius||0,
         discovered:false,breached:false,
         pulse:rng.next()*10
       };
-      // The renderer reads discovery state off the seal it is drawing.
+      // The renderer reads discovery state off the seal it is drawing, and off
+      // the console for the vault the console belongs to.
       seal.vault=vault;
+      if(terminal)terminal.vault=vault;
       this.vaults.push(vault);
     }
+  }
+
+  // A console for a remote-locked vault. Far enough that reaching it is a
+  // decision the operative has to make under fire, close enough that the
+  // chamber is still worth walking back to. Returns null when the sector has
+  // no open ground in that band, which is the caller's cue to pick a lock the
+  // sector can actually support.
+  placeVaultTerminal(vx,vy,rng){
+    for(let attempt=0;attempt<48;attempt++){
+      const angle=rng.angle();
+      const distance=rng.range(300,560);
+      const x=vx+Math.cos(angle)*distance;
+      const y=vy+Math.sin(angle)*distance;
+      if(!this.playable(x,y,70))continue;
+      if(this.overlapsSolid(x,y,54))continue;
+      if(this.insideVault(x,y,40))continue;
+      return this.addCover(x,y,{type:'vaultTerminal',w:34,h:34,
+        hp:120,blocksSight:false,destructible:true});
+    }
+    return null;
   }
 
   addWall(x,y,w,h,opts={}){

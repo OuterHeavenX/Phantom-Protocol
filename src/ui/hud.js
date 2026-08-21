@@ -5,7 +5,9 @@ import {PASSIVES_BY_ID} from '../../data/passives.js';
 // changed — the previous build rebuilt strings and re-queried the DOM for
 // every element on every single frame.
 
-const template=(operative,ability)=>`
+// The engine is a parameter, not a closure: this is a module-level function
+// and the run it is describing does not exist until the Hud is constructed.
+const template=(operative,ability,engine)=>`
 <canvas id="gameCanvas"></canvas>
 <div class="hud" id="hud">
   <div class="hud-top">
@@ -71,11 +73,12 @@ const template=(operative,ability)=>`
         <span>${engine.ordnance.short}</span>
         <i class="dash-fill" id="ordnanceFill"></i>
       </button>`:''}
-      <button class="dash-btn turret-btn" id="turretBtn" type="button" title="Deploy turret">
-        <span>TURRET</span>
+      <button class="dash-btn turret-btn" id="turretBtn" type="button" title="Deploy field kit (F)">
+        <span id="kitName">SENTRY</span>
         <em class="turret-count" id="turretCount">0/1</em>
         <i class="dash-fill" id="turretFill"></i>
       </button>
+      <button class="icon-btn kit-btn" id="kitBtn" type="button" title="Cycle field kit (G)">⟳</button>
       <button class="dash-btn" id="dashBtn" type="button" title="Dash">
         <span>DASH</span><i class="dash-fill" id="dashFill"></i>
       </button>
@@ -111,7 +114,7 @@ export class Hud{
     this.engine=engine;
     this.root=root;
     root.innerHTML=`<div id="gameScreen" class="screen game-screen">${
-      template(engine.operative,engine.operative.ability)
+      template(engine.operative,engine.operative.ability,engine)
     }</div>`;
 
     const $=id=>document.getElementById(id);
@@ -131,6 +134,7 @@ export class Hud{
       abilityBtn:$('abilityBtn'),abilityState:$('abilityState'),abilityFill:$('abilityFill'),
       dashBtn:$('dashBtn'),dashFill:$('dashFill'),pauseBtn:$('pauseBtn'),
       turretBtn:$('turretBtn'),turretFill:$('turretFill'),turretCount:$('turretCount'),
+      kitBtn:$('kitBtn'),kitName:$('kitName'),
       ordnanceBtn:$('ordnanceBtn'),ordnanceFill:$('ordnanceFill'),
       stickMove:$('stickMove'),knobMove:$('knobMove'),
       stickAim:$('stickAim'),knobAim:$('knobAim'),
@@ -230,6 +234,20 @@ export class Hud{
     // Turret kit: the fill tracks the recharge, the count tracks how many of
     // the rank's slots are standing.
     const kit=engine.deploySpec;
+    // Which kit is armed, not how many are planted — the count below already
+    // covers that, and with three kits the label is the thing that changes.
+    // Written only on a swap: this runs every frame and three of these four
+    // writes are style recalcs.
+    const fieldKit=engine.deployKit;
+    if(this.cache.kitId!==fieldKit.id){
+      this.cache.kitId=fieldKit.id;
+      el.kitName.textContent=fieldKit.short;
+      el.turretBtn.title=fieldKit.desc;
+      // Set on both: a custom property inherits down, not sideways, and the
+      // cycle button is the deploy button's sibling.
+      el.turretBtn.style.setProperty('--kit-color',fieldKit.color);
+      el.kitBtn?.style.setProperty('--kit-color',fieldKit.color);
+    }
     const turretRatio=1-clamp(engine.deployCooldown/kit.cooldown,0,1);
     el.turretFill.style.transform=`scaleX(${turretRatio})`;
     this.set('turretCount',el.turretCount,`${engine.deployedTurrets}/${kit.turrets}`);

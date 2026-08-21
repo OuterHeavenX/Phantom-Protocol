@@ -21,7 +21,8 @@ python3 -m http.server 8080     # then open http://localhost:8080
 | Aim | Mouse pointer | Right stick | Right stick |
 | Dash | `Shift` / `Space` | A / LB | On-screen button |
 | Ability | `E` / `Q` | X / RT | On-screen button |
-| Deploy turret | `F` | B / LB | On-screen button |
+| Deploy field kit | `F` | B / LB | On-screen button |
+| Cycle field kit | `G` | — | On-screen button (⟳) |
 | Pause | `Esc` / `P` | Start | HUD button |
 | Select adaptation | `1`–`4` | — | Tap card |
 | Reroll adaptation | `R` | — | Tap button |

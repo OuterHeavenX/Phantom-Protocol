@@ -190,6 +190,7 @@ function startRun(config){
   hud.el.abilityBtn.addEventListener('click',()=>input.setAction('ability'));
   hud.el.dashBtn.addEventListener('click',()=>input.setAction('dash'));
   hud.el.turretBtn.addEventListener('click',()=>input.setAction('deploy'));
+  hud.el.kitBtn?.addEventListener('click',()=>input.setAction('kit'));
   hud.el.ordnanceBtn?.addEventListener('click',()=>input.setAction('secondary'));
 
   engine.onEnd=summary=>finishRun(summary,config);

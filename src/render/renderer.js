@@ -4,6 +4,7 @@ import {profiler} from '../core/profiler.js';
 import {drawLandmark} from './landmarks.js';
 import {EnvironmentArt,drawSprite,drawSlicedWall} from './environment.js';
 import {EXTRACTION_RADIUS,EXTRACTION_HOLD} from '../game/engine.js';
+import {vaultKind} from '../../data/vaults.js';
 import {REVIVE_RADIUS} from '../game/squadmate.js';
 import {
   drawPlayer,drawSquadmate,drawEnemy,drawBoss,drawPhantom,drawTurret,drawMine,drawPickup,
@@ -555,6 +556,29 @@ export class Renderer{
         }
         break;
       }
+      case 'vaultTerminal':{
+        // A lock console: waist-high, lit, and unmistakably not a crate. The
+        // screen keeps working right up until the housing stops existing.
+        const live=cover.vault&&!cover.vault.breached;
+        const accent=live?'#c895ff':palette.wallEdge;
+        ctx.fillStyle='#171d26';
+        ctx.fillRect(x,y,cover.w,cover.h);
+        ctx.strokeStyle=accent;
+        ctx.lineWidth=1.4;
+        ctx.strokeRect(x,y,cover.w,cover.h);
+        // Canted screen.
+        ctx.fillStyle=withAlpha(accent,live?.34+Math.abs(Math.sin(this.engine.elapsed*4))*.3:.16);
+        ctx.fillRect(x+5,y+5,cover.w-10,cover.h*.42);
+        // Key rows underneath.
+        ctx.strokeStyle=withAlpha(accent,.4);
+        ctx.lineWidth=1;
+        ctx.beginPath();
+        for(let py=y+cover.h*.6;py<y+cover.h-4;py+=5){
+          ctx.moveTo(x+5,py);ctx.lineTo(x+cover.w-5,py);
+        }
+        ctx.stroke();
+        break;
+      }
       case 'log':{
         // Half-sunk trunk: rounded, with a waterline stain.
         const horizontal=cover.w>cover.h;
@@ -1000,6 +1024,7 @@ export class Renderer{
       if(!vault.discovered)continue;
       if(!camera.isVisible(vault.x,vault.y,vault.half+140))continue;
       const open=vault.breached;
+      const kind=vaultKind(vault.kind);
       const color=open?'#8bff9b':'#f5d27a';
 
       ctx.save();
@@ -1023,11 +1048,52 @@ export class Renderer{
       ctx.fillStyle=color;
       ctx.font='bold 10px ui-monospace,monospace';
       ctx.textAlign='center';
-      ctx.fillText(
-        open?'VAULT OPEN':vault.guarded?'SEALED VAULT // GARRISON':'SEALED VAULT',
-        vault.x,vault.y-vault.half-22
-      );
+      ctx.fillText(open?'VAULT OPEN':kind.label,vault.x,vault.y-vault.half-22);
+
+      // A manual override needs a stand-here ring and a progress arc, because
+      // there is no other way to tell the operative that walking two paces is
+      // the difference between finishing and losing it.
+      if(!open&&vault.kind==='hold'&&vault.holdRadius>0){
+        const running=vault.hold>0;
+        ctx.strokeStyle=withAlpha(kind.color,running?.34:.16);
+        ctx.lineWidth=1.4;
+        ctx.setLineDash([6,10]);
+        ctx.lineDashOffset=-time*14;
+        ctx.beginPath();ctx.arc(vault.x,vault.y,vault.holdRadius,0,TAU);ctx.stroke();
+        ctx.setLineDash([]);
+        if(running){
+          const ratio=clamp(vault.hold/vault.holdTime,0,1);
+          ctx.strokeStyle=kind.color;
+          ctx.lineWidth=4;
+          ctx.beginPath();
+          ctx.arc(vault.x,vault.y,vault.half+18,-Math.PI/2,-Math.PI/2+TAU*ratio);
+          ctx.stroke();
+          ctx.fillStyle=kind.color;
+          ctx.fillText(
+            `OVERRIDE ${Math.ceil(vault.holdTime-vault.hold)}s`,
+            vault.x,vault.y-vault.half-36
+          );
+        }
+      }
       ctx.restore();
+
+      // The console for a remote lock is elsewhere in the sector, so it gets
+      // its own marker wherever it happens to be standing.
+      const terminal=vault.terminal;
+      if(!open&&terminal&&!terminal.broken&&camera.isVisible(terminal.x,terminal.y,90)){
+        ctx.save();
+        ctx.strokeStyle=withAlpha(kind.color,.5);
+        ctx.lineWidth=1.4;
+        ctx.setLineDash([5,6]);
+        ctx.lineDashOffset=-time*18;
+        ctx.beginPath();ctx.arc(terminal.x,terminal.y,34,0,TAU);ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle=kind.color;
+        ctx.font='bold 9px ui-monospace,monospace';
+        ctx.textAlign='center';
+        ctx.fillText('VAULT LOCK',terminal.x,terminal.y-30);
+        ctx.restore();
+      }
     }
   }
 
@@ -1466,9 +1532,15 @@ export class Renderer{
     if(engine.mission?.asset&&!engine.mission.asset.downed&&!engine.mission.asset.aboard){
       mark(engine.mission.asset.x,engine.mission.asset.y,'#ffd166',11);
     }
-    // A scanned vault stays flagged off-screen until it has been opened.
+    // A scanned vault stays flagged off-screen until it has been opened, and
+    // so does the console holding it shut — that one is the objective, not the
+    // chamber, until it goes down.
     for(const vault of engine.world.vaults){
-      if(vault.discovered&&!vault.breached)mark(vault.x,vault.y,'#f5d27a',9);
+      if(!vault.discovered||vault.breached)continue;
+      mark(vault.x,vault.y,'#f5d27a',9);
+      if(vault.terminal&&!vault.terminal.broken){
+        mark(vault.terminal.x,vault.terminal.y,'#c895ff',9);
+      }
     }
     let eliteCount=0;
     for(const enemy of engine.enemies){
@@ -1541,9 +1613,16 @@ export class Renderer{
       ctx.stroke();
     }
 
-    // Scanned vaults: hollow diamond while sealed, filled once opened.
+    // Scanned vaults: hollow diamond while sealed, filled once opened. A
+    // remote lock also plots its console, so the route is readable from the
+    // map rather than only from the compass.
     for(const vault of engine.world.vaults){
       if(!vault.discovered)continue;
+      const terminal=vault.terminal;
+      if(terminal&&!terminal.broken&&!vault.breached){
+        ctx.fillStyle='rgba(200,149,255,.85)';
+        ctx.fillRect(x+terminal.x*scaleX-2,y+terminal.y*scaleY-2,4,4);
+      }
       const vx=x+vault.x*scaleX,vy=y+vault.y*scaleY;
       ctx.beginPath();
       ctx.moveTo(vx,vy-4);ctx.lineTo(vx+4,vy);ctx.lineTo(vx,vy+4);ctx.lineTo(vx-4,vy);

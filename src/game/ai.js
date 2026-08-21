@@ -468,7 +468,9 @@ function force(){forcePool.x=0;forcePool.y=0;return forcePool}
 // accelerate rather than snapping to full speed.
 function applyForce(enemy,steer,dt,scale,ctx){
   const m=Math.hypot(steer.x,steer.y);
-  const speed=enemy.speed*scale*(enemy.speedMult||1)*ctx.speedMult;
+  // snareMult is the deployable-field slow. It is kept apart from speedMult
+  // because that one is not reset on an enraged hostile.
+  const speed=enemy.speed*scale*(enemy.speedMult||1)*(enemy.snareMult||1)*ctx.speedMult;
   if(m>1e-4){
     const tx=steer.x/m*speed;
     const ty=steer.y/m*speed;

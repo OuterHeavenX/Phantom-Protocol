@@ -22,7 +22,7 @@ export class Input{
     this.stickAim={x:0,y:0,active:false};
     this.gamepadIndex=null;
     this.lastScheme='keyboard';
-    this.actions={dash:false,ability:false,pause:false,interact:false,swap:false,deploy:false,secondary:false};
+    this.actions={dash:false,ability:false,pause:false,interact:false,swap:false,deploy:false,secondary:false,kit:false};
     this.padDeployHeld=false;
     this.consumed=new Set();
     this.enabled=true;
@@ -109,6 +109,9 @@ export class Input{
     if(this.pressedThisFrame.has('tab'))this.setAction('swap');
     // Deploy is edge-triggered: holding the key must not empty the whole kit.
     if(this.pressedThisFrame.has('f'))this.setAction('deploy');
+    // Which kit the next plant uses. Edge-triggered for the same reason, and
+    // deliberately not on the gamepad's face buttons — those are full.
+    if(this.pressedThisFrame.has('g'))this.setAction('kit');
     // Secondary fire. R on the keyboard, right mouse button, or the HUD's own
     // button on touch — the same three routes the other actives use.
     if(this.pressedThisFrame.has('r'))this.setAction('secondary');

@@ -227,6 +227,23 @@
 /* All slots standing: the button is inert until one falls, so say so. */
 .turret-btn.maxed{opacity:.6}
 .turret-btn.maxed .turret-count{color:var(--accent)}
+/* The armed kit tints the button, so the three read apart without being read.
+   The fallback keeps the button on the house accent if the HUD ever renders
+   before the engine has set a kit. */
+.turret-btn{border-color:color-mix(in srgb,var(--kit-color,var(--accent)) 40%,transparent)}
+.turret-btn.ready{
+  border-color:var(--kit-color,var(--accent));
+  box-shadow:0 0 22px color-mix(in srgb,var(--kit-color,var(--accent)) 26%,transparent);
+}
+.turret-btn .dash-fill{background:var(--kit-color,var(--accent))}
+
+/* Kit cycle. Deliberately small and adjacent: it changes what the next plant
+   is, never plants anything, so it must not be mistakable for the deploy. */
+.kit-btn{
+  width:30px;height:56px;font-size:13px;
+  border-color:color-mix(in srgb,var(--kit-color,var(--accent)) 30%,transparent);
+  align-self:flex-end;
+}
 
 /* ---- Status strip ------------------------------------------------------- */
 

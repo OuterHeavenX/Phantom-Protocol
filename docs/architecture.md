@@ -47,7 +47,15 @@ the same open ground:
 2. **Vaults** (`placeVaults`) — chamber-sized footprints are almost impossible to find
    once cover has been scattered, so vaults claim theirs first. A vault is rejected
    near the start (it would seal the operative in) and its door is only cut on a side
-   with a walkable approach, so no vault can generate unopenable.
+   with a walkable approach, so no vault can generate unopenable. Each chamber then
+   draws a lock from the same seeded stream — never from save state, or two operators
+   would get different sectors from one daily contract seed. Two of the four locks make
+   the seal indestructible, so the alternate route is the only route: a manual override
+   held at the door, or a console (`placeVaultTerminal`) put down elsewhere in the
+   sector. The console is placed here too, and for the same reason — 300 to 560 units of
+   open ground is easy before cover exists and hard after. When the sector cannot supply
+   it, the chamber falls back to a plain cache rather than shipping a vault nothing can
+   open.
 3. **Cover**, **hazards** and **hostile spawns**, all of which exclude vault interiors —
    a sealed chamber must not contain a hazard the player is forced to walk into or a
    hostile that cannot path out.

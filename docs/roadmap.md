@@ -33,6 +33,13 @@ last meeting. Plus squadmates — a second operative on the ground who fights wi
 weapon and their own ability, whom a share of each wave marks as their target, and who
 goes down rather than dying.
 
+Fixed on the way through: the HUD template took `(operative, ability)` but its markup
+read `engine.ordnance`, so `new Hud(...)` threw a ReferenceError and **no run could
+start at all**. This had been true on `main` since secondary fire shipped — every test
+since had constructed the Engine directly and never gone through the HUD. The ordnance
+button has never rendered until now. This is the third order-of-construction bug in a
+row; the sweep in item 5's note is overdue.
+
 And since: the whole authored-art pipeline for Blacksite Zero — a loader with a
 procedural fallback for every draw path, an authored floor plate, three-sliced walls in
 both orientations, and all six cover types with variants. Plus the simulation made
@@ -66,8 +73,21 @@ Remaining:
    Note: duel operations crashed on construction until Act II shipped — the codec was
    built after the mission, and a duel spawns its boss during mission setup, which fires
    a codec cue. Worth assuming other order-dependent construction bugs are lurking.
-6. Vault variants beyond the loot-and-garrison pair — timed holds, terminal hacks.
-7. Turret variants (shield pylon, slow field) selectable from the deployment kit.
+6. ~~Vault variants beyond the loot-and-garrison pair — timed holds, terminal hacks.~~
+   Shipped. Four locks now, drawn from the world's seeded stream so a daily contract
+   still hands two operators the same sector. A manual override cannot be shot open at
+   all: it runs only while the operative stands at the door, it broadcasts to everything
+   within 900 units while it runs, and stepping away bleeds it back at 1.5x. A remote
+   lock cannot be shot open either — the lock is on a console placed 300 to 560 units
+   away before cover is scattered, which has to be found and put down first. Each lock
+   pays its difficulty back in credits.
+7. ~~Turret variants (shield pylon, slow field) selectable from the deployment kit.~~
+   Shipped as three field kits cycled in the field with `G`. Rank and kit are
+   independent: rank still decides how many and how tough, the kit decides what they do.
+   The shield pylon and the snare field carry no weapon at all — the pylon cuts incoming
+   damage 40% for anyone inside 150 units, the snare halves hostile movement inside 170.
+   The snare writes its own multiplier rather than sharing `speedMult`, which is
+   deliberately never reset on an enraged hostile and would have kept the slow forever.
 8. ~~A second campaign act following the CONTROL designation past trial eleven.~~ Shipped
    as THE GLASSHOUSE: six operations across the four theatres the campaign had never
    used, escalating to twenty minutes on GHOST, with SIGNAL finally forming sentences.

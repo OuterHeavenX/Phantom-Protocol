@@ -1106,9 +1106,24 @@ export function drawPhantom(ctx,phantom,time){
 
 export function drawTurret(ctx,turret,time){
   drawShadow(ctx,turret.x,turret.y,10,.28);
+  const color=turret.color||'#76e7d4';
+
+  // An unarmed kit's whole value is where its edge falls, so the edge is drawn
+  // rather than implied. Underneath the emitter, so the hardware stays legible
+  // on top of it.
+  if(turret.fieldRadius>0){
+    ctx.save();
+    const breathe=.5+Math.sin(time*2+turret.x*.01)*.5;
+    ctx.strokeStyle=withAlpha(color,.16+breathe*.12);
+    ctx.lineWidth=1.4;
+    ctx.beginPath();ctx.arc(turret.x,turret.y,turret.fieldRadius,0,TAU);ctx.stroke();
+    ctx.fillStyle=withAlpha(color,.05);
+    ctx.beginPath();ctx.arc(turret.x,turret.y,turret.fieldRadius,0,TAU);ctx.fill();
+    ctx.restore();
+  }
+
   ctx.save();
   ctx.translate(turret.x,turret.y);
-  const color=turret.color||'#76e7d4';
   // Planted turrets are heavier hardware than a weapon-spawned drone: they
   // get a deployed footplate so the two read differently at a glance.
   if(turret.planted){
@@ -1122,16 +1137,46 @@ export function drawTurret(ctx,turret,time){
     }
     ctx.stroke();
   }
-  // Base.
+  // Base. Shared by all three kits — it is the same chassis.
   ctx.fillStyle=turret.hitFlash>0?'#5a2b2b':'#123036';
   ctx.strokeStyle=color;
   ctx.lineWidth=1.4;
   ctx.beginPath();ctx.arc(0,0,8,0,TAU);ctx.fill();ctx.stroke();
-  // Rotating head.
-  ctx.rotate(turret.angle);
-  ctx.fillStyle=color;
-  ctx.fillRect(2,-2,13,4);
-  ctx.beginPath();ctx.arc(0,0,4,0,TAU);ctx.fill();
+
+  if(turret.kit==='pylon'){
+    // Three uprights around a still core: nothing rotates, because nothing is
+    // tracking anything.
+    ctx.strokeStyle=color;
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    for(let i=0;i<3;i++){
+      const a=i/3*TAU-Math.PI/2;
+      ctx.moveTo(Math.cos(a)*4,Math.sin(a)*4);
+      ctx.lineTo(Math.cos(a)*9,Math.sin(a)*9);
+    }
+    ctx.stroke();
+    ctx.fillStyle=withAlpha(color,.5+Math.abs(Math.sin(time*2.4))*.5);
+    ctx.beginPath();ctx.arc(0,0,3.4,0,TAU);ctx.fill();
+  }else if(turret.kit==='snare'){
+    // Contracting rings: the emitter reads as pulling inward, which is what
+    // it does to anything standing in it.
+    ctx.strokeStyle=color;
+    ctx.lineWidth=1.3;
+    for(let i=0;i<2;i++){
+      const phase=(time*.7+i*.5)%1;
+      ctx.globalAlpha=1-phase;
+      ctx.beginPath();ctx.arc(0,0,3+(1-phase)*6,0,TAU);ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+    ctx.fillStyle=color;
+    ctx.beginPath();ctx.arc(0,0,3,0,TAU);ctx.fill();
+  }else{
+    // Rotating head.
+    ctx.rotate(turret.angle);
+    ctx.fillStyle=color;
+    ctx.fillRect(2,-2,13,4);
+    ctx.beginPath();ctx.arc(0,0,4,0,TAU);ctx.fill();
+  }
   ctx.restore();
 
   // Durability bar, shown once a planted turret has taken a hit.
