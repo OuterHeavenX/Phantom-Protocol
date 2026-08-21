@@ -32,7 +32,10 @@ export default [
         Path2D:'readonly',ImageData:'readonly',createImageBitmap:'readonly',
         globalThis:'readonly',process:'readonly',
         CanvasPattern:'readonly',DOMMatrix:'readonly',btoa:'readonly',atob:'readonly',
-        confirm:'readonly',prompt:'readonly'
+        confirm:'readonly',prompt:'readonly',
+        Response:'readonly',Request:'readonly',Headers:'readonly',
+        CompressionStream:'readonly',DecompressionStream:'readonly',
+        TextEncoder:'readonly',TextDecoder:'readonly',AbortController:'readonly'
       }
     },
     linterOptions:{reportUnusedDisableDirectives:false},

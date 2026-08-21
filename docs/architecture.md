@@ -60,6 +60,29 @@ the same open ground:
    a sealed chamber must not contain a hazard the player is forced to walk into or a
    hostile that cannot path out.
 
+## Replays
+
+A run is fully determined by its seed, its configuration and its input, so a replay is
+those three things rather than a recording. `src/game/replay.js` holds the codec;
+`Engine.step` resolves the live input into one frozen `StepInput` per fixed step, and
+recording and playback both hang off that single point.
+
+Two properties make it exact:
+
+* **Per fixed step, not per frame.** A slow frame runs up to five steps and a fast one
+  runs none, so a per-frame log drifts the moment two machines disagree about frame rate.
+* **The simulation consumes the quantised values.** Movement and aim are stored as signed
+  bytes; if the live run used full precision and the replay used the rounded copy, the two
+  would part company within seconds. The rounding happens once, at capture, for both.
+
+Three things the seed cannot supply ride in the replay header: the adaptation choices
+(which card was taken, rerolled, banished or skipped), the account's unlocked weapon list
+(the offer pool is built from it, so a viewer with different unlocks would be offered
+different cards), and the resolved seed itself.
+
+Watching one never writes to the save — no payout, no unlocks, no medical, no walker
+record.
+
 ## Static checks
 
 There is no build step, so nothing type-checks this code on the way past. Two

@@ -93,8 +93,61 @@ export function defaultSave(){
     // normalizeSave recurses into it and a record written by an older build
     // keeps whatever fields it had.
     nemesis:defaultNemesisRecord(),
-    runHistory:[]
+    runHistory:[],
+    // Saved replays, newest first. Kept small on purpose: a replay is the seed
+    // plus a run-length encoded input log, which is tiny next to a state dump
+    // but not free, and localStorage is a shared budget the rest of the save
+    // has to fit in too.
+    replays:[]
   };
+}
+
+// How many replays a save keeps, and the ceiling on the whole shelf. A
+// half-hour run encodes to tens of kilobytes; the cap is what stops a long
+// session of long contracts from quietly filling the origin's storage and
+// taking the rest of the save down with it.
+export const MAX_REPLAYS=6;
+// Sized from the worst case actually measured: thirty minutes of continuously
+// varying analog input, which run-length encoding cannot help with at all,
+// gzips to roughly 570 KB of base64. Anything a player is likely to record is
+// far smaller. localStorage is about 5 MB per origin and the rest of the save
+// has to fit in it too, so the shelf gets a budget rather than the benefit of
+// the doubt.
+export const MAX_REPLAY_BYTES=700*1024;
+export const MAX_SHELF_BYTES=1600*1024;
+
+// Stores a replay, newest first, dropping the oldest until the shelf fits.
+// Returns the stored entry, or null when the replay is on its own too large
+// for the budget — which is a refusal to save, not a silent truncation.
+export function storeReplay(save,replay,summary){
+  if(!replay?.log?.data)return null;
+  const entry={
+    ...replay,
+    id:`r${Date.now().toString(36)}${Math.floor(Math.random()*1e4).toString(36)}`,
+    bytes:replay.log.data.length,
+    result:{
+      victory:!!summary?.victory,
+      reason:summary?.reason||'',
+      elapsed:summary?.elapsed||0,
+      kills:summary?.kills||0,
+      level:summary?.level||1
+    }
+  };
+  if(entry.bytes>MAX_REPLAY_BYTES)return null;
+  if(!Array.isArray(save.replays))save.replays=[];
+  save.replays.unshift(entry);
+  let total=save.replays.reduce((sum,r)=>sum+(r.bytes||0),0);
+  while(save.replays.length>MAX_REPLAYS||(total>MAX_SHELF_BYTES&&save.replays.length>1)){
+    total-=save.replays.pop()?.bytes||0;
+  }
+  return entry;
+}
+
+export function deleteReplay(save,id){
+  if(!Array.isArray(save.replays))return false;
+  const before=save.replays.length;
+  save.replays=save.replays.filter(entry=>entry.id!==id);
+  return save.replays.length!==before;
 }
 
 // Deep merge that keeps unknown keys from an older/newer save but guarantees
@@ -221,6 +274,19 @@ export function saveGame(save){
     localStorage.setItem(KEY,JSON.stringify(save));
     return true;
   }catch(err){
+    // Replays are the only expendable thing in the save, and the only thing
+    // large enough to be why this failed. Shed them oldest-first and retry
+    // rather than losing a whole session's progression to a full origin.
+    if(Array.isArray(save.replays)&&save.replays.length){
+      while(save.replays.length){
+        save.replays.pop();
+        try{
+          localStorage.setItem(KEY,JSON.stringify(save));
+          console.warn('[red-static] dropped a saved replay to fit the save');
+          return true;
+        }catch{/* keep shedding */}
+      }
+    }
     console.warn('[red-static] save write failed',err);
     return false;
   }

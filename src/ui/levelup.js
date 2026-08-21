@@ -206,6 +206,7 @@ export class LevelUpScreen{
 
     element.querySelector('#rerollBtn')?.addEventListener('click',()=>{
       if(engine.rerolls<=0)return;
+      engine.recordDecision('reroll');
       engine.rerolls--;
       engine.audio.play('select');
       this.options=this.roll();
@@ -213,6 +214,7 @@ export class LevelUpScreen{
     });
 
     element.querySelector('#skipBtn').addEventListener('click',()=>{
+      engine.recordDecision('skip');
       engine.credits+=120;
       engine.audio.play('coin');
       // Skipping still consumes the queued level-up.
@@ -233,6 +235,7 @@ export class LevelUpScreen{
     const engine=this.engine;
     if(engine.banishes<=0)return;
     const option=this.options[index];
+    engine.recordDecision('banish',index);
     engine.banishes--;
     this.banished.add(`${option.kind}:${option.id}`);
     engine.audio.play('deny');
@@ -244,8 +247,47 @@ export class LevelUpScreen{
   pick(index){
     const option=this.options[index];
     if(!option)return;
+    this.engine.recordDecision('pick',index);
     this.engine.applyUpgrade(option);
     this.finish();
+  }
+
+  // Replays one logged choice without opening the screen. Every branch here is
+  // the body of the matching click handler above with the audio and the render
+  // left out, because on playback there is nobody to hear or click.
+  applyDecision(decision){
+    const engine=this.engine;
+    if(!decision)return false;
+    if(!this.options)this.options=this.roll();
+    switch(decision.kind){
+      case 'pick':{
+        const option=this.options[decision.index];
+        if(!option)return false;
+        engine.applyUpgrade(option);
+        this.options=null;
+        return true;
+      }
+      case 'reroll':
+        if(engine.rerolls<=0)return false;
+        engine.rerolls--;
+        this.options=this.roll();
+        return false;      // the level-up is still pending
+      case 'banish':{
+        const option=this.options[decision.index];
+        if(!option||engine.banishes<=0)return false;
+        engine.banishes--;
+        this.banished.add(`${option.kind}:${option.id}`);
+        this.options=this.roll();
+        return false;
+      }
+      case 'skip':
+        engine.credits+=120;
+        engine.pendingLevelUps=Math.max(0,engine.pendingLevelUps-1);
+        this.options=null;
+        return true;
+      default:
+        return false;
+    }
   }
 
   finish(){

@@ -122,7 +122,10 @@ function startRun(config){
     discoverable:undiscoveredOperatives(save).map(op=>({id:op.id,codename:op.codename})),
     // Free deployment rolls a fresh seed; a rotating contract supplies its own,
     // derived from the calendar, so every operator faces the same sector.
-    seed:config.seed??Math.floor(Math.random()*1e9)
+    seed:config.seed??Math.floor(Math.random()*1e9),
+    // Watching rather than playing. The engine reads its input from the log
+    // instead of the device, and nothing downstream of `step` can tell.
+    replay:config.replay||null
   };
 
   // The HUD owns the canvas element, so create the DOM before the engine.
@@ -147,7 +150,8 @@ function startRun(config){
     }
   });
 
-  session={engine,renderer,hud,levelUp,pause,config,raf:0,last:performance.now(),detachSticks:[]};
+  session={engine,renderer,hud,levelUp,pause,config,raf:0,last:performance.now(),
+    detachSticks:[],replaying:!!config.replay};
   // Exposed for debugging and automated smoke tests.
   window.__pp=session;
   // Readable from a remote-debugged phone, or from a test, without going
@@ -233,8 +237,22 @@ function tick(now){
     engine.update(dt,input);
   }
 
-  // Present the adaptation screen whenever the engine queues a level.
-  if(engine.pendingLevelUps>0&&!levelUp.element&&!engine.ended&&!pause.open){
+  if(engine.replaying){
+    // Nobody is here to pick a card, so the logged choices are replayed into
+    // the same code the screen would have called. Looped because a reroll or a
+    // banish does not settle the level — the next decision does.
+    let guard=0;
+    while(engine.pendingLevelUps>0&&!engine.ended&&guard++<64){
+      const decision=engine.takeDecision();
+      if(!decision)break;
+      levelUp.applyDecision(decision);
+    }
+    // Out of log, or stalled on a level nothing left in the log can settle.
+    // Either way there is nothing more to watch.
+    const stalled=engine.pendingLevelUps>0&&engine.decisionIndex>=engine.decisions.length;
+    if(!engine.ended&&(engine.replayPlayer.done||stalled))engine.finish(false,'REPLAY ENDED');
+  }else if(engine.pendingLevelUps>0&&!levelUp.element&&!engine.ended&&!pause.open){
+    // Present the adaptation screen whenever the engine queues a level.
     input.releaseSticks();
     levelUp.show(()=>{});
   }
@@ -252,6 +270,16 @@ function finishRun(summary,config){
   pause.close();
   cancelAnimationFrame(session.raf);
 
+  // A replay is a recording being watched, not a contract being run. Nothing
+  // it does is earned: no payout, no unlocks, no medical, no walker record,
+  // and above all no write to the save.
+  if(session.replaying){
+    teardownSession();
+    audio.startMusic('menu');
+    screens.replayFinished(summary,config.replay);
+    return;
+  }
+
   summary.operationId=config.operation?.id||null;
   // A rotating contract keeps only the operator's best attempt at it.
   if(config.contract)recordContract(save,config.contract,summary);
@@ -265,6 +293,11 @@ function finishRun(summary,config){
   if(summary.nemesis)commitNemesis(save,summary.nemesis);
   const payout=commitRun(save,summary);
   screens.setSave(save);
+
+  // The results screen offers to keep it. Captured here rather than stored
+  // automatically: most runs are not worth a shelf slot, and the player is the
+  // only one who knows which was.
+  config.replayCapture=session.engine.replaySnapshot(save);
 
   // Surface unlocks and achievements earned by this run.
   for(const award of payout.awards){

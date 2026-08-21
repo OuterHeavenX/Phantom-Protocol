@@ -538,6 +538,17 @@ p{margin:0}
 .stat-cell b{display:block;margin-top:5px;font-size:17px;color:#eafffc}
 
 .history{display:grid;gap:2px;font-size:10.5px}
+
+/* The replay shelf reuses the operation log's row, with one fewer column and
+   the last one holding buttons rather than a number. */
+.replay-shelf .history-row{grid-template-columns:80px 1fr 1fr 64px 64px 60px 96px}
+.replay-actions{display:flex;gap:4px;justify-content:flex-end;align-items:center}
+.replay-actions .btn{padding:2px 8px;font-size:9px;letter-spacing:.1em}
+.replay-actions .btn.ghost{padding:2px 7px}
+@media(max-width:760px){
+  .replay-shelf .history-row{grid-template-columns:1fr 1fr;gap:4px}
+  .replay-actions{grid-column:1/-1;justify-content:flex-start}
+}
 .history-row{
   display:grid;grid-template-columns:80px 1fr 1fr 90px 64px 64px 44px 56px;
   gap:8px;padding:9px 12px;

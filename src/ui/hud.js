@@ -36,6 +36,14 @@ const template=(operative,ability,engine)=>`
       <div class="mission-bar"><i id="missionBar"></i></div>
     </div>
 
+    ${engine.replaying?`
+    <!-- Watching, not playing. The badge sits in the tally's column so it
+         cannot be mistaken for part of the contract readout. -->
+    <div class="replay-badge" id="replayBadge">
+      <span class="replay-dot"></span>REPLAY
+      <em id="replayProgress">0%</em>
+    </div>`:''}
+
     <div class="hud-panel tally">
       <div class="tally-row"><span>ELIM</span><b id="killsValue">0</b></div>
       <div class="tally-row"><span>CR</span><b id="creditsValue">0</b></div>
@@ -120,6 +128,10 @@ export class Hud{
       template(engine.operative,engine.operative.ability,engine)
     }</div>`;
 
+    // Marks the whole screen so the action buttons can read as inert: during a
+    // replay they show what the recording did, they do not do anything.
+    if(engine.replaying)root.querySelector('#gameScreen')?.classList.add('replaying');
+
     const $=id=>document.getElementById(id);
     this.el={
       screen:$('gameScreen'),canvas:$('gameCanvas'),
@@ -138,6 +150,7 @@ export class Hud{
       dashBtn:$('dashBtn'),dashFill:$('dashFill'),pauseBtn:$('pauseBtn'),
       turretBtn:$('turretBtn'),turretFill:$('turretFill'),turretCount:$('turretCount'),
       kitBtn:$('kitBtn'),kitName:$('kitName'),
+      replayBadge:$('replayBadge'),replayProgress:$('replayProgress'),
       ordnanceBtn:$('ordnanceBtn'),ordnanceFill:$('ordnanceFill'),
       stickMove:$('stickMove'),knobMove:$('knobMove'),
       stickAim:$('stickAim'),knobAim:$('knobAim'),
@@ -256,6 +269,11 @@ export class Hud{
     this.set('turretCount',el.turretCount,`${engine.deployedTurrets}/${kit.turrets}`);
     el.turretBtn.classList.toggle('ready',engine.canDeploy);
     el.turretBtn.classList.toggle('maxed',engine.deployedTurrets>=kit.turrets);
+
+    if(el.replayProgress&&engine.replayPlayer?.total){
+      const ratio=Math.min(1,engine.replayPlayer.consumed/engine.replayPlayer.total);
+      this.set('replayProgress',el.replayProgress,`${Math.round(ratio*100)}%`);
+    }
 
     this.updateMissionObjective();
     this.updateObjectives();

@@ -15,6 +15,8 @@ import {
 } from '../save/progression.js';
 import {portraitSvg,portraitMarkup,dossierCardMarkup} from '../render/portraits.js';
 import {Typewriter} from './typewriter.js';
+import {storeReplay,deleteReplay,MAX_REPLAYS} from '../save/storage.js';
+import {packLog,unpackLog} from '../game/replay.js';
 import {CAMPAIGN,ACTS,OBJECTIVE_TYPES,nextOperation,campaignProgress,operationUnlocked,
   operationsInAct,actUnlocked} from '../../data/campaign.js';
 import {activeContracts,resolveDifficulty,timeRemaining} from '../../data/contracts.js';
@@ -1521,9 +1523,118 @@ export class Screens{
             <span>${run.level}</span>
             <span>${run.jp}</span>
           </div>`).join('')}
-       </div>`:'<p class="muted">No operations on file.</p>'}`,
+       </div>`:'<p class="muted">No operations on file.</p>'}
+
+       <h3 class="section-title">SAVED REPLAYS</h3>
+       ${this.replayShelfMarkup()}`,
       {eyebrow:'TELEMETRY',wide:true}));
+    this.wireReplayShelf();
     this.wireBack();
+  }
+
+  // ---- replays -------------------------------------------------------------
+
+  // A replay is the run's seed plus its input log, so watching one re-runs the
+  // simulation rather than playing back a recording of it. Nothing it does is
+  // earned — the payout, the unlocks and the save are all skipped.
+  replayShelfMarkup(){
+    const replays=this.save.replays||[];
+    if(!replays.length){
+      return `<p class="muted">No replays saved. Save one from the results screen after an
+        operation; the shelf keeps the ${MAX_REPLAYS} most recent.</p>`;
+    }
+    return `<div class="history replay-shelf">
+      <div class="history-row head">
+        <span>RESULT</span><span>OPERATIVE</span><span>THEATRE</span>
+        <span>TIME</span><span>KILLS</span><span>SIZE</span><span></span>
+      </div>
+      ${replays.map(entry=>`
+        <div class="history-row ${entry.result?.victory?'win':'loss'}">
+          <span>${entry.result?.victory?'CLEARED':'FAILED'}</span>
+          <span>${escape(OPERATIVES.find(o=>o.id===entry.operative)?.codename||entry.operative)}</span>
+          <span>${escape(MAPS.find(m=>m.id===entry.map)?.name||entry.map)}</span>
+          <span>${formatTime(entry.result?.elapsed||0)}</span>
+          <span>${formatNumber(entry.result?.kills||0)}</span>
+          <span>${Math.max(1,Math.round((entry.bytes||0)/1024))} KB</span>
+          <span class="replay-actions">
+            <button class="btn small" data-watch="${entry.id}">WATCH</button>
+            <button class="btn small ghost" data-drop="${entry.id}">✕</button>
+          </span>
+        </div>`).join('')}
+    </div>`;
+  }
+
+  wireReplayShelf(){
+    root().querySelectorAll('[data-watch]').forEach(button=>{
+      button.addEventListener('click',()=>{
+        const entry=(this.save.replays||[]).find(r=>r.id===button.dataset.watch);
+        if(entry)this.watchReplay(entry);
+      });
+    });
+    root().querySelectorAll('[data-drop]').forEach(button=>{
+      button.addEventListener('click',()=>{
+        this.click();
+        if(deleteReplay(this.save,button.dataset.drop)){
+          this.persist();
+          this.stats();
+        }
+      });
+    });
+  }
+
+  async watchReplay(entry){
+    this.audio?.play('confirm');
+    let log;
+    try{
+      log=await unpackLog(entry.log);
+    }catch(err){
+      // The only way here is a browser with no DecompressionStream reading a
+      // save written by one that had it. Say so rather than failing blank.
+      this.audio?.play('deny');
+      console.warn('[red-static] replay could not be opened',err);
+      return;
+    }
+    this.teardownBackground();
+    // The run is rebuilt from the replay's own header rather than from the
+    // account watching it: an operative the viewer has never unlocked, or a
+    // development tree they have not bought, still has to produce the sector
+    // and the adaptation offers the recording was made against.
+    this.startGame({
+      operative:OPERATIVES.find(o=>o.id===entry.operative)||OPERATIVES[0],
+      map:MAPS.find(m=>m.id===entry.map)||MAPS[0],
+      duration:entry.duration,
+      durationSpec:DURATIONS.find(d=>d.minutes===entry.duration)||DURATIONS[1],
+      difficulty:DIFFICULTIES_BY_ID[entry.difficulty]||DIFFICULTIES_BY_ID[1],
+      seed:entry.seed,
+      replay:{...entry,log}
+    });
+  }
+
+  // Shown when a replay stops, in place of the results screen — there is no
+  // payout to report because nothing was earned.
+  replayFinished(summary,entry){
+    this.shell(`
+      <div class="results ${summary.victory?'victory':'defeat'}">
+        <div class="results-inner">
+          <span class="eyebrow">REPLAY // ${escape(MAPS.find(m=>m.id===entry.map)?.name||entry.map)}</span>
+          <h1>REPLAY ENDED</h1>
+          <p class="results-reason">${escape(summary.reason||'')}</p>
+          <div class="payout-row">
+            <div class="payout-cell"><span>SURVIVAL</span><b>${formatTime(summary.elapsed)}</b></div>
+            <div class="payout-cell"><span>ELIMINATIONS</span><b>${formatNumber(summary.kills)}</b></div>
+            <div class="payout-cell"><span>LEVEL</span><b>${summary.level}</b></div>
+            <div class="payout-cell"><span>RECORDED</span><b>${formatTime(entry.result?.elapsed||0)}</b></div>
+          </div>
+          <p class="muted">Replays run the simulation again from the recorded seed and input.
+            Nothing here is earned: no payout, no unlocks, and no write to the record.</p>
+          <div class="button-row center">
+            <button class="btn primary" id="watchAgainBtn">WATCH AGAIN</button>
+            <button class="btn" id="commandBtn">RETURN TO COMMAND</button>
+          </div>
+        </div>
+      </div>`,{scan:false});
+    root().querySelector('#watchAgainBtn').addEventListener('click',()=>this.watchReplay(entry));
+    root().querySelector('#commandBtn').addEventListener('click',()=>{this.click();this.stats()});
   }
 
   // ---- settings ----------------------------------------------------------
@@ -1812,11 +1923,27 @@ export class Screens{
 
           <div class="button-row center">
             <button class="btn primary" id="againBtn">RUN AGAIN</button>
+            ${config.replayCapture?'<button class="btn" id="saveReplayBtn">SAVE REPLAY</button>':''}
             <button class="btn" id="commandBtn">RETURN TO COMMAND</button>
           </div>
         </div>
       </div>`,{scan:false});
 
+    const saveReplayBtn=root().querySelector('#saveReplayBtn');
+    saveReplayBtn?.addEventListener('click',async()=>{
+      saveReplayBtn.disabled=true;
+      const capture=config.replayCapture;
+      const stored=storeReplay(this.save,{...capture,log:await packLog(capture.log)},summary);
+      if(stored){
+        this.persist();
+        this.audio?.play('unlock',{volume:.7});
+        saveReplayBtn.textContent='REPLAY SAVED';
+      }else{
+        // Only one thing can refuse it: a log too large for the whole shelf.
+        this.audio?.play('deny');
+        saveReplayBtn.textContent='REPLAY TOO LARGE';
+      }
+    });
     this.wireCounselButtons(()=>this.results(summary,payout,config));
     document.getElementById('commandBtn').addEventListener('click',()=>{
       this.click();

@@ -18,6 +18,7 @@ import {ORDNANCE_BY_ID} from '../../data/ordnance.js';
 import {liveryFor} from '../../data/liveries.js';
 import {DEPLOY_KITS,deployKit} from '../../data/deploykits.js';
 import {vaultKind} from '../../data/vaults.js';
+import {captureStep,ReplayRecorder,ReplayPlayer,REPLAY_VERSION} from './replay.js';
 import {ABILITIES,TRAITS,distanceToSegment} from './abilities.js';
 import {ENEMIES_BY_ID,STATUS_EFFECTS} from '../../data/enemies.js';
 import {BOSSES_BY_ID,MINIBOSSES} from '../../data/bosses.js';
@@ -79,7 +80,23 @@ export class Engine{
     this.devBonuses=devBonuses(config.devRanks||{});
     this.settings=config.settings;
     this.audio=config.audio;
-    this.rng=new Rng(config.seed??Math.floor(Math.random()*1e9));
+    // Kept, not just consumed: a replay is the seed plus the input log, so the
+    // resolved seed has to survive the run even when the caller passed none.
+    this.seed=config.seed??Math.floor(Math.random()*1e9);
+    this.rng=new Rng(this.seed);
+
+    // ---- Replay ------------------------------------------------------------
+    // Recording is always on and costs one packed run-length record per change
+    // of input. Playing back replaces the live input entirely: `step` reads the
+    // log instead of the device, so nothing downstream knows the difference.
+    this.stepIndex=0;
+    this.replayPlayer=config.replay?new ReplayPlayer(config.replay.log):null;
+    this.replayRecorder=this.replayPlayer?null:new ReplayRecorder();
+    // Choices made outside `step` — which adaptation was taken, rerolled,
+    // banished or skipped — are input too, and the simulation cannot infer
+    // them from the seed.
+    this.decisions=this.replayPlayer?(config.replay.decisions||[]).slice():[];
+    this.decisionIndex=0;
 
     this.operative=config.operative;
     this.map=config.map;
@@ -435,7 +452,14 @@ export class Engine{
     if(this.opticTarget&&(this.opticTarget.dead||this.elapsed-this.opticTargetAt>OPTIC_LOCK_HOLD)){
       this.opticTarget=null;
     }
-    this.updateInput(dt,input);
+    // Every step resolves its input into one frozen snapshot, and recording
+    // and playback both hang off that single point. Doing it per step rather
+    // than per frame is what makes a replay independent of frame rate: a slow
+    // frame runs up to five steps and a fast one runs none.
+    const frame=this.replayPlayer?this.replayPlayer.next():captureStep(input,this.camera,this.player);
+    this.replayRecorder?.record(frame);
+    this.stepIndex++;
+    this.updateInput(dt,frame);
     this.rebuildHashes();
     this.world.update(dt,this);
     this.director.update(dt);
@@ -2190,6 +2214,51 @@ export class Engine{
     let count=0;
     for(const turret of this.turrets)if(turret.planted&&!turret.dead)count++;
     return count;
+  }
+
+  // ---- Replay --------------------------------------------------------------
+
+  get replaying(){return !!this.replayPlayer}
+
+  // Logs a choice the player made on the adaptation screen. Called by the
+  // level-up UI, which is the only thing that can make one.
+  recordDecision(kind,index=-1){
+    if(this.replayPlayer)return;
+    this.decisions.push({at:this.stepIndex,kind,index});
+  }
+
+  // The next logged choice during playback, or null once the log runs out —
+  // which happens when a replay was cut short, and is not an error.
+  takeDecision(){
+    if(!this.replayPlayer)return null;
+    return this.decisions[this.decisionIndex++]||null;
+  }
+
+  // Everything needed to rebuild this run from scratch. The unlocked weapon
+  // list rides along because the adaptation pool is built from it, so a replay
+  // watched on an account with different unlocks would be offered different
+  // cards and diverge on the first level.
+  replaySnapshot(save){
+    if(!this.replayRecorder)return null;
+    const unlocked=Object.entries(save?.weapons||{})
+      .filter(([,record])=>record?.unlocked).map(([id])=>id);
+    return {
+      v:REPLAY_VERSION,
+      seed:this.seed,
+      recordedAt:Date.now(),
+      operative:this.operative.id,
+      map:this.map.id,
+      duration:this.durationMinutes,
+      difficulty:this.difficulty.id,
+      primary:this.config.primary||null,
+      squadmate:this.config.squadmate?.id||null,
+      operation:this.config.operation?.id||null,
+      devRanks:this.config.devRanks||{},
+      masteryXp:this.config.masteryXp||0,
+      unlocked,
+      decisions:this.decisions,
+      log:this.replayRecorder.encode()
+    };
   }
 
   get deploySpec(){return deploySpec(this.deployRank)}

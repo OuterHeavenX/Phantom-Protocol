@@ -63,9 +63,26 @@ Remaining:
 3. ~~Per-weapon secondary fire modes, as an eighth Gunsmith slot.~~ Shipped, as a rail
    of six universal ordnance modules rather than eighteen bespoke alternate fires — one
    module fits any weapon, so the choice is what the primary lacks.
-4. Replay capture using the seeded, fixed-timestep simulation. No longer blocked — the
-   simulation now reproduces exactly from its seed, so a replay is an input log plus a
-   seed rather than a state dump.
+4. ~~Replay capture using the seeded, fixed-timestep simulation.~~ Shipped. A replay is
+   the seed plus the input log, so watching one re-runs the simulation rather than
+   playing back a recording of it. Two things make that exact rather than approximate:
+   input is captured once per fixed step rather than once per rendered frame, so the
+   log does not drift when the recording and playback machines disagree about frame
+   rate; and the simulation consumes the quantised values live as well as on replay, so
+   there is no rounded copy to diverge from. Adaptation choices are logged alongside —
+   which card was taken, rerolled, banished or skipped — because the seed cannot
+   predict them, and so is the account's unlocked weapon list, because the offer pool is
+   built from it. Measured over ninety seconds of scripted play with every action
+   firing: player position identical to six decimals, and no difference in health,
+   damage dealt or taken, kills, credits, level, XP, weapons, passives or vault state,
+   through the compressed round trip. Nothing a replay does is earned — no payout, no
+   unlocks, no write to the save — and that is verified, not asserted.
+   The log run-length encodes held input away, then gzips, which is what saves the case
+   the run-length pass cannot help with: a mouse or an analog stick moves a little every
+   single step. Worst case measured is a thirty-minute contract at about 570 KB; real
+   keyboard play is a fraction of that. Saving is offered, not automatic, and a save
+   write that hits the origin's quota now sheds replays oldest-first and retries rather
+   than losing the whole session's progression.
 5. Performance profiling on low-end mobile hardware. The instrumentation half is
    shipped: SETTINGS > show fps now draws frame percentiles, the sim/render split, live
    entity and world counts, heap, and — the point of it — a step-clamp counter that goes

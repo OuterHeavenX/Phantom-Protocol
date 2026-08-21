@@ -260,6 +260,30 @@
   align-self:flex-end;
 }
 
+/* ---- Replay badge -------------------------------------------------------
+   Only present while watching a recording, and deliberately in the theatre's
+   warning colour rather than its accent: the point is that what is on screen
+   is not a contract in progress. */
+.replay-badge{
+  grid-area:2/3;justify-self:end;
+  display:flex;align-items:center;gap:7px;
+  padding:6px 10px;
+  font-size:9px;letter-spacing:.2em;color:#ffd166;
+  border:1px solid rgba(255,209,102,.4);
+  background:rgba(26,18,4,.82);
+  backdrop-filter:blur(6px);
+}
+.replay-badge em{font-style:normal;color:var(--muted);font-variant-numeric:tabular-nums}
+.replay-dot{
+  width:7px;height:7px;border-radius:50%;
+  background:#ff7068;box-shadow:0 0 8px rgba(255,112,104,.9);
+  animation:replay-pulse 1.6s ease-in-out infinite;
+}
+@keyframes replay-pulse{0%,100%{opacity:1}50%{opacity:.25}}
+/* Nobody is driving, so the action buttons are readouts rather than controls. */
+.replaying .hud-actions{opacity:.45}
+@media(prefers-reduced-motion:reduce){.replay-dot{animation:none}}
+
 /* ---- Status strip ------------------------------------------------------- */
 
 .status-strip{
