@@ -924,3 +924,7 @@ input[type=range]::-moz-range-thumb{
 }
 .contract-best{margin-top:.55rem;font-size:.72rem;letter-spacing:.06em}
 .op-row .op-index{white-space:nowrap}
+
+/* Secondary fire — the HUD's ordnance button. */
+.ordnance-btn span{letter-spacing:.12em}
+.ordnance-btn.ready{border-color:rgba(255,179,92,.55)}

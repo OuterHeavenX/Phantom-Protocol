@@ -67,6 +67,10 @@ const template=(operative,ability)=>`
         <span class="ability-state" id="abilityState">READY</span>
         <i class="ability-fill" id="abilityFill"></i>
       </button>
+      ${engine.ordnance?`<button class="dash-btn ordnance-btn" id="ordnanceBtn" type="button" title="${engine.ordnance.desc}">
+        <span>${engine.ordnance.short}</span>
+        <i class="dash-fill" id="ordnanceFill"></i>
+      </button>`:''}
       <button class="dash-btn turret-btn" id="turretBtn" type="button" title="Deploy turret">
         <span>TURRET</span>
         <em class="turret-count" id="turretCount">0/1</em>
@@ -127,6 +131,7 @@ export class Hud{
       abilityBtn:$('abilityBtn'),abilityState:$('abilityState'),abilityFill:$('abilityFill'),
       dashBtn:$('dashBtn'),dashFill:$('dashFill'),pauseBtn:$('pauseBtn'),
       turretBtn:$('turretBtn'),turretFill:$('turretFill'),turretCount:$('turretCount'),
+      ordnanceBtn:$('ordnanceBtn'),ordnanceFill:$('ordnanceFill'),
       stickMove:$('stickMove'),knobMove:$('knobMove'),
       stickAim:$('stickAim'),knobAim:$('knobAim'),
       squadStrip:$('squadStrip'),
@@ -210,6 +215,13 @@ export class Hud{
     this.set('abilityState',el.abilityState,
       abilityReady?'READY':`${player.abilityCooldown.toFixed(1)}s`);
     el.abilityBtn.classList.toggle('ready',abilityReady);
+
+    // Secondary fire, when a module is fitted.
+    if(el.ordnanceBtn){
+      const max=player.ordnanceMax||1;
+      el.ordnanceFill.style.transform=`scaleX(${1-clamp(player.ordnanceCooldown/max,0,1)})`;
+      el.ordnanceBtn.classList.toggle('ready',player.ordnanceCooldown<=0);
+    }
 
     const dashRatio=1-clamp(player.dashCooldown/1.15,0,1);
     el.dashFill.style.transform=`scaleX(${dashRatio})`;

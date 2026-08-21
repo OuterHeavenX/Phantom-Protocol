@@ -48,7 +48,7 @@ export function defaultSettings(){
 // Weapon records are account-wide: experience earned on a weapon belongs to
 // the weapon, not to whoever was carrying it.
 function defaultWeaponRecord(unlocked=false){
-  return{unlocked,maxLevel:0,timesTaken:0,kills:0,xp:0,damage:0,build:null,seenAttachments:[]};
+  return{unlocked,maxLevel:0,timesTaken:0,kills:0,xp:0,damage:0,build:null,ordnance:'breach',seenAttachments:[]};
 }
 
 function defaultOperativeRecord(){

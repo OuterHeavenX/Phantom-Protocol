@@ -16,6 +16,7 @@ import {
 import {portraitSvg,portraitMarkup,dossierCardMarkup} from '../render/portraits.js';
 import {CAMPAIGN,OBJECTIVE_TYPES,nextOperation,campaignProgress,operationUnlocked} from '../../data/campaign.js';
 import {activeContracts,resolveDifficulty,timeRemaining} from '../../data/contracts.js';
+import {ORDNANCE,ORDNANCE_BY_ID,ORDNANCE_UNLOCK,ordnanceUnlocked} from '../../data/ordnance.js';
 import {contractRecord} from '../save/contracts.js';
 import {
   SLOTS,slotLabel,attachmentsFor,ATTACHMENTS_BY_ID,defaultBuild,MAX_WEAPON_RANK
@@ -486,7 +487,13 @@ export class Screens{
     if(!weapon||!save.weapons[weapon.id]?.unlocked)return null;
     const record=save.weapons[weapon.id];
     const rank=weaponRank(record);
-    return{weapon,record,rank,build:sanitizeBuild(weapon,stored.build||record.build,rank)};
+    return{
+      weapon,record,rank,
+      build:sanitizeBuild(weapon,stored.build||record.build,rank),
+      // Kept off the attachment build on purpose — sanitizeBuild rebuilds from
+      // the known slot list and would silently drop an unrecognised key.
+      ordnance:ORDNANCE_BY_ID[record.ordnance]||ORDNANCE[0]
+    };
   }
 
   // Markup for the loadout strip shown before deployment.
@@ -594,6 +601,8 @@ export class Screens{
     const rank=weaponRank(record);
     const progress=weaponRankProgress(record);
     const build=sanitizeBuild(weapon,record.build,rank);
+    // Command rating gates which secondary-fire modules the bench will fit.
+    const rating=accountLevel(save.profile.accountXp||0).level;
     const stats=previewStats(weapon,build,rank);
     const profile=buildProfile(weapon,build,rank);
     const rarity=WEAPON_RARITY[weapon.rarity]||'#9fb6b8';
@@ -673,6 +682,27 @@ export class Screens{
                   </div>
                 </div>`;
               }).join('')}
+
+              <div class="gs-slot" data-slot="ordnance">
+                <div class="gs-slot-head">
+                  <span class="eyebrow">SECONDARY FIRE</span>
+                  <i class="gs-next">R KEY · RIGHT STICK</i>
+                </div>
+                <div class="gs-options">
+                  ${ORDNANCE.map(module=>{
+                    const unlocked=ordnanceUnlocked(module.id,rating);
+                    const active=(record.ordnance||ORDNANCE[0].id)===module.id;
+                    return `<button class="gs-option ${active?'active':''} ${unlocked?'':'locked'}"
+                              data-ordnance="${module.id}" ${unlocked?'':'disabled'}
+                              title="${escape(module.desc)}">
+                      <b>${escape(module.icon)} ${escape(module.name)}</b>
+                      <span>${unlocked
+                        ? `${escape(module.desc)} · ${module.cooldown}s`
+                        : `Locked · command rating ${ORDNANCE_UNLOCK[module.id]}`}</span>
+                    </button>`;
+                  }).join('')}
+                </div>
+              </div>
             </div>
 
             <aside class="gs-readout">
@@ -704,6 +734,18 @@ export class Screens{
 
     root().querySelectorAll('[data-bench]').forEach(button=>{
       button.addEventListener('click',()=>{this.click();this.gunsmith(button.dataset.bench)});
+    });
+
+    root().querySelectorAll('[data-ordnance]').forEach(button=>{
+      button.addEventListener('click',()=>{
+        if(button.disabled)return;
+        this.audio?.play('tech');
+        // The module lives on the weapon record rather than in the build, so a
+        // weapon keeps the secondary that suits it.
+        record.ordnance=button.dataset.ordnance;
+        this.persist();
+        this.gunsmith(weapon.id);
+      });
     });
 
     root().querySelectorAll('[data-fit]').forEach(button=>{

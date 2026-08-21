@@ -107,7 +107,10 @@ function startRun(config){
     // Primary weapon and its bench build, resolved into combat modifiers.
     primary:config.primary?{
       weaponId:config.primary.weapon.id,
-      mods:resolveBuild(config.primary.weapon,config.primary.build,config.primary.rank)
+      mods:resolveBuild(config.primary.weapon,config.primary.build,config.primary.rank),
+      // Secondary fire rides alongside the attachment build rather than inside
+      // it: sanitizeBuild rebuilds from the known slot list and would drop it.
+      ordnance:config.primary.ordnance||null
     }:null,
     // Files a personnel cache can turn up in this run.
     discoverable:undiscoveredOperatives(save).map(op=>({id:op.id,codename:op.codename})),
@@ -182,6 +185,7 @@ function startRun(config){
   hud.el.abilityBtn.addEventListener('click',()=>input.setAction('ability'));
   hud.el.dashBtn.addEventListener('click',()=>input.setAction('dash'));
   hud.el.turretBtn.addEventListener('click',()=>input.setAction('deploy'));
+  hud.el.ordnanceBtn?.addEventListener('click',()=>input.setAction('secondary'));
 
   engine.onEnd=summary=>finishRun(summary,config);
   engine.onBossSpawn=boss=>{

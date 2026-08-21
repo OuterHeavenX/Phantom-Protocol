@@ -46,7 +46,9 @@ Remaining:
    AI, the bosses and the director moved onto the seeded stream; particles and audio
    deliberately stayed off it, which is now enforced by test rather than convention.
 2. A second development tree branch gated behind account level.
-3. Per-weapon secondary fire modes, as an eighth Gunsmith slot.
+3. ~~Per-weapon secondary fire modes, as an eighth Gunsmith slot.~~ Shipped, as a rail
+   of six universal ordnance modules rather than eighteen bespoke alternate fires — one
+   module fits any weapon, so the choice is what the primary lacks.
 4. Replay capture using the seeded, fixed-timestep simulation. No longer blocked — the
    simulation now reproduces exactly from its seed, so a replay is an input log plus a
    seed rather than a state dump.

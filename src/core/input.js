@@ -22,7 +22,7 @@ export class Input{
     this.stickAim={x:0,y:0,active:false};
     this.gamepadIndex=null;
     this.lastScheme='keyboard';
-    this.actions={dash:false,ability:false,pause:false,interact:false,swap:false,deploy:false};
+    this.actions={dash:false,ability:false,pause:false,interact:false,swap:false,deploy:false,secondary:false};
     this.padDeployHeld=false;
     this.consumed=new Set();
     this.enabled=true;
@@ -109,11 +109,16 @@ export class Input{
     if(this.pressedThisFrame.has('tab'))this.setAction('swap');
     // Deploy is edge-triggered: holding the key must not empty the whole kit.
     if(this.pressedThisFrame.has('f'))this.setAction('deploy');
+    // Secondary fire. R on the keyboard, right mouse button, or the HUD's own
+    // button on touch — the same three routes the other actives use.
+    if(this.pressedThisFrame.has('r'))this.setAction('secondary');
     if(pad){
       if(pad.dash)this.setAction('dash');
       if(pad.ability)this.setAction('ability');
       if(pad.pause)this.setAction('pause');
       if(pad.deploy&&!this.padDeployHeld)this.setAction('deploy');
+      if(pad.secondary&&!this.padSecondaryHeld)this.setAction('secondary');
+      this.padSecondaryHeld=!!pad.secondary;
       this.padDeployHeld=pad.deploy;
     }
 
@@ -148,6 +153,7 @@ export class Input{
       dash:held(0)||held(6),
       ability:held(2)||held(7),
       deploy:held(1)||held(4),
+      secondary:held(5)||held(3),
       pause:held(9),
       fire:held(5)||held(7)
     };

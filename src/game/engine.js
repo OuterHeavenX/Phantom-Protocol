@@ -12,6 +12,8 @@ import {CodecDirector} from './codec.js';
 import {Squadmate} from './squadmate.js';
 import {Nemesis,nemesisScaling} from './nemesis.js';
 import {Fx} from './fx.js';
+import {ORDNANCE_FIRE} from './ordnance.js';
+import {ORDNANCE_BY_ID} from '../../data/ordnance.js';
 import {ABILITIES,TRAITS,distanceToSegment} from './abilities.js';
 import {ENEMIES_BY_ID,STATUS_EFFECTS} from '../../data/enemies.js';
 import {BOSSES_BY_ID,MINIBOSSES} from '../../data/bosses.js';
@@ -207,6 +209,7 @@ export class Engine{
       hitFlash:0,invulnerable:0,
       dashCooldown:0,dashTimer:0,dashDirX:0,dashDirY:0,
       abilityCooldown:0,abilityMax:op.ability.cooldown,
+      ordnanceCooldown:0,ordnanceMax:0,
       shieldTimer:0,shieldAngle:0,shieldReflect:false,
       damageBuff:1,damageBuffTimer:0,
       revives:(dev.revives||0),
@@ -291,6 +294,18 @@ export class Engine{
     this.opticTargetAt=0;
     if(this.primaryMods?.field?.detection){
       this.detectionMult*=1+this.primaryMods.field.detection;
+    }
+    // The ordnance module fitted to the primary. Its cooldown answers to the
+    // same development rank that shortens the operative's ability, so a build
+    // invested in actives feels it on both.
+    // Resolved here rather than trusted from the caller: the config may carry
+    // the module object or just its id, and an unknown id resolves to nothing
+    // rather than to a half-built module that fires blanks.
+    const fitted=primary?.ordnance;
+    this.ordnance=ORDNANCE_BY_ID[typeof fitted==='string'?fitted:fitted?.id]||null;
+    if(this.ordnance){
+      this.player.ordnanceMax=this.ordnance.cooldown*(1+(dev.abilityCooldown||0))*this.abilityCooldownMult;
+      this.player.ordnanceCooldown=this.ordnance.cooldown*.5;
     }
     // "Expanded Loadout" grants a second starting weapon.
     if(dev.startingWeapons&&this.config.secondWeapon){
@@ -434,6 +449,7 @@ export class Engine{
     const player=this.player;
     player.dashCooldown=Math.max(0,player.dashCooldown-dt);
     player.abilityCooldown=Math.max(0,player.abilityCooldown-dt);
+    player.ordnanceCooldown=Math.max(0,player.ordnanceCooldown-dt);
     this.deployCooldown=Math.max(0,this.deployCooldown-dt);
 
     if(input.takeAction('deploy'))this.deployTurret();
@@ -467,6 +483,16 @@ export class Engine{
       if(ability&&ability(this,player)){
         player.abilityCooldown=player.abilityMax;
         this.telemetry.abilitiesUsed++;
+      }
+    }
+
+    // Secondary fire. A module returns false when it found nothing to do — a
+    // marker round with nothing in the blast — and keeps its charge.
+    if(input.takeAction('secondary')&&this.ordnance&&player.ordnanceCooldown<=0){
+      const fire=ORDNANCE_FIRE[this.ordnance.id];
+      if(fire&&fire(this,player,this.ordnance,this.ordnanceDamage())){
+        player.ordnanceCooldown=player.ordnanceMax;
+        this.telemetry.ordnanceFired=(this.telemetry.ordnanceFired||0)+1;
       }
     }
 
@@ -824,6 +850,7 @@ export class Engine{
       const victim=this.aiTargetFor(enemy);
       context.player=victim;
       enemy.hitFlash=Math.max(0,enemy.hitFlash-dt);
+      if(enemy.markedTimer>0)enemy.markedTimer-=dt;
       enemy.walkPhase+=dt*6;
 
       // Support and guardian auras buff or shield nearby allies.
@@ -876,6 +903,15 @@ export class Engine{
 
     // Auras applied after positions settle so the reads are consistent.
     this.applySupportAuras();
+  }
+
+  // A module's damage rides on the primary's, so secondary fire stays relevant
+  // against late-contract health pools instead of decaying into chip damage.
+  ordnanceDamage(){
+    if(!this.ordnance)return 0;
+    const weapon=this.loadout.weapons.find(w=>w.id===this.primaryId)||this.loadout.weapons[0];
+    const base=weapon?weapon.damage(this.stats):this.stats.damage*8;
+    return base*(this.ordnance.damageScale||1);
   }
 
   aiContext(dt){
@@ -1081,6 +1117,11 @@ export class Engine{
 
     const stats=this.stats;
     let damage=amount*this.player.damageBuff;
+
+    // A marker round paints a target: everything that hits it while the paint
+    // lasts does more. Applied here rather than at each damage source so the
+    // mark cannot be inconsistent between a bullet, a blast and a burn.
+    if(target.markedTimer>0)damage*=target.markedMult||1;
 
     // Elite/boss damage bonus from the development tree.
     if(target.elite||target.boss)damage*=this.eliteDamageMult;
