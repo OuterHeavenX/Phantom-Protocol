@@ -236,7 +236,7 @@ function nameplate(ctx,mate,color,text){
   ctx.restore();
 }
 
-export function drawPlayer(ctx,player,operative,time){
+export function drawPlayer(ctx,player,operative,time,weaponTint){
   const moving=Math.min(1,Math.hypot(player.vx,player.vy)/120);
   drawShadow(ctx,player.x,player.y,player.radius,.4);
 
@@ -263,7 +263,9 @@ export function drawPlayer(ctx,player,operative,time){
     phase:player.walkPhase*7,
     moving,
     weapon:WEAPON_LOOK[operative.weapon]||'rifle',
-    weaponColor:operative.color,
+    // A livery tints the weapon in the operative's hands. Without one the
+    // weapon stays the operative's own accent, as it always has.
+    weaponColor:weaponTint||operative.color,
     flash:player.hitFlash>0,
     armor:1
   });

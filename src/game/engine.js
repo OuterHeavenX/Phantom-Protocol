@@ -14,6 +14,7 @@ import {Nemesis,nemesisScaling} from './nemesis.js';
 import {Fx} from './fx.js';
 import {ORDNANCE_FIRE} from './ordnance.js';
 import {ORDNANCE_BY_ID} from '../../data/ordnance.js';
+import {liveryFor} from '../../data/liveries.js';
 import {ABILITIES,TRAITS,distanceToSegment} from './abilities.js';
 import {ENEMIES_BY_ID,STATUS_EFFECTS} from '../../data/enemies.js';
 import {BOSSES_BY_ID,MINIBOSSES} from '../../data/bosses.js';
@@ -319,6 +320,15 @@ export class Engine{
     // Resolved here rather than trusted from the caller: the config may carry
     // the module object or just its id, and an unknown id resolves to nothing
     // rather than to a half-built module that fires blanks.
+    // Cosmetic finish on the primary. Keyed by weapon id rather than held as a
+    // single value, so a weapon picked up mid-contract keeps its own default
+    // instead of inheriting the primary's paint.
+    this.liveries={};
+    if(primary?.livery){
+      const livery=liveryFor(typeof primary.livery==='string'?primary.livery:primary.livery?.id);
+      if(livery&&(livery.tracer||livery.body))this.liveries[this.primaryId]=livery;
+    }
+
     const fitted=primary?.ordnance;
     this.ordnance=ORDNANCE_BY_ID[typeof fitted==='string'?fitted:fitted?.id]||null;
     if(this.ordnance){
@@ -922,6 +932,18 @@ export class Engine{
 
     // Auras applied after positions settle so the reads are consistent.
     this.applySupportAuras();
+  }
+
+  // The tracer a weapon fires, or null to leave its behaviour's own colour
+  // alone. Standard Issue stores no tracer, so an unfitted loadout resolves to
+  // null here and every shot looks exactly as it always has.
+  liveryTracer(weapon){
+    return this.liveries[weapon?.id]?.tracer||null;
+  }
+
+  // The tint of the weapon in the operative's hands, for the renderer.
+  liveryBody(weaponId){
+    return this.liveries[weaponId]?.body||null;
   }
 
   // A module's damage rides on the primary's, so secondary fire stays relevant

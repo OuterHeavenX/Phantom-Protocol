@@ -752,7 +752,7 @@ export class Renderer{
 
     for(const entity of sortable){
       if(entity===engine.player){
-        drawPlayer(ctx,engine.player,engine.operative,time);
+        drawPlayer(ctx,engine.player,engine.operative,time,engine.liveryBody?.(engine.primaryId));
       }else if(entity.codename!==undefined&&entity.operative!==undefined){
         drawSquadmate(ctx,entity,time);
       }else if(entity.boss){

@@ -110,7 +110,8 @@ function startRun(config){
       mods:resolveBuild(config.primary.weapon,config.primary.build,config.primary.rank),
       // Secondary fire rides alongside the attachment build rather than inside
       // it: sanitizeBuild rebuilds from the known slot list and would drop it.
-      ordnance:config.primary.ordnance||null
+      ordnance:config.primary.ordnance||null,
+      livery:config.primary.livery||null
     }:null,
     // Files a personnel cache can turn up in this run.
     discoverable:undiscoveredOperatives(save).map(op=>({id:op.id,codename:op.codename})),

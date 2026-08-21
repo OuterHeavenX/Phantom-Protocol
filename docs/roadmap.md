@@ -66,5 +66,10 @@ Remaining:
    used, escalating to twenty minutes on GHOST, with SIGNAL finally forming sentences.
    Fixing it turned up that op6 had never been launchable — see below.
 9. Voice or typewriter pacing on briefing dialogue rather than a straight fade-in.
-10. Weapon camouflage and charm cosmetics earned at the higher weapon ranks.
+10. ~~Weapon camouflage and charm cosmetics earned at the higher weapon ranks.~~ Shipped
+   as liveries instead. Camouflage does not survive this camera: the weapon is a 15x3.2
+   world-unit sliver, roughly forty by nine device pixels, drawn in two flat colours and
+   rotating with the operative — there is no surface for a pattern and a charm would be
+   sub-pixel. A livery paints the tracer and the weapon tint instead, which is visible on
+   every trigger pull at any zoom.
 11. Saved Gunsmith presets, so one weapon can carry several named builds.

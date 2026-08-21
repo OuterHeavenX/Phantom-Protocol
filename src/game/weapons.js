@@ -158,6 +158,15 @@ function fireDirection(engine,weapon,target){
 // Behaviors
 // ---------------------------------------------------------------------------
 
+// A weapon wearing a livery fires that livery's tracer; everything else keeps
+// the colour its behaviour has always used. Routed through one function rather
+// than seven literals so a livery cannot reach some shots and miss others —
+// the projectile colour also drives the trail and the impact spark, so this is
+// the whole visible chain from muzzle to hit.
+function tracer(weapon,engine,fallback){
+  return engine.liveryTracer?.(weapon)||fallback;
+}
+
 const BEHAVIORS={
   // Straight-line projectiles fanned by `spread`.
   projectile(weapon,engine,stats){
@@ -180,7 +189,7 @@ const BEHAVIORS={
         damage,radius:4,pierce:weapon.stat('pierce',stats),
         knockback:weapon.stat('knockback',stats),
         life:(weapon.stat('range',stats)||600)/speed,
-        weapon,color:'#ffe08a',trail:true
+        weapon,color:tracer(weapon,engine,'#ffe08a'),trail:true
       });
     }
     engine.muzzleFlash(baseAngle,count>2?1.3:1);
@@ -206,7 +215,7 @@ const BEHAVIORS={
           damage:weapon.damage(stats),radius:3.5,pierce:weapon.stat('pierce',stats),
           knockback:weapon.stat('knockback',stats),
           life:(weapon.stat('range',stats)||500)/speed,
-          weapon,color:'#ffd98a',trail:true
+          weapon,color:tracer(weapon,engine,'#ffd98a'),trail:true
         });
         engine.muzzleFlash(angle,.8);
         engine.audio.play('shoot',{volume:.7});
@@ -235,7 +244,7 @@ const BEHAVIORS={
         damage:weapon.damage(stats),radius:3,pierce:0,
         knockback:weapon.stat('knockback',stats),
         life:range/velocity,falloff:weapon.def.falloff,
-        weapon,color:'#ffc978'
+        weapon,color:tracer(weapon,engine,'#ffc978')
       });
     }
     engine.muzzleFlash(baseAngle,1.7);
@@ -263,7 +272,7 @@ const BEHAVIORS={
         life:(weapon.stat('range',stats)||900)/speed,
         critBonus:weapon.stat('critBonus',stats),
         blastRadius:weapon.def.blastRadius?weapon.def.blastRadius*stats.area:0,
-        weapon,color:'#e8f6ff',heavy:true,trail:true
+        weapon,color:tracer(weapon,engine,'#e8f6ff'),heavy:true,trail:true
       });
     }
     engine.muzzleFlash(angle,2.1);
@@ -289,7 +298,7 @@ const BEHAVIORS={
         life:(weapon.stat('range',stats)||800)/speed,
         status:weapon.def.statusEffect,statusChance:weapon.def.statusChance,
         scorchTrail:weapon.def.scorchTrail,
-        weapon,color:'#9be8ff',beam:true,trail:true
+        weapon,color:tracer(weapon,engine,'#9be8ff'),beam:true,trail:true
       });
     }
     engine.muzzleFlash(angle,1.6);
@@ -368,7 +377,7 @@ const BEHAVIORS={
       radius,damage:weapon.damage(stats),
       knockback:weapon.stat('knockback',stats),
       status:weapon.def.statusEffect,statusChance:weapon.def.statusChance,
-      color:'#8fd8ff',weapon
+      color:tracer(weapon,engine,'#8fd8ff'),weapon
     });
     engine.camera.addShake(.16);
     engine.audio.play(weapon.def.sound||'scramble',{volume:.9});
@@ -407,7 +416,7 @@ const BEHAVIORS={
         knockback:weapon.stat('knockback',stats),
         life:(weapon.stat('range',stats)||640)/speed*2.2,
         homing:{turnRate:weapon.stat('turnRate',stats),speed,target},
-        weapon,color:'#ffb35c',trail:true,smoke:true
+        weapon,color:tracer(weapon,engine,'#ffb35c'),trail:true,smoke:true
       });
     }
     engine.audio.play('shoot',{volume:.7});

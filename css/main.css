@@ -941,3 +941,11 @@ input[type=range]::-moz-range-thumb{
 .dev-node.branch-command{border-color:rgba(245,210,122,.34)}
 .dev-node.branch-command .node-branch{color:var(--gold)}
 .doctrine-blurb{margin:.1rem 0 .7rem;max-width:70ch;font-size:.8rem}
+
+/* Weapon liveries — a swatch beside the name, since the name alone is not a colour. */
+.livery-swatch{
+  display:inline-block;width:.62rem;height:.62rem;margin-right:.42rem;
+  border-radius:1px;vertical-align:baseline;
+  box-shadow:0 0 0 1px rgba(0,0,0,.5), 0 0 6px currentColor;
+}
+.livery-option.active{border-color:rgba(245,210,122,.5)}

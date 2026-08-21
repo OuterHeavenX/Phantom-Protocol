@@ -18,6 +18,7 @@ import {CAMPAIGN,ACTS,OBJECTIVE_TYPES,nextOperation,campaignProgress,operationUn
   operationsInAct,actUnlocked} from '../../data/campaign.js';
 import {activeContracts,resolveDifficulty,timeRemaining} from '../../data/contracts.js';
 import {ORDNANCE,ORDNANCE_BY_ID,ORDNANCE_UNLOCK,ordnanceUnlocked} from '../../data/ordnance.js';
+import {LIVERIES,liveryFor,liveryUnlocked} from '../../data/liveries.js';
 import {contractRecord} from '../save/contracts.js';
 import {
   SLOTS,slotLabel,attachmentsFor,ATTACHMENTS_BY_ID,defaultBuild,MAX_WEAPON_RANK
@@ -506,7 +507,8 @@ export class Screens{
       build:sanitizeBuild(weapon,stored.build||record.build,rank),
       // Kept off the attachment build on purpose — sanitizeBuild rebuilds from
       // the known slot list and would silently drop an unrecognised key.
-      ordnance:ORDNANCE_BY_ID[record.ordnance]||ORDNANCE[0]
+      ordnance:ORDNANCE_BY_ID[record.ordnance]||ORDNANCE[0],
+      livery:liveryFor(record.livery)
     };
   }
 
@@ -697,6 +699,25 @@ export class Screens{
                 </div>`;
               }).join('')}
 
+              <div class="gs-slot" data-slot="livery">
+                <div class="gs-slot-head">
+                  <span class="eyebrow">LIVERY</span>
+                  <i class="gs-next">COSMETIC · NO STAT EFFECT</i>
+                </div>
+                <div class="gs-options">
+                  ${LIVERIES.map(livery=>{
+                    const unlocked=liveryUnlocked(livery,rank);
+                    const active=(record.livery||LIVERIES[0].id)===livery.id;
+                    return `<button class="gs-option livery-option ${active?'active':''} ${unlocked?'':'locked'}"
+                              data-livery="${livery.id}" ${unlocked?'':'disabled'}
+                              title="${escape(livery.desc)}">
+                      <b><i class="livery-swatch" style="background:${livery.swatch}"></i>${escape(livery.name)}</b>
+                      <span>${unlocked?escape(livery.desc):`Locked · weapon rank ${livery.rank}`}</span>
+                    </button>`;
+                  }).join('')}
+                </div>
+              </div>
+
               <div class="gs-slot" data-slot="ordnance">
                 <div class="gs-slot-head">
                   <span class="eyebrow">SECONDARY FIRE</span>
@@ -748,6 +769,16 @@ export class Screens{
 
     root().querySelectorAll('[data-bench]').forEach(button=>{
       button.addEventListener('click',()=>{this.click();this.gunsmith(button.dataset.bench)});
+    });
+
+    root().querySelectorAll('[data-livery]').forEach(button=>{
+      button.addEventListener('click',()=>{
+        if(button.disabled)return;
+        this.audio?.play('tech');
+        record.livery=button.dataset.livery;
+        this.persist();
+        this.gunsmith(weapon.id);
+      });
     });
 
     root().querySelectorAll('[data-ordnance]').forEach(button=>{
