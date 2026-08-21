@@ -33,7 +33,12 @@ export const PASSIVES=[
   {
     id:'ammunition',name:'Ammunition Processor',short:'AMM',icon:'⁙',
     desc:'On-board round fabrication. Adds an extra projectile to weapons that fire them.',
-    stat:'amount',perLevel:.34,format:v=>`+${Math.floor(v)} projectile${Math.floor(v)===1?'':'s'}`,
+    // The runtime rounds the sum of a weapon's base count and this stat, so the
+    // label has to round too — flooring it under-reported every other rank.
+    // .5 per rank keeps label and runtime in step and stops rank 1 buying
+    // nothing: a shotgun already gained a pellet from it, a rifle did not.
+    stat:'amount',perLevel:.5,
+    format:v=>`+${Math.round(v)} projectile${Math.round(v)===1?'':'s'}`,
     maxLevel:6
   },
   {
