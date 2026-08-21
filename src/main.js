@@ -13,6 +13,7 @@ import {Engine} from './game/engine.js';
 import {Renderer} from './render/renderer.js';
 import {Input,isTouchDevice} from './core/input.js';
 import {audio} from './core/audio.js';
+import {profiler} from './core/profiler.js';
 import {resolveBuild} from './game/gunsmith.js';
 
 // Application entry point. Owns the top-level state machine (menu ⇄ run),
@@ -145,6 +146,9 @@ function startRun(config){
   session={engine,renderer,hud,levelUp,pause,config,raf:0,last:performance.now(),detachSticks:[]};
   // Exposed for debugging and automated smoke tests.
   window.__pp=session;
+  // Readable from a remote-debugged phone, or from a test, without going
+  // through the on-screen overlay.
+  window.__profile=()=>profiler.snapshot();
 
   const resize=()=>{
     const dpr=Math.min(save.settings.performanceMode?1:2,window.devicePixelRatio||1);

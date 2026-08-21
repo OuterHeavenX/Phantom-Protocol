@@ -1,4 +1,5 @@
 import {Rng} from '../core/rng.js';
+import {profiler} from '../core/profiler.js';
 import {Camera} from '../core/camera.js';
 import {clamp,damp,dist,dist2,normalize,compact,SpatialHash,TAU} from '../core/math.js';
 import {World} from './world.js';
@@ -388,6 +389,7 @@ export class Engine{
       return;
     }
 
+    profiler.begin();
     this.accumulator+=Math.min(realDt,.25);
     let steps=0;
     while(this.accumulator>=FIXED_STEP&&steps<MAX_STEPS){
@@ -396,8 +398,18 @@ export class Engine{
       steps++;
       if(this.ended||this.pendingLevelUps>0)break;
     }
-    // Bail out of a death spiral rather than compounding lag.
-    if(steps>=MAX_STEPS)this.accumulator=0;
+    // Bail out of a death spiral rather than compounding lag. This is the one
+    // event worth counting above all others: past the cap the contract silently
+    // runs slower than the clock, and nothing else in the game says so.
+    if(steps>=MAX_STEPS){
+      profiler.count_('stepClamps');
+      profiler.count_('droppedMs',Math.round(this.accumulator*1000));
+      this.accumulator=0;
+    }
+    profiler.count_('steps',steps);
+    profiler.mark('sim');
+    profiler.peak('enemies',this.enemies.length);
+    profiler.peak('particles',this.fx.stats?.particles||0);
 
     this.fx.update(realDt);
     this.codec.update(realDt);

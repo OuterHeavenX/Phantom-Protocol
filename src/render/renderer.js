@@ -1,5 +1,6 @@
 import {clamp,TAU,dist,formatTime} from '../core/math.js';
 import {Weather} from './weather.js';
+import {profiler} from '../core/profiler.js';
 import {drawLandmark} from './landmarks.js';
 import {EnvironmentArt,drawSprite,drawSlicedWall} from './environment.js';
 import {EXTRACTION_RADIUS,EXTRACTION_HOLD} from '../game/engine.js';
@@ -161,6 +162,10 @@ export class Renderer{
     }
 
     this.drawPost(ctx,width,height);
+    // Closes the render section and the frame. The simulation half was marked
+    // in Engine.update, so the two together account for the whole frame.
+    profiler.mark('render');
+    profiler.end();
   }
 
   trackFps(now){
@@ -1410,6 +1415,9 @@ export class Renderer{
     this.drawOffscreenMarkers(ctx,width,height);
     if(this.settings.showMinimap!==false)this.drawMinimap(ctx,width,height);
     this.drawAnnouncements(ctx,width,height);
+    // The profiler only records while the readout is on, so a player who never
+    // opens it pays nothing for it existing.
+    profiler.setEnabled(!!this.settings.showFps);
     if(this.settings.showFps)this.drawDebug(ctx,width,height);
 
     ctx.restore();
@@ -1595,22 +1603,43 @@ export class Renderer{
     ctx.restore();
   }
 
+  // Readable off a phone screen without a console attached, because that is the
+  // hardware the numbers are actually needed from.
   drawDebug(ctx,width,height){
     const engine=this.engine;
     const stats=engine.fx.stats;
+    const p=profiler.snapshot();
+    const clamps=p.counters.stepClamps||0;
+    const dropped=p.counters.droppedMs||0;
+
     ctx.save();
     ctx.font='10px ui-monospace,monospace';
-    ctx.fillStyle='rgba(140,230,220,.8)';
     ctx.textAlign='left';
+
     const lines=[
-      `${this.fps} fps`,
-      `hostiles ${engine.enemies.length}/${engine.director.enemyCap}`,
-      `proj ${engine.projectiles.length}+${engine.enemyProjectiles.length}`,
-      `particles ${stats.particles}`,
-      `pickups ${engine.pickups.length}`,
-      `intensity ${engine.director.intensity.toFixed(2)}`
+      [`${p.frameMs.p50||'--'}ms p50   ${p.frameMs.p95||'--'} p95   ${p.frameMs.p99||'--'} p99`,'#8ce6dc'],
+      [`worst ${p.frameMs.max||'--'}ms  (${p.fps.p50||0} fps typical, ${p.fps.worst||0} worst)`,'#8ce6dc'],
+      [`sim ${p.phasesMs.sim??'--'}ms   render ${p.phasesMs.render??'--'}ms`,'#8ce6dc'],
+      // The clamp line is the point of the whole overlay. Anything above zero
+      // means the simulation is discarding time and the contract is running
+      // slower than its own clock.
+      [clamps
+        ? `STEP CLAMPS ${clamps}  ·  ${dropped}ms of contract discarded`
+        : 'step clamps 0  ·  simulation keeping pace',
+       clamps?'#ff7068':'#7fd48a'],
+      [`hostiles ${engine.enemies.length}/${engine.director.enemyCap}  peak ${p.peak.enemies}`,'rgba(140,230,220,.75)'],
+      [`proj ${engine.projectiles.length}+${engine.enemyProjectiles.length}   particles ${stats.particles} peak ${p.peak.particles}`,'rgba(140,230,220,.75)'],
+      [`cover ${engine.world.cover.length}  decor ${engine.world.decor.length}  decals ${engine.world.decals?.length??0}`,'rgba(140,230,220,.75)'],
+      [`quality ${this.settings.particles||'high'}${this.settings.performanceMode?' · perf mode':''}${p.heapMb?`   heap ${p.heapMb}MB`:''}`,'rgba(140,230,220,.75)']
     ];
-    lines.forEach((line,i)=>ctx.fillText(line,12,height-96+i*12));
+
+    const boxH=lines.length*13+12;
+    ctx.fillStyle='rgba(2,10,14,.72)';
+    ctx.fillRect(8,height-boxH-10,332,boxH);
+    lines.forEach(([line,color],i)=>{
+      ctx.fillStyle=color;
+      ctx.fillText(line,16,height-boxH+4+i*13);
+    });
     ctx.restore();
   }
 }

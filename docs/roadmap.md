@@ -55,8 +55,15 @@ Remaining:
 4. Replay capture using the seeded, fixed-timestep simulation. No longer blocked — the
    simulation now reproduces exactly from its seed, so a replay is an input log plus a
    seed rather than a state dump.
-5. Performance profiling on low-end mobile hardware.
-   Note: duel operations crashed on construction until this act shipped — the codec was
+5. Performance profiling on low-end mobile hardware. The instrumentation half is
+   shipped: SETTINGS > show fps now draws frame percentiles, the sim/render split, live
+   entity and world counts, heap, and — the point of it — a step-clamp counter that goes
+   red when the simulation starts discarding contract time. `window.__profile()` returns
+   the same numbers as an object. What remains is running it on an actual phone; every
+   "iPhone" figure in this project's history was headless Chromium with a viewport
+   override, which shares no CPU, GPU or thermal budget with the device it was named
+   after.
+   Note: duel operations crashed on construction until Act II shipped — the codec was
    built after the mission, and a duel spawns its boss during mission setup, which fires
    a codec cue. Worth assuming other order-dependent construction bugs are lurking.
 6. Vault variants beyond the loot-and-garrison pair — timed holds, terminal hacks.
