@@ -16,7 +16,7 @@ import {
 import {portraitSvg,portraitMarkup,dossierCardMarkup} from '../render/portraits.js';
 import {Typewriter} from './typewriter.js';
 import {storeReplay,deleteReplay,MAX_REPLAYS} from '../save/storage.js';
-import {packLog,unpackLog} from '../game/replay.js';
+import {packLog,unpackLog,REPLAY_VERSION} from '../game/replay.js';
 import {CAMPAIGN,ACTS,OBJECTIVE_TYPES,nextOperation,campaignProgress,operationUnlocked,
   operationsInAct,actUnlocked} from '../../data/campaign.js';
 import {activeContracts,resolveDifficulty,timeRemaining} from '../../data/contracts.js';
@@ -1642,8 +1642,8 @@ export class Screens{
         <span>TIME</span><span>KILLS</span><span>SIZE</span><span></span>
       </div>
       ${replays.map(entry=>`
-        <div class="history-row ${entry.result?.victory?'win':'loss'}">
-          <span>${entry.result?.victory?'CLEARED':'FAILED'}</span>
+        <div class="history-row ${entry.result?.victory?'win':'loss'} ${(entry.v||1)!==REPLAY_VERSION?'stale':''}">
+          <span>${(entry.v||1)!==REPLAY_VERSION?'OUTDATED':entry.result?.victory?'CLEARED':'FAILED'}</span>
           <span>${escape(OPERATIVES.find(o=>o.id===entry.operative)?.codename||entry.operative)}</span>
           <span>${escape(MAPS.find(m=>m.id===entry.map)?.name||entry.map)}</span>
           <span>${formatTime(entry.result?.elapsed||0)}</span>
@@ -1676,6 +1676,17 @@ export class Screens{
   }
 
   async watchReplay(entry){
+    // A replay is only a seed and an input log, so it is only watchable against
+    // the simulation it was recorded under. Aim resolution changed in v2 —
+    // weapons now fire where the operative points — and a v1 recording replayed
+    // against that rule diverges within seconds. Refusing is the honest answer;
+    // playing it back wrong would look like a bug in the run rather than in the
+    // format.
+    if((entry.v||1)!==REPLAY_VERSION){
+      this.audio?.play('deny');
+      this.replayOutdated(entry);
+      return;
+    }
     this.audio?.play('confirm');
     let log;
     try{
@@ -1701,6 +1712,26 @@ export class Screens{
       seed:entry.seed,
       replay:{...entry,log}
     });
+  }
+
+  // Shown in place of playback when a recording predates the simulation it
+  // would have to run against.
+  replayOutdated(entry){
+    this.shell(`
+      <div class="results defeat">
+        <div class="results-inner">
+          <span class="eyebrow">REPLAY // ${escape(MAPS.find(m=>m.id===entry.map)?.name||entry.map)}</span>
+          <h1>RECORDING OUT OF DATE</h1>
+          <p class="results-reason">Recorded against simulation v${entry.v||1}; this build runs v${REPLAY_VERSION}.</p>
+          <p class="muted">A replay is a seed and an input log, not a recording of what happened,
+            so it can only be watched against the simulation that produced it. Playing this one
+            here would show a run that never took place.</p>
+          <div class="button-row center">
+            <button class="btn primary" id="commandBtn">BACK TO RECORD</button>
+          </div>
+        </div>
+      </div>`,{scan:false});
+    root().querySelector('#commandBtn').addEventListener('click',()=>{this.click();this.stats()});
   }
 
   // Shown when a replay stops, in place of the results screen — there is no

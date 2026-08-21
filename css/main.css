@@ -543,6 +543,10 @@ p{margin:0}
    the last one holding buttons rather than a number. */
 .replay-shelf .history-row{grid-template-columns:80px 1fr 1fr 64px 64px 60px 96px}
 .replay-actions{display:flex;gap:4px;justify-content:flex-end;align-items:center}
+/* A recording the current simulation cannot run. Still listed, because the
+   player saved it and deleting it behind their back would be worse. */
+.replay-shelf .history-row.stale{opacity:.55}
+.replay-shelf .history-row.stale span:first-child{color:var(--muted)}
 .replay-actions .btn{padding:2px 8px;font-size:9px;letter-spacing:.1em}
 .replay-actions .btn.ghost{padding:2px 7px}
 @media(max-width:760px){

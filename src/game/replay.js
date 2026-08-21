@@ -23,7 +23,17 @@
 //   precision and the replay used the rounded copy, the two would diverge
 //   within seconds — so the rounding happens at capture, once, for both.
 
-export const REPLAY_VERSION=1;
+export const REPLAY_VERSION=2;
+
+// Settings that reach the simulation rather than only the presentation, and so
+// have to travel with a replay. `autoAim` decides whether a weapon adjusts onto
+// a contact near the pointer; `performanceMode` lowers the hostile cap from a
+// hundred to sixty-eight. A replay recorded under one and watched under the
+// other is a different run, so the recording's values win on playback.
+//
+// Anything added here later must be added to this list in the same commit —
+// it is the one place that knows a preference is not just a preference.
+export const SIM_SETTINGS=['autoAim','performanceMode'];
 
 // The actions the simulation reads, in bit order. Order is part of the file
 // format: appending is safe, reordering is not.

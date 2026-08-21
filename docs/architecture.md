@@ -60,6 +60,26 @@ the same open ground:
    a sealed chamber must not contain a hazard the player is forced to walk into or a
    hostile that cannot path out.
 
+## Aiming
+
+Where the rounds go and where the operative is drawn facing are one decision, resolved in
+`fireDirection` and mirrored onto `player.angle`:
+
+* **Pointing the weapon wins.** Every behaviour that reaches `fireDirection` fires in a
+  straight line — nothing there tracks or homes — so an actively aimed weapon fires along
+  the facing, whatever it has acquired.
+* **Auto-target is assist, not override.** With `settings.autoAim` on, a contact inside a
+  38-degree cone of the pointer is taken, and `markEngagement` brings the body round onto
+  it. The cone can be generous precisely because the sprite follows the shot.
+* **Not aiming means the operative turns to the fight.** The facing follows the last
+  direction rounds actually went for `ENGAGEMENT_HOLD` seconds, then falls back to the
+  direction of travel. Walking right while engaging something on the left is a real thing
+  to do, and the body should be turned towards the thing being shot.
+
+`autoAim` and `performanceMode` are the two preferences that change the simulation rather
+than its presentation, so they are listed in `SIM_SETTINGS` and travel inside a replay.
+Anything added to that pair belongs in the same list, in the same commit.
+
 ## Replays
 
 A run is fully determined by its seed, its configuration and its input, so a replay is

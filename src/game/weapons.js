@@ -140,18 +140,55 @@ const targetScratch=[];
 // distance. Applied to surface distance in `nearest` acquisition.
 const PRIORITY={boss:.3,elite:.7};
 
-// Direction the weapon should fire in, honouring manual aim when the player
-// is actively aiming and auto-target otherwise.
+// Direction the weapon should fire in, honouring manual aim when the player is
+// actively aiming and auto-target otherwise.
+//
+// That contract is what this comment has always claimed, but the code only
+// honoured it for the four weapons declared `targeting:'facing'`. Every other
+// direct-fire weapon shot whatever it had acquired, so an operative facing the
+// pointer put rounds out of their own back at something behind them. Every
+// behaviour that reaches this function fires in a straight line — nothing here
+// tracks or homes — so pointing the weapon is unambiguous and wins.
+//
+// Auto-target then means what the settings screen says it means: weapons
+// acquire targets *when the operative is not aiming*. Acquisition still runs
+// either way, because it is also what marks a contact and drives the optic.
+// How far off the pointer an acquired contact may sit and still be taken.
+// Generous, because taking it turns the operative to face it as well — the
+// pointer says roughly where the fight is and the operative does the fine
+// aiming, which is the whole job of an auto-target system. What it can never
+// do is send a round somewhere the operative is not pointing at all.
+export const ASSIST_CONE=Math.cos(38*Math.PI/180);
+
 function fireDirection(engine,weapon,target){
   const player=engine.player;
-  if(engine.manualAim&&weapon.def.targeting==='facing'){
-    return{x:Math.cos(player.angle),y:Math.sin(player.angle)};
+  const facing={x:Math.cos(player.angle),y:Math.sin(player.angle)};
+  if(engine.manualAim){
+    // Pointing the weapon wins. Auto-target does not stop mattering, though —
+    // it becomes assist: a contact already inside the cone the operative is
+    // pointing down is worth taking, and markEngagement brings the body round
+    // onto it, so the rounds and the sprite still leave along the same line.
+    if(engine.settings.autoAim!==false&&target){
+      const d=normalize(target.x-player.x,target.y-player.y);
+      if(d.m>0&&d.x*facing.x+d.y*facing.y>=ASSIST_CONE){
+        engine.markEngagement(d.x,d.y);
+        return d;
+      }
+    }
+    return facing;
   }
+  if(engine.settings.autoAim===false)return facing;
   if(target){
     const d=normalize(target.x-player.x,target.y-player.y);
-    if(d.m>0)return d;
+    if(d.m>0){
+      // The operative turns to face what they are actually shooting at. This
+      // is the fire solution itself, not a guess at one, so the sprite and the
+      // rounds can never disagree about which way the fight is.
+      engine.markEngagement(d.x,d.y);
+      return d;
+    }
   }
-  return{x:Math.cos(player.angle),y:Math.sin(player.angle)};
+  return facing;
 }
 
 // ---------------------------------------------------------------------------

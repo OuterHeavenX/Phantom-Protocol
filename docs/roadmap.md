@@ -51,6 +51,17 @@ reproducible from its seed, and the contract board built on top of it: a daily a
 weekly assignment derived from the calendar, with rotating theatres, lengths,
 difficulties and modifiers, so every operator faces the same sector on the same day.
 
+Fixed since: the operative faced one way and the rounds went another. `fireDirection`'s
+own comment had always said it honoured manual aim, but the code only did that for the
+four weapons declared `targeting:'facing'` — every other direct-fire weapon shot whatever
+it had acquired, so an operative pointing right put rounds out of their own back. Measured
+in a live run: 51 degrees between the sprite and the muzzle before, 1 degree after, and
+that 1 degree is weapon spread. Two more things came out of the same corner: the operative
+now turns to face what they are engaging rather than the way they are walking, and
+`settings.autoAim` — a ternary whose two branches were identical, so the setting resolved
+to nothing at all — now means aim assist inside a 38-degree cone, which brings the body
+round with the shot so a wide cone never shows as a mismatch.
+
 Remaining:
 
 1. ~~Deterministic daily and weekly contracts.~~ Shipped. Thirty-one draws across the

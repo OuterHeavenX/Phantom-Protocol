@@ -1,11 +1,11 @@
 import {Rng} from '../core/rng.js';
 import {profiler} from '../core/profiler.js';
 import {Camera} from '../core/camera.js';
-import {clamp,damp,dist,dist2,normalize,compact,SpatialHash,TAU} from '../core/math.js';
+import {clamp,damp,dist,dist2,normalize,compact,approachAngle,SpatialHash,TAU} from '../core/math.js';
 import {World} from './world.js';
 import {Director} from './director.js';
 import {EnemyBrain,AI_STATES} from './ai.js';
-import {Loadout} from './weapons.js';
+import {Loadout,ASSIST_CONE} from './weapons.js';
 import {Boss} from './boss.js';
 import {Objectives} from './objectives.js';
 import {Mission} from './mission.js';
@@ -18,7 +18,7 @@ import {ORDNANCE_BY_ID} from '../../data/ordnance.js';
 import {liveryFor} from '../../data/liveries.js';
 import {DEPLOY_KITS,deployKit} from '../../data/deploykits.js';
 import {vaultKind} from '../../data/vaults.js';
-import {captureStep,ReplayRecorder,ReplayPlayer,REPLAY_VERSION} from './replay.js';
+import {captureStep,ReplayRecorder,ReplayPlayer,REPLAY_VERSION,SIM_SETTINGS} from './replay.js';
 import {ABILITIES,TRAITS,distanceToSegment} from './abilities.js';
 import {ENEMIES_BY_ID,STATUS_EFFECTS} from '../../data/enemies.js';
 import {BOSSES_BY_ID,MINIBOSSES} from '../../data/bosses.js';
@@ -41,6 +41,15 @@ export const EXTRACTION_HOLD=2.5;
 export const EXTRACTION_SPEED_BONUS=1.28;
 // Close enough for the operative's scanner to resolve a sealed chamber.
 export const VAULT_SCAN_RADIUS=330;
+
+// How long the operative keeps facing a contact after the last round went its
+// way. Without a hold the body snaps back to the walking direction between
+// shots, which is the flicker the mismatch used to hide behind.
+export const ENGAGEMENT_HOLD=1.1;
+// Radians per second the body turns to bring a new contact round. Fast enough
+// that the sprite is never meaningfully behind the rounds, slow enough that
+// two weapons working different targets read as tracking rather than snapping.
+export const TURN_RATE=16;
 
 // How long a fitted optic keeps its lock on a contact after last acquiring it.
 // Comfortably longer than any weapon's cycle, so the reticle reads as steady.
@@ -78,7 +87,13 @@ export class Engine{
     // They used to be computed two hundred lines down, which meant anything
     // above that line silently saw undefined.
     this.devBonuses=devBonuses(config.devRanks||{});
-    this.settings=config.settings;
+    // A handful of preferences change the simulation rather than how it looks,
+    // so a replay carries its own and they win here. Copied rather than
+    // mutated: this object is the live save's settings and the menu is still
+    // holding it.
+    this.settings=config.replay?.settings
+      ?{...config.settings,...config.replay.settings}
+      :config.settings;
     this.audio=config.audio;
     // Kept, not just consumed: a replay is the seed plus the input log, so the
     // resolved seed has to survive the run even when the caller passed none.
@@ -199,6 +214,14 @@ export class Engine{
     // Which kit the next plant uses. Run state, not save state: every
     // operative carries all three and swaps between them in the field.
     this.deployKitIndex=0;
+
+    // The direction rounds last actually went, and when. The operative faces
+    // this rather than their walking direction, so the sprite and the rounds
+    // agree about which way the fight is.
+    this.engagementX=1;
+    this.engagementY=0;
+    this.engagementAt=-99;
+    this.manualAim=false;
 
     this.setupPlayer();
     this.setupSquad();
@@ -526,10 +549,26 @@ export class Engine{
     if(input.takeAction('kit'))this.cycleDeployKit();
 
     const aim=input.aimVector(this.camera,player);
-    this.manualAim=aim.manual&&!this.settings.autoAim===false?aim.manual:aim.manual;
+    // This used to read `aim.manual && !autoAim===false ? aim.manual :
+    // aim.manual` — a ternary whose branches were identical, so the auto-target
+    // setting resolved to nothing at all. Manual aim is simply whether the
+    // operative is pointing the weapon; what auto-target changes is what
+    // happens when they are not, which is where fireDirection reads it.
+    this.manualAim=aim.manual;
     if(aim.manual){
-      player.angle=Math.atan2(aim.y,aim.x);
       this.aimLead={x:aim.x,y:aim.y};
+      // Where the operative is pointing, and — when auto-target assist has
+      // adjusted a shot onto a contact inside that cone — where the rounds
+      // actually went. The body holds the adjusted line for as long as the
+      // engagement is live, rather than flicking back to the raw pointer on
+      // every frame no weapon happened to fire.
+      const engaged=this.elapsed-this.engagementAt<ENGAGEMENT_HOLD&&
+        this.engagementX*aim.x+this.engagementY*aim.y>=ASSIST_CONE;
+      // Snapped, not eased: the rounds leave along this angle the same step,
+      // so easing it would put the muzzle behind the pointer.
+      player.angle=engaged
+        ?Math.atan2(this.engagementY,this.engagementX)
+        :Math.atan2(aim.y,aim.x);
     }else{
       this.aimLead=null;
     }
@@ -630,7 +669,19 @@ export class Engine{
       const acceleration=terrain?.friction?18*terrain.friction:18;
       player.vx=damp(player.vx,targetVx,acceleration,dt);
       player.vy=damp(player.vy,targetVy,acceleration,dt);
-      if(!this.manualAim&&(move.x||move.y))player.angle=Math.atan2(move.y,move.x);
+      // Facing, when the operative is not pointing the weapon themselves. The
+      // contact being engaged wins over the direction of travel: walking right
+      // while shooting something on the left is a real thing to do, and the
+      // body should be turned towards the thing being shot. Falls back to the
+      // walk once the engagement goes stale.
+      if(!this.manualAim){
+        const engaged=this.elapsed-this.engagementAt<ENGAGEMENT_HOLD;
+        const faceX=engaged?this.engagementX:move.x;
+        const faceY=engaged?this.engagementY:move.y;
+        if(faceX||faceY){
+          player.angle=approachAngle(player.angle,Math.atan2(faceY,faceX),TURN_RATE*dt);
+        }
+      }
     }
 
     const previousX=player.x,previousY=player.y;
@@ -2216,6 +2267,16 @@ export class Engine{
     return count;
   }
 
+  // Records the direction a weapon just fired in, so the operative can turn to
+  // face it. Called from fireDirection with the resolved fire solution itself
+  // rather than with a target, so what the body faces and what the rounds do
+  // are the same vector by construction.
+  markEngagement(x,y){
+    this.engagementX=x;
+    this.engagementY=y;
+    this.engagementAt=this.elapsed;
+  }
+
   // ---- Replay --------------------------------------------------------------
 
   get replaying(){return !!this.replayPlayer}
@@ -2255,6 +2316,7 @@ export class Engine{
       operation:this.config.operation?.id||null,
       devRanks:this.config.devRanks||{},
       masteryXp:this.config.masteryXp||0,
+      settings:Object.fromEntries(SIM_SETTINGS.map(key=>[key,this.settings[key]])),
       unlocked,
       decisions:this.decisions,
       log:this.replayRecorder.encode()
