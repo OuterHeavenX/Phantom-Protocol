@@ -17,11 +17,26 @@
   z-index:4;
 }
 
+/* Two explicit rows. Row one is vitals / timer / tally; row two is the
+   objective stack and the radio traffic beside it, which puts the codec
+   directly under the timer. Everything here is a real grid item placed by
+   area, so no two panels can end up on top of each other at any width — which
+   they previously did on a phone.
+
+   The middle track is a fixed width rather than `auto`. Sizing it to content
+   would mean the side panels resized every time a line of radio traffic came
+   in and went out again. */
 .hud-top{
   display:grid;
-  grid-template-columns:minmax(210px,1fr) minmax(220px,auto) minmax(160px,1fr);
+  grid-template-columns:minmax(190px,1fr) min(520px,38vw) minmax(150px,1fr);
+  grid-template-rows:auto auto;
   gap:10px;align-items:start;
 }
+.vitals{grid-area:1/1}
+.mission{grid-area:1/2}
+.tally{grid-area:1/3}
+.hud-top-left{grid-area:2/1}
+.codec{grid-area:2/2}
 
 .hud-panel{
   background:linear-gradient(180deg,rgba(4,13,19,.88),rgba(3,10,14,.7));
@@ -111,7 +126,7 @@
 
 /* ---- Mission ------------------------------------------------------------ */
 
-.mission{text-align:center;justify-self:center;min-width:230px}
+.mission{text-align:center;justify-self:center;min-width:230px;max-width:100%}
 .mission-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:10px;letter-spacing:.1em}
 .timer-group{display:flex;flex-direction:column;gap:2px;align-items:center}
 .mission-head #timerValue{font-size:17px;color:#eafffc;font-variant-numeric:tabular-nums}
@@ -432,13 +447,12 @@
 }
 
 /* ---- Codec --------------------------------------------------------------
-   Radio traffic, bottom-left above the loadout strip. Never interactive: on a
-   touch device the move stick lives under here, so the panel must let every
-   touch straight through to it. */
+   Radio traffic, under the mission timer at the top of the screen. Never
+   interactive: it sits over the play area, so the panel must let every touch
+   and click straight through to what is behind it. */
 .codec{
-  position:absolute;left:0;bottom:96px;
   display:flex;align-items:stretch;gap:0;
-  max-width:min(520px,72vw);
+  min-width:0;
   pointer-events:none;
   border:1px solid var(--c,var(--accent));
   border-left:3px solid var(--c,var(--accent));
@@ -446,8 +460,9 @@
   box-shadow:0 0 34px rgba(0,0,0,.6);
 }
 .codec.open{animation:codec-in .26s cubic-bezier(.2,.9,.3,1) both}
+/* Drops in from behind the mission panel it hangs under. */
 @keyframes codec-in{
-  from{opacity:0;transform:translateX(-14px)}
+  from{opacity:0;transform:translateY(-14px)}
   to{opacity:1;transform:none}
 }
 
@@ -483,8 +498,9 @@
   overflow-wrap:break-word;
 }
 
+/* The phone layout for the whole top row lives in responsive.css with the rest
+   of it; this is only the type scale that goes with it. */
 @media(max-width:760px){
-  .codec{bottom:112px;max-width:82vw}
   .codec-portrait{width:48px;height:48px}
   .codec-text{font-size:10px;line-height:1.45}
 }

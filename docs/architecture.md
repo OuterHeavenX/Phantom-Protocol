@@ -60,6 +60,35 @@ the same open ground:
    a sealed chamber must not contain a hazard the player is forced to walk into or a
    hostile that cannot path out.
 
+## Static checks
+
+There is no build step, so nothing type-checks this code on the way past. Two
+checks run over the source instead, and each exists because it caught a shipped
+bug that stopped the game starting:
+
+```sh
+tools/check.sh
+```
+
+1. **`npx eslint src data`** (`eslint.config.mjs`). The rule that earns its
+   place is `no-undef`. A template literal in `hud.js` referenced `engine`
+   where the function only took `(operative, ability)`, so the HUD constructor
+   threw and no run could start at all — and it shipped, because every test
+   built the `Engine` directly and never went through the HUD.
+2. **`python3 tools/construction-order.py src data`**. Walks each constructor
+   statement by statement and reports reads of fields that are not assigned
+   yet but will be. It follows `this` across object boundaries — into the
+   constructors it is handed to, through the alias they stash it under, and
+   back out through every method they call on it — because that is the shape
+   the real bug had: the engine built the codec after the mission, a duel
+   objective spawned its boss during mission setup, and `spawnBoss` fired a
+   codec cue. Run it on `859b8ad^` and it reproduces that crash with the whole
+   chain.
+
+Neither replaces running the game. Three of this project's worst bugs were only
+visible through the real menus in a real browser, so a change to the HUD or the
+run lifecycle still needs a launch.
+
 ## AI
 
 Three cooperating layers:

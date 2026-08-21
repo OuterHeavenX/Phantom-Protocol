@@ -66,13 +66,18 @@
   .hud-top{grid-template-columns:minmax(0,1fr) auto;gap:6px}
   .hud-panel{padding:7px 8px;font-size:10px}
 
-  .mission{grid-column:1/-1;grid-row:1;min-width:0;margin:0 46px}
+  /* Four stacked rows: vitals beside the tally, then the timer, the radio
+     traffic and the objective stack each across the full width. Three tracks
+     do not fit on a phone, and letting them try put the timer on top of the
+     health bar. */
+  .vitals{grid-area:1/1;max-width:none}
+  .tally{grid-area:1/2}
+  .mission{grid-area:2/1/auto/-1;min-width:0;margin:0}
+  .codec{grid-area:3/1/auto/-1}
+  .hud-top-left{grid-area:4/1/auto/-1;gap:6px}
   .mission-head{font-size:9px}
   .mission-head #timerValue{font-size:14px}
   .phase{font-size:7.5px}
-
-  .hud-column{grid-column:1;grid-row:2;gap:6px}
-  .vitals{max-width:none}
   .hp-text b{font-size:12px}
   .xp-row{font-size:8.5px}
 
@@ -81,7 +86,7 @@
   .objective{font-size:8.5px;gap:5px;padding:2px 4px}
   .objective-count{font-size:8px}
 
-  .tally{grid-column:2;grid-row:2;min-width:auto}
+  .tally{min-width:auto;justify-self:end}
   .tally-row{gap:8px;font-size:9px}
   .combo{font-size:11px}
 
@@ -127,7 +132,7 @@
 
 /* ---- Small phone -------------------------------------------------------- */
 @media(max-width:400px){
-  .mission{margin:0 40px}
+  .mission{margin:0}
   .loadout{max-width:46vw}
   .slot-meta b{max-width:48px}
   .ability-btn{min-width:76px}
@@ -137,7 +142,7 @@
 /* ---- Landscape phone: HUD must stay out of the play area ---------------- */
 @media(max-height:520px) and (orientation:landscape){
   .hud-panel{padding:5px 7px;font-size:9px}
-  .mission{margin:0 40px}
+  .mission{margin:0}
   /* Only the objective currently closest to done is worth the vertical space. */
   .objective-list{gap:3px}
   .objective:nth-child(n+3){display:none}

@@ -11,7 +11,6 @@ const template=(operative,ability,engine)=>`
 <canvas id="gameCanvas"></canvas>
 <div class="hud" id="hud">
   <div class="hud-top">
-    <div class="hud-column">
     <div class="hud-panel vitals">
       <div class="vital-head">
         <span class="op-tag" style="--op:${operative.color}">${operative.codename}</span>
@@ -23,17 +22,6 @@ const template=(operative,ability,engine)=>`
         <div class="bar xp"><i id="xpBar"></i></div>
         <span class="xp-text" id="xpText">0/22</span>
       </div>
-    </div>
-
-    <div class="hud-panel mission-objective" id="missionObjective" hidden>
-      <span class="mission-objective-label" id="missionObjectiveLabel">OBJECTIVE</span>
-      <b class="mission-objective-value" id="missionObjectiveValue">—</b>
-    </div>
-
-    <div class="hud-panel objectives" id="objectivePanel">
-      <span class="objectives-head">FIELD OBJECTIVES <b id="objectivesCleared">0</b></span>
-      <ul class="objective-list" id="objectiveList"></ul>
-    </div>
     </div>
 
     <div class="hud-panel mission">
@@ -53,6 +41,35 @@ const template=(operative,ability,engine)=>`
       <div class="tally-row"><span>CR</span><b id="creditsValue">0</b></div>
       <div class="tally-row"><span>JP</span><b id="jpValue">0</b></div>
       <div class="combo" id="comboValue"></div>
+    </div>
+
+    <!-- Second row: the objective stack on the left, radio traffic beside it
+         in the middle track so it lands directly under the timer. Both are
+         real grid items, so neither can ever sit on top of the other. -->
+    <div class="hud-column hud-top-left">
+    <div class="hud-panel mission-objective" id="missionObjective" hidden>
+      <span class="mission-objective-label" id="missionObjectiveLabel">OBJECTIVE</span>
+      <b class="mission-objective-value" id="missionObjectiveValue">—</b>
+    </div>
+
+    <div class="hud-panel objectives" id="objectivePanel">
+      <span class="objectives-head">FIELD OBJECTIVES <b id="objectivesCleared">0</b></span>
+      <ul class="objective-list" id="objectiveList"></ul>
+    </div>
+    </div>
+
+    <div class="codec" id="codec" hidden aria-live="polite">
+      <div class="codec-portrait">
+        <img id="codecPortrait" alt="" decoding="async">
+        <span class="codec-scan"></span>
+      </div>
+      <div class="codec-body">
+        <div class="codec-head">
+          <b id="codecName">—</b>
+          <span id="codecChannel">CHANNEL 00</span>
+        </div>
+        <p class="codec-text" id="codecText"></p>
+      </div>
     </div>
   </div>
 
@@ -87,20 +104,6 @@ const template=(operative,ability,engine)=>`
   </div>
 
   <div class="squad-strip" id="squadStrip" hidden></div>
-
-  <div class="codec" id="codec" hidden aria-live="polite">
-    <div class="codec-portrait">
-      <img id="codecPortrait" alt="" decoding="async">
-      <span class="codec-scan"></span>
-    </div>
-    <div class="codec-body">
-      <div class="codec-head">
-        <b id="codecName">—</b>
-        <span id="codecChannel">CHANNEL 00</span>
-      </div>
-      <p class="codec-text" id="codecText"></p>
-    </div>
-  </div>
 
   <div class="status-strip" id="statusStrip"></div>
 </div>

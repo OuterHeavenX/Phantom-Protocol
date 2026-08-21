@@ -37,8 +37,12 @@ Fixed on the way through: the HUD template took `(operative, ability)` but its m
 read `engine.ordnance`, so `new Hud(...)` threw a ReferenceError and **no run could
 start at all**. This had been true on `main` since secondary fire shipped — every test
 since had constructed the Engine directly and never gone through the HUD. The ordnance
-button has never rendered until now. This is the third order-of-construction bug in a
-row; the sweep in item 5's note is overdue.
+button has never rendered until now.
+
+And since: radio traffic moved from the bottom-left corner to under the mission timer,
+which meant laying the top row out on an explicit grid. Doing that fixed a phone bug
+nobody had reported — the timer panel was sitting on top of the health bar at 430px,
+because three tracks never fit and the layout let them try.
 
 And since: the whole authored-art pipeline for Blacksite Zero — a loader with a
 procedural fallback for every draw path, an authored floor plate, three-sliced walls in
@@ -72,7 +76,7 @@ Remaining:
    after.
    Note: duel operations crashed on construction until Act II shipped — the codec was
    built after the mission, and a duel spawns its boss during mission setup, which fires
-   a codec cue. Worth assuming other order-dependent construction bugs are lurking.
+   a codec cue.
 6. ~~Vault variants beyond the loot-and-garrison pair — timed holds, terminal hacks.~~
    Shipped. Four locks now, drawn from the world's seeded stream so a daily contract
    still hands two operators the same sector. A manual override cannot be shot open at
@@ -100,3 +104,13 @@ Remaining:
    sub-pixel. A livery paints the tracer and the weapon tint instead, which is visible on
    every trigger pull at any zoom.
 11. Saved Gunsmith presets, so one weapon can carry several named builds.
+12. ~~A sweep for the order-dependent construction bugs the duel crash implied were
+   lurking.~~ Done, and the sweep is now a checked-in tool rather than a one-off:
+   `tools/check.sh` runs eslint's `no-undef` and `tools/construction-order.py` over
+   the source. The construction walk follows `this` across object boundaries and
+   reproduces the duel crash when pointed at `859b8ad^`; eslint pins the HUD
+   `ReferenceError` when pointed at `443c1e1`. Both are clean on the current tree, so
+   the answer to "are there more" is no rather than probably not.
+   Still uncovered, and deliberately: a field the constructor initialises to a
+   placeholder and fills in later reads as null rather than undefined, which is a
+   different bug and a far noisier signal — most placeholders are legitimate.
