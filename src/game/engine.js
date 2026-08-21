@@ -68,6 +68,11 @@ export class Engine{
   constructor(canvas,config){
     this.canvas=canvas;
     this.config=config;
+    // Resolved before anything else in the constructor: these are pure config,
+    // and the modifier hooks, the turret kit and the loadout all read them.
+    // They used to be computed two hundred lines down, which meant anything
+    // above that line silently saw undefined.
+    this.devBonuses=devBonuses(config.devRanks||{});
     this.settings=config.settings;
     this.audio=config.audio;
     this.rng=new Rng(config.seed??Math.floor(Math.random()*1e9));
@@ -146,6 +151,12 @@ export class Engine{
     this.forgetRateMult=1;
     this.enemyAccuracyPenalty=0;
     this.abilityCooldownMult=1;
+    // Command doctrine multipliers, read where each behaviour lives rather than
+    // folded into stats. Clamped so a maxed branch cannot reach zero.
+    this.squadDamageMult=1+(this.devBonuses.squadDamage||0);
+    this.squadReviveMult=Math.max(.4,1+(this.devBonuses.squadRevive||0));
+    this.nemesisWithdrawBonus=this.devBonuses.nemesisWithdraw||0;
+    this.extractionHoldMult=Math.max(.4,1+(this.devBonuses.extractionHold||0));
     this.explosionSizeMult=1;
     this.eliteDamageMult=1;
     this.playerDamageTakenMult=1;
@@ -162,7 +173,7 @@ export class Engine{
     this.dossiersSpawned=0;
 
     // ---- Field turret kit --------------------------------------------------
-    this.deployRank=1;
+    this.deployRank=1+(this.devBonuses.deployRank||0);
     this.deployCooldown=0;
 
     this.setupPlayer();
@@ -198,7 +209,7 @@ export class Engine{
   setupPlayer(){
     const spawn=this.world.playerSpawn();
     const op=this.operative;
-    const dev=devBonuses(this.config.devRanks||{});
+    const dev=this.devBonuses;
     const mastery=masteryBonuses(this.config.masteryXp||0);
 
     const maxHp=Math.round(
@@ -224,7 +235,6 @@ export class Engine{
       walkPhase:0,
       alive:true
     };
-    this.devBonuses=dev;
     this.masteryBonuses=mastery;
     this.detectionMult=1+(dev.detection||0);
   }
@@ -276,7 +286,10 @@ export class Engine{
     }
     const dev=this.devBonuses;
     for(const [key,value] of Object.entries(dev)){
-      if(['maxHp','armor','revives','extraChoice','rerolls','banishes','startingWeapons','startLevel','abilityCooldown','detection','creditGain','eliteDamage'].includes(key))continue;
+      if(['maxHp','armor','revives','extraChoice','rerolls','banishes','startingWeapons','startLevel','abilityCooldown','detection','creditGain','eliteDamage',
+        // Command doctrine: consumed by name at the site each one changes,
+        // never folded into the stat block, where they would silently do nothing.
+        'ordnanceReady','squadDamage','squadRevive','nemesisWithdraw','deployRank','extractionHold'].includes(key))continue;
       base[key]=MULTIPLICATIVE.has(key)?(base[key]??1)+value:(base[key]??0)+value;
     }
     for(const [key,value] of Object.entries(this.masteryBonuses)){
@@ -310,7 +323,8 @@ export class Engine{
     this.ordnance=ORDNANCE_BY_ID[typeof fitted==='string'?fitted:fitted?.id]||null;
     if(this.ordnance){
       this.player.ordnanceMax=this.ordnance.cooldown*(1+(dev.abilityCooldown||0))*this.abilityCooldownMult;
-      this.player.ordnanceCooldown=this.ordnance.cooldown*.5;
+      // Hot Load deploys with the module already charged.
+      this.player.ordnanceCooldown=this.devBonuses.ordnanceReady?0:this.ordnance.cooldown*.5;
     }
     // "Expanded Loadout" grants a second starting weapon.
     if(dev.startingWeapons&&this.config.secondWeapon){
@@ -2532,7 +2546,7 @@ export class Engine{
           return;
         }
         this.extractionHold=(this.extractionHold||0)+this.dt;
-        if(this.extractionHold>=EXTRACTION_HOLD)this.finish(true,'EXTRACTION CONFIRMED');
+        if(this.extractionHold>=EXTRACTION_HOLD*this.extractionHoldMult)this.finish(true,'EXTRACTION CONFIRMED');
       }else{
         this.extractionHold=Math.max(0,(this.extractionHold||0)-this.dt*.8);
       }

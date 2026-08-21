@@ -936,3 +936,8 @@ input[type=range]::-moz-range-thumb{
 .act-head p{margin:0;max-width:62ch}
 .act-block.locked .act-head h2{color:rgba(220,238,242,.35)}
 .act-block.locked{opacity:.72}
+
+/* Command doctrine — the fourth branch. */
+.dev-node.branch-command{border-color:rgba(245,210,122,.34)}
+.dev-node.branch-command .node-branch{color:var(--gold)}
+.doctrine-blurb{margin:.1rem 0 .7rem;max-width:70ch;font-size:.8rem}

@@ -5,7 +5,7 @@ import {MAPS,DURATIONS,DIFFICULTIES,DIFFICULTIES_BY_ID} from '../../data/maps.js
 import {ENEMIES,ELITES} from '../../data/enemies.js';
 import {BOSSES_BY_ID} from '../../data/bosses.js';
 import {
-  DEV_TREE,devNodeCost,devRequirementsMet,devBonuses,accountLevel,
+  DEV_TREE,DOCTRINE_BRANCH,devNodeCost,devRequirementsMet,devBonuses,accountLevel,
   ACHIEVEMENTS,ACHIEVEMENT_CATEGORIES,MILESTONES,INTEL_FILES
 } from '../../data/meta.js';
 import {
@@ -1232,8 +1232,10 @@ export class Screens{
     const save=this.save;
     const ranks=save.dev||{};
     const bonuses=devBonuses(ranks);
-    const tiers=[1,2,3,4];
-    const branches={offense:'OFFENSE',defense:'DEFENSE',utility:'UTILITY'};
+    const tiers=[1,2,3,4,5];
+    const branches={offense:'OFFENSE',defense:'DEFENSE',utility:'UTILITY',command:'COMMAND'};
+    // Doctrine nodes gate on command rating rather than on other nodes.
+    const devRating=accountLevel(save.profile.accountXp||0).level;
 
     const summary=Object.entries(bonuses)
       .filter(([,value])=>value)
@@ -1251,12 +1253,13 @@ export class Screens{
        </div>
        ${tiers.map(tier=>`
         <div class="dev-tier">
-          <div class="tier-label"><span>TIER ${tier}</span></div>
+          <div class="tier-label"><span>${tier===5?'COMMAND DOCTRINE':'TIER '+tier}</span></div>
+          ${tier===5?`<p class="muted doctrine-blurb">${escape(DOCTRINE_BRANCH.blurb)}</p>`:''}
           <div class="dev-row">
             ${DEV_TREE.filter(node=>node.tier===tier).map(node=>{
               const rank=ranks[node.id]||0;
               const maxed=rank>=node.max;
-              const available=devRequirementsMet(node,ranks);
+              const available=devRequirementsMet(node,ranks,devRating);
               const cost=devNodeCost(node,rank);
               const affordable=save.profile.jp>=cost;
               const state=maxed?'maxed':!available?'blocked':affordable?'ready':'poor';
@@ -1269,7 +1272,9 @@ export class Screens{
                 <p class="muted">${escape(node.desc)}</p>
                 <div class="node-effect">${rank?escape(node.format(rank)):'—'}${
                   maxed?'':` → <b>${escape(node.format(rank+1))}</b>`}</div>
-                <span class="node-cost">${maxed?'MASTERED':!available
+                <span class="node-cost">${maxed?'MASTERED'
+                  :(node.level&&devRating<node.level)?`COMMAND RATING ${node.level}`
+                  :!available
                   ?`REQUIRES ${node.requires.map(r=>{
                       const [id,need]=r.split(':');
                       return `${DEV_TREE.find(n=>n.id===id)?.name||id} ${need}`;

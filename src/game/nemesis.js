@@ -80,7 +80,9 @@ export class Nemesis extends Boss{
     }
     // Below its threshold it stops fighting and starts leaving, unless this is
     // the tier where it has run out of places to run.
-    const floor=withdrawThreshold(this.tier);
+    // Sustained Pressure raises the threshold, so the walker breaks off with
+    // more health left on it — it still escapes, it just takes less away.
+    const floor=withdrawThreshold(this.tier)+(engine.nemesisWithdrawBonus||0);
     if(floor>0&&this.healthRatio<=floor){
       this.beginWithdraw(engine);
       return;

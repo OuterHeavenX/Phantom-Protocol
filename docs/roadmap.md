@@ -45,7 +45,10 @@ Remaining:
 1. ~~Deterministic daily and weekly contracts.~~ Shipped. Thirty-one draws across the
    AI, the bosses and the director moved onto the seeded stream; particles and audio
    deliberately stayed off it, which is now enforced by test rather than convention.
-2. A second development tree branch gated behind account level.
+2. ~~A second development tree branch gated behind account level.~~ Shipped as COMMAND
+   DOCTRINE: five nodes that change rules rather than numbers, opening against command
+   rating instead of against other nodes. Nothing in it touches world generation, so a
+   daily contract still builds the same sector for two operators with different trees.
 3. ~~Per-weapon secondary fire modes, as an eighth Gunsmith slot.~~ Shipped, as a rail
    of six universal ordnance modules rather than eighteen bespoke alternate fires — one
    module fits any weapon, so the choice is what the primary lacks.

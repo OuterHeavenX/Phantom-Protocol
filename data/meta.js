@@ -121,9 +121,69 @@ export const DEV_TREE=[
 
 export const DEV_BY_ID=Object.fromEntries(DEV_TREE.map(d=>[d.id,d]));
 
+// ---------------------------------------------------------------------------
+// Command doctrine — the fourth branch
+// ---------------------------------------------------------------------------
+// The three original branches are sliders: every node is a percentage on a stat
+// that already existed. This one changes rules instead, and opens against
+// command rating rather than against other nodes, so the tree grows over an
+// account's life instead of being fully legible on day one.
+//
+// One hard constraint shapes what can go in here: nothing may touch world
+// generation. A sector is built from the contract seed alone, and a daily
+// contract is only worth comparing if two operators with different trees walk
+// into the same sector. So there is no node that adds a vault or moves a wall,
+// however tempting — doctrine changes how the operative fights the sector, not
+// what the sector is.
+export const DOCTRINE=[
+  {
+    id:'readyOrdnance',name:'Hot Load',tier:5,branch:'command',max:1,cost:60,costStep:0,level:6,
+    desc:'Secondary fire is charged on insertion rather than spooling up after it.',
+    effect:()=>({ordnanceReady:1}),format:()=>'Deploy with the ordnance module charged',requires:[]
+  },
+  {
+    id:'fireteam',name:'Fireteam Doctrine',tier:5,branch:'command',max:3,cost:70,costStep:35,level:10,
+    desc:'The second operative on the ground fights harder and gets back up faster.',
+    effect:r=>({squadDamage:r*.09,squadRevive:-r*.12}),
+    format:r=>`+${(r*9).toFixed(0)}% squadmate damage, -${(r*12).toFixed(0)}% revive time`,requires:[]
+  },
+  {
+    id:'pressure',name:'Sustained Pressure',tier:5,branch:'command',max:3,cost:80,costStep:40,level:14,
+    desc:'The walker breaks off sooner. It still leaves, but it leaves with less.',
+    effect:r=>({nemesisWithdraw:r*.05}),
+    format:r=>`Walker withdraws ${(r*5).toFixed(0)}% earlier`,requires:[]
+  },
+  {
+    id:'emplacement',name:'Emplacement Authority',tier:5,branch:'command',max:1,cost:90,costStep:0,level:18,
+    desc:'Field kit is issued one rank above standing authorisation.',
+    effect:()=>({deployRank:1}),format:()=>'+1 starting deployment rank',requires:[]
+  },
+  {
+    id:'exfil',name:'Exfiltration Priority',tier:5,branch:'command',max:2,cost:75,costStep:40,level:22,
+    desc:'The bird does not wait for the paperwork. Shorter hold on the beacon.',
+    effect:r=>({extractionHold:-r*.2}),
+    format:r=>`-${(r*20).toFixed(0)}% extraction hold`,requires:[]
+  }
+];
+
+// The doctrine branch is part of the same tree as far as everything downstream
+// is concerned — the same ranks map, the same cost curve, the same bonus table.
+DEV_TREE.push(...DOCTRINE);
+for(const node of DOCTRINE)DEV_BY_ID[node.id]=node;
+
+export const DOCTRINE_BRANCH={
+  id:'command',name:'COMMAND DOCTRINE',
+  blurb:'Opens against command rating rather than against other nodes. These change how a contract runs, not how big the numbers are.'
+};
+
 export function devNodeCost(node,rank){return node.cost+rank*node.costStep}
 
-export function devRequirementsMet(node,ranks){
+// A node opens when its prerequisite ranks are held and, for doctrine nodes,
+// when command rating has reached the level it is gated behind. Callers that
+// do not pass a rating are treated as rating zero, so a doctrine node stays
+// shut rather than defaulting open.
+export function devRequirementsMet(node,ranks,rating=0){
+  if(node.level&&rating<node.level)return false;
   return node.requires.every(req=>{
     const [id,needed]=req.split(':');
     return (ranks[id]||0)>=Number(needed);

@@ -189,7 +189,9 @@ export class Squadmate{
   // What one round is worth right now, against the operative's level.
   get shotDamage(){
     const level=Math.max(1,this.engine.level||1);
-    return this.fire.damage*(1+GROWTH_PER_LEVEL*(level-1));
+    // Fireteam Doctrine rides on top of the level curve rather than replacing
+    // it, so the branch is worth the same proportion late as it is early.
+    return this.fire.damage*(1+GROWTH_PER_LEVEL*(level-1))*(this.engine.squadDamageMult??1);
   }
 
   shoot(target){
@@ -246,7 +248,8 @@ export class Squadmate{
     const player=engine.player;
     const near=player.alive&&dist2(player.x,player.y,this.x,this.y)<REVIVE_RADIUS**2;
     if(near){
-      this.reviveProgress=Math.min(1,this.reviveProgress+dt/REVIVE_SECONDS);
+      // Fireteam Doctrine shortens the time spent kneeling over them.
+      this.reviveProgress=Math.min(1,this.reviveProgress+dt/(REVIVE_SECONDS*(engine.squadReviveMult??1)));
       if(this.reviveProgress>=1)this.revive();
     }else{
       this.reviveProgress=Math.max(0,this.reviveProgress-dt*.6);
