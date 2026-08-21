@@ -177,23 +177,23 @@ export class Director{
         this.state=WAVE_STATES.DEPLOY;
         this.waveIndex++;
         this.queueWave();
-        this.stateTimer=4+Math.random()*2;
+        this.stateTimer=4+this.engine.rng.range(0,2);
         break;
       }
       case WAVE_STATES.DEPLOY:{
         this.state=WAVE_STATES.SUSTAIN;
-        this.stateTimer=6+Math.random()*4;
+        this.stateTimer=6+this.engine.rng.range(0,4);
         break;
       }
       case WAVE_STATES.SUSTAIN:{
         // Occasional surges break the rhythm so it never feels metronomic.
-        if(progress>.25&&Math.random()<.32){
+        if(progress>.25&&this.engine.rng.next()<.32){
           this.state=WAVE_STATES.SURGE;
           this.queueSurge();
           this.stateTimer=5;
         }else{
           this.state=WAVE_STATES.LULL;
-          this.stateTimer=clamp(6-progress*4,1.6,6)+Math.random()*1.5;
+          this.stateTimer=clamp(6-progress*4,1.6,6)+this.engine.rng.range(0,1.5);
         }
         break;
       }
@@ -220,7 +220,7 @@ export class Director{
     const groups=clamp(Math.round(size/6),1,4);
     for(let g=0;g<groups;g++){
       const bearing=rng.angle();
-      const squad=new Squad('assault');
+      const squad=new Squad('assault',this.engine.rng);
       const members=Math.ceil(size/groups);
       const archetype=this.pickArchetype(rng);
       for(let i=0;i<members;i++){
@@ -234,7 +234,7 @@ export class Director{
   queueSurge(){
     const rng=this.engine.rng;
     const size=Math.round((8+this.escalation*13)*this.difficulty.densityMult);
-    const squad=new Squad('assault');
+    const squad=new Squad('assault',this.engine.rng);
     const bearing=rng.angle();
     for(let i=0;i<size;i++){
       this.spawnQueue.push({archetype:this.pickArchetype(rng),bearing,squad,spread:1.2,gap:.05});

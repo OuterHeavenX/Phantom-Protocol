@@ -694,7 +694,7 @@ export class Engine{
       walkPhase:this.rng.next()*10,
       squad:null
     };
-    EnemyBrain.init(enemy,archetype);
+    EnemyBrain.init(enemy,archetype,this.rng);
     this.assignAggro(enemy);
     this.enemies.push(enemy);
     return enemy;
@@ -881,6 +881,11 @@ export class Engine{
   aiContext(dt){
     return{
       dt,
+      // The simulation's own stream. Every AI draw goes through it, so the
+      // same contract seed produces the same hostiles doing the same things.
+      // Cosmetic randomness — particles, audio variation, weather — stays off
+      // it deliberately, or a change of particle quality would desync the run.
+      rng:this.rng,
       player:this.player,
       world:this.world,
       detectionMult:this.detectionMult,

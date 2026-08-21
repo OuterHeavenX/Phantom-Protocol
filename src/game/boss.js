@@ -78,7 +78,7 @@ export class Boss{
     if(!pattern)return;
 
     this.patternCooldowns.set(pattern.id,pattern.cooldown/this.enrage);
-    this.globalCooldown=(.9+Math.random()*.6)/this.enrage;
+    this.globalCooldown=(.9+engine.rng.range(0,.6))/this.enrage;
 
     const impl=PATTERNS[pattern.id];
     if(!impl)return;
@@ -148,7 +148,7 @@ export class Boss{
     const distance=dist(this.x,this.y,player.x,player.y);
     const preferred=this.radius+180;
     const drive=distance>preferred?1:distance<preferred*.65?-1:0;
-    const strafeDir=this.strafeDir||(this.strafeDir=Math.random()<.5?1:-1);
+    const strafeDir=this.strafeDir||(this.strafeDir=engine.rng.bool()?1:-1);
 
     const targetVx=(toPlayer.x*drive-toPlayer.y*strafeDir*.5)*this.speed;
     const targetVy=(toPlayer.y*drive+toPlayer.x*strafeDir*.5)*this.speed;
@@ -158,7 +158,7 @@ export class Boss{
     this.y+=this.vy*dt;
     engine.world.resolveCollision(this,this.radius);
 
-    if(Math.random()<dt*.2)this.strafeDir*=-1;
+    if(engine.rng.next()<dt*.2)this.strafeDir*=-1;
   }
 
   emitShockwave(engine){
@@ -183,7 +183,7 @@ export class Boss{
     if(!available.length)return null;
     let total=0;
     for(const pattern of available)total+=pattern.weight||1;
-    let roll=Math.random()*total;
+    let roll=engine.rng.next()*total;
     for(const pattern of available){
       roll-=pattern.weight||1;
       if(roll<=0)return pattern;
@@ -223,7 +223,7 @@ const PATTERNS={
     fire(boss,pattern,engine){
       const arms=pattern.arms||3;
       const perArm=pattern.bullets||9;
-      const direction=pattern.counterRotate&&Math.random()<.5?-1:1;
+      const direction=pattern.counterRotate&&engine.rng.bool()?-1:1;
       for(let shot=0;shot<perArm;shot++){
         engine.scheduleAction(shot*.07,()=>{
           if(boss.dead)return;
@@ -282,10 +282,10 @@ const PATTERNS={
           if(boss.dead)return;
           const player=engine.player;
           const spread=i===0?0:120+i*30;
-          const angle=Math.random()*TAU;
+          const angle=engine.rng.angle();
           engine.spawnOrbitalStrike({
-            x:player.x+player.vx*.5+Math.cos(angle)*spread*Math.random(),
-            y:player.y+player.vy*.5+Math.sin(angle)*spread*Math.random(),
+            x:player.x+player.vx*.5+Math.cos(angle)*spread*engine.rng.next(),
+            y:player.y+player.vy*.5+Math.sin(angle)*spread*engine.rng.next(),
             delay:pattern.delay||1.2,
             damage:pattern.damage*boss.damageMult,
             blastRadius:pattern.radius||110,
@@ -337,8 +337,8 @@ const PATTERNS={
     fire(boss,pattern,engine){
       const player=engine.player;
       for(let attempt=0;attempt<16;attempt++){
-        const angle=Math.random()*TAU;
-        const distance=(pattern.range||340)*(.6+Math.random()*.6);
+        const angle=engine.rng.angle();
+        const distance=(pattern.range||340)*(.6+engine.rng.range(0,.6));
         const x=player.x+Math.cos(angle)*distance;
         const y=player.y+Math.sin(angle)*distance;
         if(!engine.world.isInside(x,y,boss.radius+30))continue;
@@ -363,8 +363,8 @@ const PATTERNS={
           const lead=pattern.predictive?.75:.2;
           const jitter=pattern.predictive?40:150;
           engine.spawnOrbitalStrike({
-            x:player.x+player.vx*lead+(Math.random()-.5)*jitter,
-            y:player.y+player.vy*lead+(Math.random()-.5)*jitter,
+            x:player.x+player.vx*lead+(engine.rng.next()-.5)*jitter,
+            y:player.y+player.vy*lead+(engine.rng.next()-.5)*jitter,
             delay:pattern.delay||1.2,
             damage:pattern.damage*boss.damageMult,
             blastRadius:pattern.radius||100,
@@ -402,7 +402,7 @@ const PATTERNS={
     fire(boss,pattern,engine){
       const weapons=engine.loadout.weapons;
       if(!weapons.length){PATTERNS.radialBurst.fire(boss,{bullets:12,speed:280,damage:pattern.damage},engine);return}
-      const weapon=weapons[Math.floor(Math.random()*weapons.length)];
+      const weapon=engine.rng.pick(weapons);
       const angle=Math.atan2(engine.player.y-boss.y,engine.player.x-boss.x);
       const shots=clamp(Math.round(weapon.level*.8)+2,3,10);
       for(let i=0;i<shots;i++){

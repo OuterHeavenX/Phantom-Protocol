@@ -22,7 +22,11 @@ export const AI_STATES={
 let squadIdCounter=0;
 
 export class Squad{
-  constructor(objective='assault'){
+  // `rng` is the simulation's stream, not a cosmetic one. Every draw a squad
+  // makes changes where hostiles go, so it has to come from the contract seed
+  // or the same seed stops producing the same contract.
+  constructor(objective='assault',rng){
+    this.rng=rng;
     this.id=++squadIdCounter;
     this.members=[];
     this.objective=objective;
@@ -30,7 +34,7 @@ export class Squad{
     this.commander=null;
     this.focusX=0;this.focusY=0;
     this.decisionTimer=0;
-    this.flankSide=Math.random()<.5?1:-1;
+    this.flankSide=rng.bool()?1:-1;
     this.initialSize=0;
     this.suppressing=false;
   }
@@ -66,7 +70,7 @@ export class Squad{
   think(dt,ctx){
     this.decisionTimer-=dt;
     if(this.decisionTimer>0)return;
-    this.decisionTimer=.45+Math.random()*.35;
+    this.decisionTimer=.45+ctx.rng.range(0,.35);
 
     const alive=this.members.filter(m=>!m.dead);
     if(!alive.length)return;
@@ -199,19 +203,19 @@ function avoidObstacles(enemy,world,out,weight=1){
 // ---------------------------------------------------------------------------
 
 export class EnemyBrain{
-  static init(enemy,archetype){
+  static init(enemy,archetype,rng){
     enemy.state=AI_STATES.SEARCH;
     enemy.stateTimer=0;
     enemy.awareness=0;            // 0 unaware .. 1 fully tracking
     enemy.lastKnownX=enemy.x;
     enemy.lastKnownY=enemy.y;
     enemy.memory=0;
-    enemy.attackCooldown=Math.random()*1.4;
+    enemy.attackCooldown=rng.range(0,1.4);
     enemy.windup=0;
     enemy.windupAction=null;
-    enemy.flankSide=Math.random()<.5?1:-1;
-    enemy.wallSlide=Math.random()<.5?1:-1;
-    enemy.strafeDir=Math.random()<.5?1:-1;
+    enemy.flankSide=rng.bool()?1:-1;
+    enemy.wallSlide=rng.bool()?1:-1;
+    enemy.strafeDir=rng.bool()?1:-1;
     enemy.coverPoint=null;
     enemy.coverTimer=0;
     enemy.repathTimer=0;
@@ -221,7 +225,7 @@ export class EnemyBrain{
     enemy.desiredX=enemy.x;enemy.desiredY=enemy.y;
     enemy.profile=archetype.ai;
     enemy.preferredRange=PROFILES[archetype.ai]?.preferredRange??90;
-    enemy.aggression=.7+Math.random()*.5;
+    enemy.aggression=.7+rng.range(0,.5);
     enemy.reactionDelay=PROFILES[archetype.ai]?.reaction??.25;
     enemy.reactionTimer=0;
     enemy.cloaked=false;
@@ -348,8 +352,8 @@ export class EnemyBrain{
     }else{
       enemy.repathTimer-=ctx.dt;
       if(enemy.repathTimer<=0||enemy.patrolX===undefined){
-        enemy.repathTimer=2.6+Math.random()*2;
-        const angle=Math.random()*TAU;
+        enemy.repathTimer=2.6+ctx.rng.range(0,2);
+        const angle=ctx.rng.angle();
         enemy.patrolX=enemy.x+Math.cos(angle)*300;
         enemy.patrolY=enemy.y+Math.sin(angle)*300;
       }
@@ -364,7 +368,7 @@ export class EnemyBrain{
     if(distanceToPlayer<enemy.preferredRange*1.6){
       strafe(enemy,player.x,player.y,enemy.strafeDir,steer,profile.strafe??.55);
       // Occasionally reverse to break player muscle memory.
-      if(Math.random()<ctx.dt*.35)enemy.strafeDir*=-1;
+      if(ctx.rng.next()<ctx.dt*.35)enemy.strafeDir*=-1;
     }
   }
 
@@ -384,7 +388,7 @@ export class EnemyBrain{
     const player=ctx.player;
     if(!enemy.coverPoint||enemy.coverTimer<=0||enemy.coverPoint.obstacle.broken){
       enemy.coverPoint=ctx.claimCoverPoint(enemy,player);
-      enemy.coverTimer=3.5+Math.random()*3;
+      enemy.coverTimer=3.5+ctx.rng.range(0,3);
     }
     enemy.coverTimer-=ctx.dt;
     if(enemy.coverPoint){
@@ -503,7 +507,7 @@ const PROFILES={
       if(enemy.awareness<.3)return AI_STATES.SEARCH;
       if(enemy.squad?.objective==='withdraw')return AI_STATES.RETREAT;
       // Break line of sight to reload, then step back out.
-      if(enemy.hp/enemy.maxHp<.4&&Math.random()<ctx.dt*.6)return AI_STATES.COVER;
+      if(enemy.hp/enemy.maxHp<.4&&ctx.rng.next()<ctx.dt*.6)return AI_STATES.COVER;
       if(!ctx.hasSight&&enemy.awareness>.5)return AI_STATES.ENGAGE;
       if(enemy.squadRole==='flank')return AI_STATES.FLANK;
       return AI_STATES.ENGAGE;
