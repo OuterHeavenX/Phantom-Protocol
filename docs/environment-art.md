@@ -83,16 +83,32 @@ falls back complete rather than showing a gap where a cap should be.
 
 ## What is wired up today
 
-Blacksite Zero is opted in with `art:'black site'` and ships three things: a
-512x512 floor plate mapped to the existing 128-unit tiling period, and both
-partition wall sets — a 104x104 cap at each end with a middle that tiles at 32
-world units, 128x104 for horizontal walls and 104x128 for vertical ones.
-Everything else in that theatre — cover, vault chamber walls and seals, hazards,
-decor — still draws procedurally, and so does any wall whose files fail to load.
-The two orientations fail independently. No other theatre has the flag.
+Blacksite Zero is opted in with `art:'black site'` and ships the floor, both
+wall orientations and all six cover types:
 
-The vertical set is derived from the horizontal one by reflection about the main
-diagonal. That is not the same as rotating it: a diagonal reflection maps the
+| key | assets |
+|---|---|
+| `floor` | one 512x512 plate on the existing 128-unit tiling period |
+| `wall.h`, `wall.v` | a 104x104 cap at each end, middle tiling at 32 world units |
+| `cover.crate`, `cover.pillar` | four variants each — together 64% of all cover placed |
+| `cover.barrier`, `cover.lowcover`, `cover.machinery`, `cover.container` | two variants each |
+
+Vault chamber walls, vault seals, hazards and decor still draw procedurally, and
+so does anything whose files fail to load. Every key fails independently. No
+other theatre has the flag.
+
+The vertical wall set is derived from the horizontal one, and the cover is
+surfaced from the same panel metal, so the whole theatre reads as one facility.
+Cover masters were kept inside the value range of the approved wall and floor
+art — mean luminance 40 to 59 against the floor's 43 and the wall cap's 56 —
+so the additive lighting pass lifts them rather than clipping them.
+
+Cover needs no slicing: six fixed footprints, never scaled and never rotated, so
+each is a single stretch-to-collider blit and `variant` picks the face the
+generator already chose for the piece.
+
+The vertical wall set is derived from the horizontal one by reflection about the
+main diagonal. That is not the same as rotating it: a diagonal reflection maps the
 upper-left quadrant onto itself, so the theatre's fixed upper-left key light
 survives it, where a 90-degree rotation would have swung the light to the
 upper-right. It also inherits the horizontal middle's seamless tiling, since the

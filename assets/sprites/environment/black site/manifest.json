@@ -33,6 +33,46 @@
         "mid": "walls/blacksite-wall-v-mid-104x128-derived.png",
         "capB": "walls/blacksite-wall-v-cap-b-104x104-derived.png"
       }
+    },
+    "cover.crate": {
+      "variants": [
+        "cover/blacksite-cover-crate-0.png",
+        "cover/blacksite-cover-crate-1.png",
+        "cover/blacksite-cover-crate-2.png",
+        "cover/blacksite-cover-crate-3.png"
+      ]
+    },
+    "cover.pillar": {
+      "variants": [
+        "cover/blacksite-cover-pillar-0.png",
+        "cover/blacksite-cover-pillar-1.png",
+        "cover/blacksite-cover-pillar-2.png",
+        "cover/blacksite-cover-pillar-3.png"
+      ]
+    },
+    "cover.barrier": {
+      "variants": [
+        "cover/blacksite-cover-barrier-0.png",
+        "cover/blacksite-cover-barrier-1.png"
+      ]
+    },
+    "cover.lowcover": {
+      "variants": [
+        "cover/blacksite-cover-lowcover-0.png",
+        "cover/blacksite-cover-lowcover-1.png"
+      ]
+    },
+    "cover.machinery": {
+      "variants": [
+        "cover/blacksite-cover-machinery-0.png",
+        "cover/blacksite-cover-machinery-1.png"
+      ]
+    },
+    "cover.container": {
+      "variants": [
+        "cover/blacksite-cover-container-0.png",
+        "cover/blacksite-cover-container-1.png"
+      ]
     }
   }
 }
