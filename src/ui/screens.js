@@ -15,6 +15,8 @@ import {
 } from '../save/progression.js';
 import {portraitSvg,portraitMarkup,dossierCardMarkup} from '../render/portraits.js';
 import {CAMPAIGN,OBJECTIVE_TYPES,nextOperation,campaignProgress,operationUnlocked} from '../../data/campaign.js';
+import {activeContracts,resolveDifficulty,timeRemaining} from '../../data/contracts.js';
+import {contractRecord} from '../save/contracts.js';
 import {
   SLOTS,slotLabel,attachmentsFor,ATTACHMENTS_BY_ID,defaultBuild,MAX_WEAPON_RANK
 } from '../../data/attachments.js';
@@ -112,6 +114,7 @@ export class Screens{
 
     const nav=[
       ['CAMPAIGN','Story operations and recovered documents','campaign'],
+      ['CONTRACTS','Rotating daily and weekly assignments','contracts'],
       ['DEPLOY','Configure and launch an operation','deploy'],
       ['OPERATIVES','Roster, mastery and dossiers','operatives'],
       ['GUNSMITH','Fit optics, barrels and internals','gunsmith'],
@@ -209,6 +212,7 @@ export class Screens{
   route(name){
     const routes={
       campaign:()=>this.campaign(),
+      contracts:()=>this.contracts(),
       gunsmith:()=>this.gunsmith(),
       deploy:()=>this.deploy(),operatives:()=>this.operatives(),
       armory:()=>this.armory(),development:()=>this.development(),
@@ -242,6 +246,69 @@ export class Screens{
     window.addEventListener('keydown',handler);
     this.navHandler&&window.removeEventListener('keydown',this.navHandler);
     this.navHandler=handler;
+  }
+
+  // ---- rotating contracts -------------------------------------------------
+
+  // The board. Both contracts are computed from today's date rather than
+  // stored, so this screen is a pure read — there is nothing to sync and
+  // nothing to expire, and two operators opening it on the same day see the
+  // same two assignments.
+  contracts(){
+    const save=this.save;
+    const now=Date.now();
+    const list=activeContracts();
+
+    this.shell(this.panel('CONTRACT BOARD',
+      'Two standing assignments, drawn from the calendar. Everybody gets the same sector, the same response and the same command signature — the seed comes from the date, not from your machine.',
+      `<div class="op-list">
+        ${list.map(c=>{
+          const record=contractRecord(save,c);
+          const resolved=resolveDifficulty(c);
+          const remaining=timeRemaining(c,now);
+          return `<article class="op-row ${record?.survived?'done':''}">
+            <span class="op-index">${c.kind==='weekly'?'WK':'DY'}</span>
+            <div class="op-body">
+              <span class="eyebrow">${escape(c.label)} · ${escape(c.key)} · RESETS IN ${escape(remaining)}</span>
+              <h3>${escape(c.map.name)} · ${escape(c.duration.label)}</h3>
+              <p class="muted">${escape(c.modifier.name)} — ${escape(c.modifier.desc)}</p>
+              <div class="contract-terms">
+                <span>${escape(c.difficulty.name)}</span>
+                <span>JP x${resolved.jpMult.toFixed(2)}</span>
+                <span>SEED ${c.seed}</span>
+              </div>
+              ${record?`<p class="muted contract-best">BEST · ${record.survived?'EXTRACTED':'LOST'} · ${record.score.toLocaleString()} pts · ${record.kills} kills · ${record.attempts} attempt${record.attempts===1?'':'s'}</p>`
+                      :'<p class="muted contract-best">No attempt recorded.</p>'}
+            </div>
+            <div class="op-action">
+              <button class="btn primary small" data-contract="${escape(c.kind)}">DEPLOY</button>
+            </div>
+          </article>`;
+        }).join('')}
+      </div>`,
+      {eyebrow:'ASSIGNMENTS',wide:true}));
+
+    this.wireBack();
+    root().querySelectorAll('[data-contract]').forEach(button=>{
+      button.addEventListener('click',()=>{
+        this.click();
+        const contract=list.find(c=>c.kind===button.dataset.contract);
+        if(!contract)return;
+        const operativeId=this.deployConfig.operative;
+        this.startGame({
+          operative:OPERATIVES.find(o=>o.id===operativeId)||OPERATIVES[0],
+          map:contract.map,
+          duration:contract.duration.minutes,
+          durationSpec:contract.duration,
+          // The modifier is folded in here rather than in the engine, so a
+          // contract needs no simulation code of its own.
+          difficulty:resolveDifficulty(contract),
+          primary:this.currentPrimary(),
+          seed:contract.seed,
+          contract
+        });
+      });
+    });
   }
 
   // ---- campaign ----------------------------------------------------------

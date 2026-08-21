@@ -2,6 +2,7 @@ import {loadSave,saveGame} from './save/storage.js';
 import {commitRun,completeRecruitments,undiscoveredOperatives,
   clearHealed,sendToMedical} from './save/progression.js';
 import {nemesisRecord,commitNemesis} from './game/nemesis.js';
+import {recordContract} from './save/contracts.js';
 import {nemesisDue} from '../data/nemesis.js';
 import {Screens} from './ui/screens.js';
 import {Splash} from './ui/splash.js';
@@ -110,7 +111,9 @@ function startRun(config){
     }:null,
     // Files a personnel cache can turn up in this run.
     discoverable:undiscoveredOperatives(save).map(op=>({id:op.id,codename:op.codename})),
-    seed:Math.floor(Math.random()*1e9)
+    // Free deployment rolls a fresh seed; a rotating contract supplies its own,
+    // derived from the calendar, so every operator faces the same sector.
+    seed:config.seed??Math.floor(Math.random()*1e9)
   };
 
   // The HUD owns the canvas element, so create the DOM before the engine.
@@ -236,6 +239,8 @@ function finishRun(summary,config){
   cancelAnimationFrame(session.raf);
 
   summary.operationId=config.operation?.id||null;
+  // A rotating contract keeps only the operator's best attempt at it.
+  if(config.contract)recordContract(save,config.contract,summary);
   // A squadmate carried out on their back spends real time in medical. Being
   // downed is not a death, but walking to the beacon without them is a choice
   // the next contract remembers.

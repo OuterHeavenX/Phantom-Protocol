@@ -80,6 +80,10 @@ export function defaultSave(){
     operatives,weapons,maps,difficulties,
     dev:{},
     campaign:{},
+    // Best result per rotating contract, keyed by its calendar key. A contract
+    // is a pure function of its date, so a record written today still describes
+    // the contract it was set on even after that day has rolled over.
+    contracts:{},
     achievements:{},
     milestones:{},
     intelligence:{},

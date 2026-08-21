@@ -914,3 +914,13 @@ input[type=range]::-moz-range-thumb{
 @media(pointer:coarse){
   .splash-hint{bottom:2.5%}
 }
+
+/* Contract board — the two rotating assignments. */
+.contract-terms{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.55rem}
+.contract-terms span{
+  font-size:.68rem;letter-spacing:.09em;padding:.2rem .55rem;
+  border:1px solid rgba(118,231,212,.3);border-radius:2px;
+  color:#76e7d4;white-space:nowrap;
+}
+.contract-best{margin-top:.55rem;font-size:.72rem;letter-spacing:.06em}
+.op-row .op-index{white-space:nowrap}

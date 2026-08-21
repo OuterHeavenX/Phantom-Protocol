@@ -33,15 +33,23 @@ last meeting. Plus squadmates — a second operative on the ground who fights wi
 weapon and their own ability, whom a share of each wave marks as their target, and who
 goes down rather than dying.
 
+And since: the whole authored-art pipeline for Blacksite Zero — a loader with a
+procedural fallback for every draw path, an authored floor plate, three-sliced walls in
+both orientations, and all six cover types with variants. Plus the simulation made
+reproducible from its seed, and the contract board built on top of it: a daily and a
+weekly assignment derived from the calendar, with rotating theatres, lengths,
+difficulties and modifiers, so every operator faces the same sector on the same day.
+
 Remaining:
 
-1. Deterministic daily and weekly contracts built on the existing seeded RNG. Blocked
-   on the simulation being reproducible from a seed at all: the director, boss and FX
-   still call bare `Math.random()`, so the same seed does not produce the same contract.
-   Item 4 is blocked on the same thing.
+1. ~~Deterministic daily and weekly contracts.~~ Shipped. Thirty-one draws across the
+   AI, the bosses and the director moved onto the seeded stream; particles and audio
+   deliberately stayed off it, which is now enforced by test rather than convention.
 2. A second development tree branch gated behind account level.
 3. Per-weapon secondary fire modes, as an eighth Gunsmith slot.
-4. Replay capture using the seeded, fixed-timestep simulation.
+4. Replay capture using the seeded, fixed-timestep simulation. No longer blocked — the
+   simulation now reproduces exactly from its seed, so a replay is an input log plus a
+   seed rather than a state dump.
 5. Performance profiling on low-end mobile hardware.
 6. Vault variants beyond the loot-and-garrison pair — timed holds, terminal hacks.
 7. Turret variants (shield pylon, slow field) selectable from the deployment kit.
