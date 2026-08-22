@@ -134,13 +134,15 @@ imported by production code except a single dynamic `import()` in `src/main.js`
 behind a URL flag, so with the flag absent none of it is fetched.
 
 `src/experiments/visual-test/` — **BLACKSITE VISUAL TEST**, reached at
-`?visualtest=1`. An experimental WebGL2 renderer over the real simulation,
-built to find out how far the presentation can be pushed and whether a GPU path
-is worth having. `?visualtest=1&renderer=2d` runs the same level through the
-production Canvas 2D renderer as a control. See that directory's README for the
-pipeline and for how to run the benchmark on your own hardware.
+`?visualtest=1`. A benchmark harness: an enemy-count sweep over the real
+simulation, with per-pass timings, feature switches and a supersampling control.
 
-The production BLACKSITE ZERO is untouched by any of it.
+It began as the isolated experiment the deferred renderer was built in. Now that
+the renderer has shipped, the harness drives the shipping classes rather than a
+copy of them — `?visualtest=1` runs `DeferredRenderer`, `?visualtest=1&renderer=2d`
+runs the production Canvas 2D renderer as the control, and `?visualtest=1&theatre=<id>`
+picks any of the ten. A number measured there is therefore a number about the game.
+See that directory's README.
 
 ## Static checks
 
@@ -191,10 +193,25 @@ through walls. Heavy attacks run through a windup with a visible telegraph.
 
 ## Rendering
 
-Ten stages, back to front, described in `src/render/renderer.js`. Entities are sorted by
-world Y each frame so overlap reads correctly. The lighting pass renders additive radial
-gradients into a half-resolution offscreen canvas which is composited with
-`globalCompositeOperation = 'lighter'`; it is skipped entirely in performance mode.
+Two renderers with the same public surface — construct, `resize`, `render`, `destroy`.
+`createRenderer` in `src/main.js` is the only code that knows there is a choice, and it
+is called before anything touches the canvas: a canvas is bound to its context for life,
+so taking a 2D context to check something first permanently forecloses WebGL2 on it.
+
+**Canvas 2D** (`src/render/renderer.js`) is ten stages, back to front. Entities are
+sorted by world Y each frame so overlap reads correctly. The lighting pass renders
+additive radial gradients into a half-resolution offscreen canvas which is composited
+with `globalCompositeOperation = 'lighter'`; it is skipped entirely in performance mode.
+
+**Deferred WebGL2** (`src/render/gl/`) replaces the floor, geometry, lighting and post
+with an instanced G-buffer, instanced light volumes, a bloom chain and a filmic
+composite, and calls back into the 2D renderer for everything else through two entry
+points it owns: `drawWorldLayer` for world-space sprites and markers, `drawScreenLayer`
+for weather and the readouts. Neither is used by the 2D path, so that class behaves
+identically whether or not a GL renderer exists. Per-theatre scene dressing lives in
+`src/render/gl/dressing.js`. The capability probe is split into
+`src/render/gl/support.js` so the settings screen can ask whether WebGL2 is usable
+without importing a renderer to find out. See `docs/deferred-renderer.md`.
 
 All sprites are procedural vector drawings (`src/render/sprites.js`) with animated limbs
 and directional weapons. Operative portraits are the same idea in SVG for the DOM UI

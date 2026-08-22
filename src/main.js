@@ -11,6 +11,8 @@ import {LevelUpScreen} from './ui/levelup.js';
 import {PauseMenu} from './ui/pause.js';
 import {Engine} from './game/engine.js';
 import {Renderer} from './render/renderer.js';
+import {DeferredRenderer} from './render/gl/deferred.js';
+import {shouldUseGL,probeWebGL2} from './render/gl/support.js';
 import {Input,isTouchDevice} from './core/input.js';
 import {BUTTON} from './core/gamepad.js';
 import {FocusNav} from './ui/focusnav.js';
@@ -176,11 +178,10 @@ function startRun(config){
   const engine=new Engine(placeholder,engineConfig);
 
   const hud=new Hud(app,engine);
-  const canvas=hud.el.canvas;
-  const ctx=canvas.getContext('2d',{alpha:false});
+  // The renderer may have to replace the canvas element to recover from a
+  // failed GL initialisation, so it hands back the one actually in the page.
+  const {renderer,canvas}=createRenderer(hud,engine,save.settings);
   engine.canvas=canvas;
-
-  const renderer=new Renderer(canvas,ctx,engine);
   const levelUp=new LevelUpScreen(engine,save);
   const pause=new PauseMenu(engine,save,{
     onSettingsChange:()=>{
@@ -259,6 +260,53 @@ function startRun(config){
 
   session.last=performance.now();
   session.raf=requestAnimationFrame(tick);
+}
+
+// ---------------------------------------------------------------------------
+// Renderer selection
+// ---------------------------------------------------------------------------
+//
+// Two renderers ship: the Canvas 2D one that has always run the game, and the
+// deferred WebGL2 one. They present the same surface, so this is the only
+// place that knows there is a choice.
+//
+// A canvas gets exactly one context for its lifetime, so the decision has to
+// be made before anything touches it — taking a 2D context to "check
+// something first" permanently forecloses WebGL2 on that canvas. The
+// capability probe therefore runs on a throwaway 1x1 canvas.
+//
+// Anything that goes wrong falls back rather than failing: a browser without
+// WebGL2, a driver that refuses to link a shader, a machine where the only
+// implementation is a software rasteriser. The 2D renderer is not a
+// degraded mode, it is the shipping renderer, and every theatre still looks
+// right under it.
+function createRenderer(hud,engine,settings){
+  let canvas=hud.el.canvas;
+  if(shouldUseGL(settings)){
+    try{
+      const gl=new DeferredRenderer(canvas,engine);
+      if(!gl.failed){
+        console.info('[red-static] renderer: deferred WebGL2 · %s',probeWebGL2().renderer);
+        return{renderer:gl,canvas};
+      }
+      gl.destroy?.();
+    }catch(err){
+      console.warn('[red-static] deferred renderer failed, falling back to Canvas 2D',err);
+    }
+    // The canvas may now hold a dead or half-built GL context, and a canvas
+    // cannot trade one context for another. Replacing the element is the only
+    // way back to Canvas 2D.
+    const fresh=canvas.cloneNode(false);
+    fresh.width=canvas.width;
+    fresh.height=canvas.height;
+    canvas.replaceWith(fresh);
+    hud.el.canvas=fresh;
+    canvas=fresh;
+  }
+  const ctx=canvas.getContext('2d',{alpha:false});
+  // Nothing left to draw with. Better to say so than to run a blank frame loop.
+  if(!ctx)throw new Error('No 2D canvas context available');
+  return{renderer:new Renderer(canvas,ctx,engine),canvas};
 }
 
 function tick(now){

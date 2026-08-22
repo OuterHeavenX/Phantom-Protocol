@@ -7,27 +7,33 @@
 //
 // The test borrows the production Engine wholesale. The simulation is not
 // touched: hostiles path, shoot and die exactly as they do in a real contract,
-// which is the only way an enemy-count sweep means anything. What is replaced
-// is the renderer.
+// which is the only way an enemy-count sweep means anything.
+//
+// It also borrows the production renderers wholesale. Both paths under test —
+// the deferred WebGL2 one and the Canvas 2D one — are now the shipping
+// classes, so a number measured here is a number about the game rather than
+// about an experiment that resembles it.
 
 import {Engine} from '../../game/engine.js';
 import {Renderer} from '../../render/renderer.js';
 import {MAPS,DURATIONS,DIFFICULTIES_BY_ID} from '../../../data/maps.js';
 import {OPERATIVES} from '../../../data/operatives.js';
-import {VisualTestRenderer} from './renderer-gl.js';
-import {emitters} from './scene.js';
+import {DeferredRenderer} from '../../render/gl/deferred.js';
 import {Harness} from './harness.js';
-import {preset} from './presets.js';
+import {preset} from '../../render/gl/presets.js';
 
 export async function bootVisualTest({audio,input,save}){
   await injectStyles();
 
   const app=document.querySelector('#app');
+  const params0=new URLSearchParams(location.search);
+  const wantedId=(params0.get('theatre')||'blacksite').toLowerCase();
+  const banner=MAPS.find(m=>m.id===wantedId)?.name||MAPS[0].name;
   app.innerHTML=`
     <div class="screen vt-screen">
       <canvas id="vtCanvas"></canvas>
       <div class="vt-banner">
-        BLACKSITE VISUAL TEST — experimental renderer ·
+        VISUAL TEST — ${banner} · ${params0.get('renderer')==='2d'?'Canvas 2D':'deferred WebGL2'} ·
         <a href="?">leave</a>
       </div>
     </div>`;
@@ -36,18 +42,22 @@ export async function bootVisualTest({audio,input,save}){
   // A dedicated theatre entry so the production BLACKSITE ZERO is untouched.
   // Sized to the experimental sector and marked so world generation lays out a
   // room rather than the usual corridor grid.
-  const baseMap=MAPS.find(m=>m.id==='blacksite');
+  // ?theatre=<id> runs the sweep in any of the ten. Default is BLACKSITE ZERO,
+  // which is the one the numbers on record were taken in.
+  const baseMap=MAPS.find(m=>m.id===wantedId)||MAPS[0];
   const map={
     ...baseMap,
-    id:'blacksite-visual-test',
-    name:'BLACKSITE VISUAL TEST',
-    // The authored art pack belongs to the production theatre; this one paints
-    // its own environment in GL and must not also draw the 2D one underneath.
+    // A dedicated theatre entry so the production level is untouched, keeping
+    // the same id suffix the earlier runs used.
+    id:`${baseMap.id}-visual-test`,
+    name:`${baseMap.name} VISUAL TEST`,
+    // The authored art pack belongs to the production theatre; the GL path
+    // paints its own floor and must not also draw the 2D one underneath.
     art:null
   };
 
-  const params=new URLSearchParams(location.search);
-  const quality=preset(params.get('preset')?.toUpperCase()||'HIGH');
+  const quality=preset(params0.get('preset')?.toUpperCase()||'HIGH');
+  const params=params0;
 
   const engine=new Engine(canvas,{
     operative:OPERATIVES[0],
@@ -73,31 +83,27 @@ export async function bootVisualTest({audio,input,save}){
 
   // The GL renderer claims the visible canvas first. A canvas gets exactly one
   // context for its lifetime, so taking a 2D one here — which an earlier
-  // version of this file did, to build the sprite proxy — makes WebGL2
+  // version of this file did, to build a sprite proxy — makes WebGL2
   // permanently unavailable on it.
-  const renderer=new VisualTestRenderer(canvas,engine,
+  //
+  // This is the shipping DeferredRenderer, unmodified. It brings its own copy
+  // of the production 2D renderer for sprites and its own screen-space UI
+  // layer, so what is measured here is exactly what a contract costs.
+  const renderer=new DeferredRenderer(canvas,engine,
     {quality,seed:1337,capture:params.get('vtcapture')==='1'});
   if(renderer.failed){
     app.innerHTML=`<div class="vt-fail"><h1>WebGL2 unavailable</h1>
-      <p>This experiment needs WebGL2. The production game does not.</p>
+      <p>This test needs WebGL2. The game falls back to Canvas 2D without it.</p>
       <p><a href="?">Back to RED STATIC</a></p></div>`;
     return null;
   }
 
-  // The production renderer, used here only for its entity passes: hostiles,
-  // projectiles and pickups are drawn by the shipping sprite code so
-  // readability under the new lighting is a fair comparison. It draws onto the
-  // renderer's offscreen layer and never presents to the screen.
-  const spriteProxy=new Renderer(renderer.entityCanvas,renderer.entityCtx,engine);
-  renderer.spriteProxy=spriteProxy;
-  renderer.initAtmosphere(emitters(renderer.scene));
-
-  renderer.initAtmosphere(emitters(renderer.scene));
-
   return runLoop({app,canvas,engine,renderer,quality,params,input,
-    onResize:()=>{
-      // The proxy draws onto the entity layer, which the GL renderer sizes.
-      spriteProxy.resize?.(renderer.entityCanvas.width,renderer.entityCanvas.height);
+    // A preset change moves the render scale and the atmosphere budget, and
+    // neither is picked up without being told.
+    onPresetChange:()=>{
+      renderer.resize(canvas.width,canvas.height);
+      renderer.initAtmosphere();
     }});
 }
 
@@ -109,7 +115,7 @@ export async function bootVisualTest({audio,input,save}){
 // simulation and the sampling are identical and the two sets of numbers can
 // be put side by side.
 
-function runLoop({app,canvas,engine,renderer,quality,params,input,onResize}){
+function runLoop({app,canvas,engine,renderer,quality,params,input,onResize,onPresetChange}){
   // The director is stood down so the population is exactly what the test asks
   // for. Hostiles are real: same archetypes, same AI, same collision.
   engine.director.update=()=>{};
@@ -152,7 +158,7 @@ function runLoop({app,canvas,engine,renderer,quality,params,input,onResize}){
 
   const harness=new Harness({
     engine,renderer,quality,
-    onPresetChange:()=>renderer.resize(canvas.width,canvas.height),
+    onPresetChange:onPresetChange||(()=>renderer.resize(canvas.width,canvas.height)),
     onEnemyCount:n=>{target=n}
   });
   harness.targetEnemies=target;
@@ -185,7 +191,7 @@ function runLoop({app,canvas,engine,renderer,quality,params,input,onResize}){
     engine.timeRemaining=Math.max(60,engine.timeRemaining);
     engine.update(dt,input);
     maintain();
-    renderer.render(dt);
+    renderer.render();
     harness.update(ms,now);
     raf=requestAnimationFrame(frame);
   };
@@ -237,7 +243,7 @@ function boot2d({app,canvas,engine,quality,params,input}){
   // an adapter rather than by teaching the harness about two renderers.
   const adapter={
     info:{renderer:'Canvas 2D (production renderer)',software:false,ok:true},
-    timings:{gbuffer:0,lights:0,particles:0,bloom:0,composite:0,upload:0,entities:0},
+    timings:{gbuffer:0,lights:0,particles:0,bloom:0,composite:0,upload:0,sprites:0,gpu:0},
     get lightCount(){return renderer.lightingEnabled?-1:0},
     get particleCount(){return engine.fx.particles.count},
     get propCount(){return engine.world.walls.length+engine.world.cover.length},

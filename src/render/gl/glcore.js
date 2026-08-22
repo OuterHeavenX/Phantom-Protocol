@@ -1,12 +1,13 @@
-// Minimal WebGL2 helpers for the visual test.
+// Minimal WebGL2 helpers.
 //
-// Deliberately small and dependency-free: the point of this experiment is to
-// find out what the browser can do for RED STATIC, not to adopt a rendering
-// library. Nothing in here is imported by the production game.
+// Deliberately small and dependency-free: RED STATIC has no bundler and no
+// third-party runtime, and the deferred renderer is not a reason to acquire
+// either. These began life in the visual-test experiment; the experiment now
+// imports them from here so there is one copy.
 
 // `capture` keeps the drawing buffer readable so a screenshot tool can see the
-// frame. It costs a copy every frame, so it is opt-in via ?vtcapture=1 and off
-// for any run whose numbers matter.
+// frame. It costs a copy every frame, so it is opt-in and off for any run
+// whose numbers matter.
 export function createContext(canvas,{capture=false}={}){
   const gl=canvas.getContext('webgl2',{
     alpha:false,
@@ -49,7 +50,7 @@ function compile(gl,type,source,label){
   if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS)){
     const log=gl.getShaderInfoLog(shader);
     gl.deleteShader(shader);
-    throw new Error(`[visual-test] ${label} shader failed:\n${log}\n${numbered(source)}`);
+    throw new Error(`[red-static/gl] ${label} shader failed:\n${log}\n${numbered(source)}`);
   }
   return shader;
 }
@@ -68,7 +69,7 @@ export function createProgram(gl,vertexSource,fragmentSource,label='program'){
   if(!gl.getProgramParameter(program,gl.LINK_STATUS)){
     const log=gl.getProgramInfoLog(program);
     gl.deleteProgram(program);
-    throw new Error(`[visual-test] ${label} link failed:\n${log}`);
+    throw new Error(`[red-static/gl] ${label} link failed:\n${log}`);
   }
   // Uniform locations resolved once. Looking them up per draw is a
   // surprisingly large slice of a frame with this many passes.
@@ -101,7 +102,7 @@ export function createTarget(gl,width,height,{float=false,filter='linear'}={}){
   const status=gl.checkFramebufferStatus(gl.FRAMEBUFFER);
   gl.bindFramebuffer(gl.FRAMEBUFFER,null);
   if(status!==gl.FRAMEBUFFER_COMPLETE){
-    throw new Error(`[visual-test] framebuffer incomplete (0x${status.toString(16)}) at ${width}x${height}`);
+    throw new Error(`[red-static/gl] framebuffer incomplete (0x${status.toString(16)}) at ${width}x${height}`);
   }
   return{texture,framebuffer,width,height,float};
 }

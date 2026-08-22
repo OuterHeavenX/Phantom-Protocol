@@ -1446,21 +1446,98 @@ export class Renderer{
     ctx.restore();
   }
 
+  // ---- Layer entry points -------------------------------------------------
+  //
+  // The deferred renderer (src/render/gl/deferred.js) draws the floor, the
+  // geometry, the lighting and the post chain itself, and needs everything
+  // else from here. Rather than teach it the draw order, it calls these two
+  // and gets exactly the passes render() would have run, in the same sequence.
+  //
+  // Nothing in the Canvas 2D path goes through them, so this class behaves
+  // identically whether or not a GL renderer exists.
+
+  // The painted floor, when this theatre ships one, for the deferred renderer
+  // to lay into its G-buffer and light. Returns false when there is no
+  // authored art — including while the pack is still loading — so the caller
+  // can skip the upload rather than pay for a blank texture.
+  //
+  // Only the floor: no theatre has painted walls yet, and the deferred path
+  // wants to draw geometry itself anyway, for the height field.
+  drawAuthoredGround(ctx){
+    if(!this.art?.active||!this.artFloorPattern)return false;
+    this.drawFloor(ctx);
+    return true;
+  }
+
+  // World space, part one: everything that is a thing in the sector. The caller
+  // has already applied the camera transform and is responsible for restoring
+  // it.
+  //
+  // Markers are deliberately not here. The deferred renderer runs a
+  // contrast-adaptive rim over this layer's silhouettes, which is what keeps a
+  // hostile readable against lit plating, and putting a marker reticle through
+  // the same filter would only fringe it.
+  drawWorldLayer(ctx,{particles=true}={}){
+    this.drawDecals(ctx);
+    // Landmarks stay on this layer rather than becoming GL props: they are
+    // authored art with their own shading, and a generic lit quad in place of
+    // a wrecked airframe is a downgrade, not an upgrade.
+    this.drawLandmarks(ctx);
+    this.drawHazards(ctx);
+    this.drawGroundEffects(ctx);
+    this.drawEntities(ctx);
+    this.drawProjectiles(ctx);
+    this.drawBeams(ctx);
+    if(particles)this.drawParticles(ctx);
+  }
+
+  // World space, part two: the overlays that tell the player where to go. Not
+  // part of the sector and not lit by it.
+  drawWorldMarkers(ctx){
+    this.drawExtractionBeacon(ctx);
+    this.drawVaultMarkers(ctx);
+    this.drawMissionMarkers(ctx);
+    this.drawSquadMarkers(ctx);
+    this.drawOptic(ctx);
+  }
+
+  // Screen space: weather, the flash and health pulse, and the readouts. The
+  // caller supplies the frame delta because this instance is not the one
+  // driving the loop and has no other way to know it.
+  drawScreenLayer(ctx,width,height,{vignette=true,delta=1/60}={}){
+    this.lastDelta=clamp(delta,0,.05);
+    this.frameTimes.push(delta*1000);
+    if(this.frameTimes.length>40)this.frameTimes.shift();
+    const average=this.frameTimes.reduce((a,b)=>a+b,0)/this.frameTimes.length;
+    this.fps=Math.round(1000/Math.max(1,average));
+
+    if(this.weather.active){
+      ctx.setTransform(1,0,0,1,0,0);
+      this.weather.update(this.lastDelta);
+      this.weather.draw(ctx,width,height,this.engine.camera,this.engine.elapsed);
+    }
+    this.drawPost(ctx,width,height,{vignette});
+  }
+
   // ---- 10. Post -----------------------------------------------------------
-  drawPost(ctx,width,height){
+  // `vignette` is false when the deferred renderer is running: its composite
+  // shader already applies one, and two stacked vignettes close the frame down
+  // to a porthole.
+  drawPost(ctx,width,height,{vignette=true}={}){
     const engine=this.engine;
     ctx.save();
     ctx.setTransform(1,0,0,1,0,0);
 
-    // Vignette.
-    const vignette=ctx.createRadialGradient(
-      width/2,height/2,Math.min(width,height)*.32,
-      width/2,height/2,Math.max(width,height)*.78
-    );
-    vignette.addColorStop(0,'rgba(0,0,0,0)');
-    vignette.addColorStop(1,engine.world.palette.fog||'rgba(0,4,8,.55)');
-    ctx.fillStyle=vignette;
-    ctx.fillRect(0,0,width,height);
+    if(vignette){
+      const gradient=ctx.createRadialGradient(
+        width/2,height/2,Math.min(width,height)*.32,
+        width/2,height/2,Math.max(width,height)*.78
+      );
+      gradient.addColorStop(0,'rgba(0,0,0,0)');
+      gradient.addColorStop(1,engine.world.palette.fog||'rgba(0,4,8,.55)');
+      ctx.fillStyle=gradient;
+      ctx.fillRect(0,0,width,height);
+    }
 
     // Low-health pulse.
     const healthRatio=engine.player.hp/engine.player.maxHp;

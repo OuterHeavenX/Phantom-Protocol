@@ -4,7 +4,7 @@
 // enemy-count scenarios and the automated sweep. Everything a person needs to
 // find the ceiling on their own hardware, without a build step or a profiler.
 
-import {PRESET_NAMES,TOGGLES,preset} from './presets.js';
+import {PRESET_NAMES,TOGGLES,preset} from '../../render/gl/presets.js';
 
 export const ENEMY_STEPS=[25,50,100,150,200];
 
@@ -386,12 +386,17 @@ export class Harness{
       ['lights',`${(t.lights||0).toFixed(2)} ms`],
       ['particles',`${(t.particles||0).toFixed(2)} ms`],
       ['bloom',`${(t.bloom||0).toFixed(2)} ms`],
-      ['2D entities',`${(t.entities||0).toFixed(2)} ms`],
+      ['2D sprites',`${(t.sprites||0).toFixed(2)} ms`],
       ['tex upload',`${(t.upload||0).toFixed(2)} ms`],
       ['composite',`${(t.composite||0).toFixed(2)} ms`]
     ];
     this.statsEl.innerHTML=rows.map(([k,v])=>
       `<span>${k}</span><b>${v}</b>`).join('');
+    // The internal resolution is stamped here rather than only on a button
+    // press: the first sync runs before the canvas has been sized, so a fresh
+    // page reported the 300x150 the element was born with.
+    const now=this.el.querySelector('#vtScaleNow');
+    if(now)now.textContent=`${renderer.internalWidth}×${renderer.internalHeight}`;
     if(!this.rendererPainted){
       const info=renderer.info||{};
       this.el.querySelector('#vtRenderer').innerHTML=

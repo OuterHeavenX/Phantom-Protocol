@@ -176,3 +176,29 @@ Remaining:
    Still uncovered, and deliberately: a field the constructor initialises to a
    placeholder and fills in later reads as null rather than undefined, which is a
    different bug and a far noisier signal — most placeholders are legitimate.
+13. ~~Ship the deferred WebGL2 renderer, in every theatre rather than only in the
+   experiment.~~ Done. `src/render/gl/` is now a second production renderer with the
+   same public surface as the Canvas 2D one, selected in `createRenderer` and
+   controlled by `Settings → Presentation → Renderer`. Per-theatre dressing in
+   `dressing.js` gives all ten sectors their own ground material, prop mix and
+   lighting rig, coloured from the palette each already had. Seven outdoor materials
+   were added to the G-buffer shader — ground, sheet water, foliage, roadway, rock,
+   snow, molten slag — because the original set was an interior set and nine of the
+   ten theatres are not interiors.
+   Three things the promotion turned up that the experiment had not:
+   * The experiment ran in one big empty hall, so its dressing ran a walkway down the
+     spine of the sector and painted hazard bands across it. In a real corridor grid
+     that crossed forty walls. Both are scattered placements now.
+   * BLACKSITE ZERO ships authored floor art, and a GL floor threw it away. The
+     deferred path now lays a painted floor into the G-buffer as albedo and skips its
+     own plates, so the art survives and gains per-pixel lighting rather than losing
+     to it.
+   * The readability regression the experiment recorded as a blocker was real, and is
+     fixed: the composite runs a contrast-adaptive silhouette rim over the sprite
+     layer, and world-space markers moved off that layer so they are not fringed by it.
+   Exposure was tuned by measurement against the Canvas 2D renderer in the same sector
+   at the same contract seed, not by eye — an early build sat about 40% above the 2D
+   mean with its top decile clipped to white.
+   Not done, and deliberately: no GPU exists in the development environment, so every
+   performance figure for the GL path still has to come from real hardware through
+   `?visualtest=1`. Nothing in this repository claims otherwise.

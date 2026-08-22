@@ -15,6 +15,7 @@ import {
 } from '../save/progression.js';
 import {portraitSvg,portraitMarkup,dossierCardMarkup} from '../render/portraits.js';
 import {Typewriter} from './typewriter.js';
+import {probeWebGL2} from '../render/gl/support.js';
 import {storeReplay,deleteReplay,MAX_REPLAYS} from '../save/storage.js';
 import {packLog,unpackLog,REPLAY_VERSION} from '../game/replay.js';
 import {CAMPAIGN,ACTS,OBJECTIVE_TYPES,nextOperation,campaignProgress,operationUnlocked,
@@ -1769,6 +1770,9 @@ export class Screens{
 
         <section class="settings-block">
           <h3 class="section-title">PRESENTATION</h3>
+          ${select('renderer','Renderer',settings.renderer||'auto',
+            [['auto','AUTOMATIC'],['gl','DEFERRED (WEBGL2)'],['2d','CANVAS 2D']])}
+          <p class="muted small" id="rendererNote">${rendererNote(settings.renderer||'auto')}</p>
           ${select('particles','Effect density',settings.particles,[['low','LOW'],['medium','MEDIUM'],['high','HIGH']])}
           ${slider('screenShake','Screen shake',settings.screenShake,0,1.5,.1)}
           ${toggle('damageNumbers','Damage numbers',settings.damageNumbers)}
@@ -1862,6 +1866,19 @@ export class Screens{
     document.getElementById('particles')?.addEventListener('change',event=>{
       settings.particles=event.target.value;
       commit();
+    });
+
+    // A canvas is bound to its context for life, so the renderer cannot change
+    // under a contract already in progress. The choice takes effect at the
+    // next deployment, and the note under the control says so rather than
+    // leaving the player to wonder why nothing happened.
+    document.getElementById('renderer')?.addEventListener('change',event=>{
+      settings.renderer=event.target.value;
+      commit();
+      const note=document.getElementById('rendererNote');
+      // innerHTML rather than textContent: the note is already escaped, and the
+      // initial render puts it in through the same path.
+      if(note)note.innerHTML=rendererNote(settings.renderer);
     });
 
     document.getElementById('exportBtn')?.addEventListener('click',()=>{
@@ -2053,6 +2070,26 @@ export class Screens{
       this.startGame(config);
     });
   }
+}
+
+// What the renderer choice will actually do on this machine, said plainly.
+// AUTOMATIC is the only setting whose outcome the player cannot predict, so it
+// is the only one that reports what it found.
+function rendererNote(choice){
+  const cap=probeWebGL2();
+  // The driver string and the failure reason come from the browser, not from
+  // the player, but they still go into markup, so they still get escaped.
+  const gpu=escape(cap.renderer||'unknown');
+  const why=escape(cap.reason||'unavailable');
+  if(choice==='2d')return 'Canvas 2D. The original renderer, and the one every theatre was authored against.';
+  if(choice==='gl'){
+    if(!cap.ok)return `Deferred WebGL2 is not available here (${why}). Contracts will run on Canvas 2D.`;
+    if(cap.software)return 'Forced on. This browser reports a software rasteriser, which will be much slower than Canvas 2D.';
+    return `Deferred WebGL2 on ${gpu}. Per-pixel lighting, contact shadows and bloom. Takes effect at the next deployment.`;
+  }
+  if(!cap.ok)return `No WebGL2 here (${why}), so contracts run on Canvas 2D.`;
+  if(cap.software)return 'WebGL2 here is a software rasteriser, so contracts run on Canvas 2D.';
+  return `Deferred WebGL2 on ${gpu}. Takes effect at the next deployment.`;
 }
 
 function statBar(label,value,max){

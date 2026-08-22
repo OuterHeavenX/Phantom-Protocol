@@ -41,6 +41,10 @@ export function defaultSettings(){
     codec:true,
     uiScale:1,touchSize:1,leftHanded:false,
     colorblind:'none',reducedFlashing:false,
+    // Which renderer draws a contract. 'auto' takes the deferred WebGL2 path
+    // wherever there is real hardware behind it and the Canvas 2D one
+    // otherwise; the other two settings override that decision either way.
+    renderer:'auto',
     performanceMode:false,targetFps:60,showFps:false
   };
 }
@@ -215,6 +219,7 @@ function migrate(raw){
       sfx:typeof s.sfx==='number'?s.sfx:migrated.settings.sfx,
       damageNumbers:s.damageNumbers!==false,
       particles:s.particles||'high',
+      renderer:s.renderer||'auto',
       performanceMode:!!s.performance
     });
   }
