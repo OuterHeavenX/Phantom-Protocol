@@ -152,6 +152,41 @@ The negative rows are measurement noise on a 3 fps sample, not effects that
 make the frame faster. They are left in rather than tidied away because
 pretending a ±17 ms wobble at 316 ms is signal would be worse.
 
+### First real-hardware result — and why it is not a ceiling
+
+RTX 5080, Chrome 151, Windows, 2560×1305, dpr 1, ULTRA:
+
+| hostiles | fps | avg | p50 | p95 | p99 | worst |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 25 | 240 | 4.2 | 4.2 | 4.3 | 4.3 | 4.6 |
+| 50 | 240 | 4.2 | 4.2 | 4.3 | 4.3 | 4.4 |
+| 100 | 240 | 4.2 | 4.2 | 4.3 | 4.3 | 4.3 |
+| 150 | 240 | 4.2 | 4.2 | 4.3 | 4.3 | 4.4 |
+| 200 | 240 | 4.2 | 4.2 | 4.3 | 4.3 | 4.3 |
+
+Two things to take from this, one of which is a warning.
+
+**Confirmed on real hardware: the GL path's cost is independent of hostile
+count.** Two hundred hostiles cost the same as twenty-five, at ULTRA, with
+bloom, contact shadows and sixty-odd lights running. The software-rasterised
+run showed the same shape, so this is architectural, and it is the opposite of
+the Canvas 2D renderer, which loses a third of its frame rate over the same
+range.
+
+**But this run found the monitor, not the ceiling.** 4.2 ms is exactly 1000/240.
+Every percentile is pinned within 0.4 ms of the mean and no frame ever missed
+its deadline: that is vsync at 240 Hz with the GPU idle most of the time. It
+says the renderer is comfortably inside the budget on that card and nothing
+about how much room is left.
+
+The harness now carries the two tools for going past it — a **render scale**
+row for supersampling, since the pipeline is fill-bound and 2× is four times
+the pixels, and **GPU sync timing**, which times the whole frame including the
+GPU so the figure is directly comparable to the frame interval. A 4.2 ms
+interval containing 1 ms of work has four times the headroom, and looks
+identical to one containing 4 ms without it. The sweep flags any step whose
+frame times are pinned, so a capped run cannot be misread as a limit.
+
 ### Readability regression at ULTRA
 
 Worth stating because the brief was explicit that hostiles must stay readable

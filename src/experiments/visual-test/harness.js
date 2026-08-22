@@ -8,6 +8,10 @@ import {PRESET_NAMES,TOGGLES,preset} from './presets.js';
 
 export const ENEMY_STEPS=[25,50,100,150,200];
 
+// Supersample factors. The pipeline is fill-bound, so resolution is the dial
+// that finds the ceiling: 2x is four times the pixels, 3x is nine.
+export const SCALES=[0.5,1,1.5,2,3];
+
 // A rolling window of real frame intervals. Percentiles rather than an average
 // because an average of 60 hides the four frames that took 90ms, and those are
 // the ones that are felt.
@@ -24,18 +28,24 @@ class FrameLog{
   }
   reset(){this.n=0;this.i=0}
   stats(){
-    if(!this.n)return{fps:0,avg:0,p50:0,p95:0,p99:0,worst:0};
+    if(!this.n)return{fps:0,avg:0,p50:0,p95:0,p99:0,worst:0,capped:false};
     const slice=Array.from(this.times.subarray(0,this.n)).sort((a,b)=>a-b);
     const at=q=>slice[Math.min(slice.length-1,Math.floor(slice.length*q))];
     let sum=0;for(const v of slice)sum+=v;
     const avg=sum/slice.length;
+    const p50=at(.5),p99=at(.99);
     return{
       fps:Math.round(1000/Math.max(.01,avg)),
       avg:+avg.toFixed(2),
-      p50:+at(.5).toFixed(2),
+      p50:+p50.toFixed(2),
       p95:+at(.95).toFixed(2),
-      p99:+at(.99).toFixed(2),
-      worst:+slice[slice.length-1].toFixed(2)
+      p99:+p99.toFixed(2),
+      worst:+slice[slice.length-1].toFixed(2),
+      // Frame times this regular are a display refresh, not a workload. A run
+      // that never misses its deadline has not found any ceiling — it has
+      // found the monitor — and saying so is the difference between a result
+      // and a misreading.
+      capped:p99-p50<1&&avg<20
     };
   }
 }
@@ -76,6 +86,16 @@ export class Harness{
         <div class="vt-row" id="vtPresets"></div>
         <div class="vt-title">HOSTILES</div>
         <div class="vt-row" id="vtCounts"></div>
+        <div class="vt-title">RENDER SCALE <span class="vt-inline" id="vtScaleNow"></span></div>
+        <div class="vt-row" id="vtScales"></div>
+        <div class="vt-row">
+          <button class="vt-btn vt-wide" id="vtSync">GPU SYNC TIMING: OFF</button>
+        </div>
+        <div class="vt-note">
+          Supersampling is how you find the ceiling on a fast card: 2× is four
+          times the pixels. GPU sync stalls on <code>finish()</code> to time the
+          real GPU work — a diagnostic, not something to benchmark in.
+        </div>
         <div class="vt-title">EFFECTS</div>
         <div class="vt-toggles" id="vtToggles"></div>
         <div class="vt-title">BENCHMARK</div>
@@ -113,6 +133,17 @@ export class Harness{
       b.addEventListener('click',()=>this.setEnemies(n));
       counts.appendChild(b);
     }
+    const scales=el.querySelector('#vtScales');
+    for(const scale of SCALES){
+      const b=document.createElement('button');
+      b.className='vt-btn';
+      b.textContent=`${scale}×`;
+      b.dataset.scale=scale;
+      b.addEventListener('click',()=>this.setScale(scale));
+      scales.appendChild(b);
+    }
+    el.querySelector('#vtSync').addEventListener('click',()=>this.toggleSync());
+
     const toggles=el.querySelector('#vtToggles');
     for(const [key,label,hint] of TOGGLES){
       const row=document.createElement('button');
@@ -187,6 +218,19 @@ export class Harness{
     for(const b of this.el.querySelectorAll('[data-count]')){
       b.classList.toggle('on',Number(b.dataset.count)===this.targetEnemies);
     }
+    const scale=this.quality.renderScale??1;
+    for(const b of this.el.querySelectorAll('[data-scale]')){
+      b.classList.toggle('on',Number(b.dataset.scale)===scale);
+    }
+    const now=this.el.querySelector('#vtScaleNow');
+    if(now&&this.renderer)now.textContent=
+      `${this.renderer.internalWidth}×${this.renderer.internalHeight}`;
+    const sync=this.el.querySelector('#vtSync');
+    if(sync){
+      const on=!!this.renderer?.syncTiming;
+      sync.textContent=`GPU SYNC TIMING: ${on?'ON':'OFF'}`;
+      sync.classList.toggle('on',on);
+    }
   }
 
   syncToggles(){
@@ -196,6 +240,20 @@ export class Harness{
       const on=key==='grain'||key==='scanline'||key==='vignette'?value>0:value!==false;
       b.classList.toggle('on',on);
     }
+  }
+
+  setScale(scale){
+    this.quality.renderScale=scale;
+    this.renderer.resize?.(this.renderer.width,this.renderer.height);
+    this.frames.reset();
+    this.syncButtons();
+  }
+
+  toggleSync(){
+    if(!this.renderer||this.renderer.syncTiming===undefined)return;
+    this.renderer.syncTiming=!this.renderer.syncTiming;
+    this.frames.reset();
+    this.syncButtons();
   }
 
   applyPreset(name){
@@ -242,6 +300,7 @@ export class Harness{
     }
     const stats=this.frames.stats();
     this.results.push({enemies:ENEMY_STEPS[s.index],...stats,
+      gpu:+(this.renderer.timings?.gpu||0).toFixed(2),
       lights:this.renderer.lightCount||0,
       particles:this.renderer.particleCount||0,
       projectiles:this.engine.projectiles.length});
@@ -264,16 +323,26 @@ export class Harness{
       `renderer : ${info.renderer||'unknown'}`,
       `software : ${info.software?'YES — CPU rasterised, not representative':'no'}`,
       `canvas   : ${this.renderer.width}x${this.renderer.height} @ dpr ${window.devicePixelRatio||1}`,
-      `internal : ${this.renderer.internalWidth}x${this.renderer.internalHeight}`,
+      `internal : ${this.renderer.internalWidth}x${this.renderer.internalHeight}`+
+        ` (scale ${this.quality.renderScale??1}x)`,
+      `gpu sync : ${this.renderer.syncTiming?'on':'off'}`,
       `ua       : ${navigator.userAgent}`,
+      this.results.some(r=>r.capped)
+        ? '\nNOTE: frame times are pinned to the display refresh on at least one\n'+
+          'step. That is a vsync cap, not the renderer\u2019s ceiling. Raise RENDER\n'+
+          'SCALE until the numbers move, or switch GPU SYNC TIMING on to read the\n'+
+          'real GPU cost per frame.'
+        : '',
       '',
-      'enemies   fps   avg    p50    p95    p99   worst  lights  parts'
+      'enemies   fps   avg    p50    p95    p99   worst  frm+gpu  lights  parts'
     ].join('\n');
     const rows=this.results.map(r=>
       `${String(r.enemies).padStart(7)}${String(r.fps).padStart(6)}`+
       `${r.avg.toFixed(1).padStart(7)}${r.p50.toFixed(1).padStart(7)}`+
       `${r.p95.toFixed(1).padStart(7)}${r.p99.toFixed(1).padStart(7)}`+
-      `${r.worst.toFixed(1).padStart(8)}${String(r.lights).padStart(8)}${String(r.particles).padStart(7)}`
+      `${r.worst.toFixed(1).padStart(8)}${(r.gpu||0).toFixed(2).padStart(9)}`+
+      `${String(r.lights).padStart(8)}${String(r.particles).padStart(7)}`+
+      (r.capped?'  vsync-capped':'')
     ).join('\n');
     this.resultsEl.textContent=`${head}\n${rows}`;
   }
@@ -299,7 +368,7 @@ export class Harness{
       :'n/a';
     const alive=engine.enemies.filter(e=>!e.dead).length;
     const rows=[
-      ['FPS',s.fps],
+      ['FPS',s.capped?`${s.fps} (capped)`:s.fps],
       ['frame avg',`${s.avg.toFixed(2)} ms`],
       ['p95 / p99',`${s.p95.toFixed(1)} / ${s.p99.toFixed(1)} ms`],
       ['worst',`${s.worst.toFixed(1)} ms`],
@@ -310,6 +379,8 @@ export class Harness{
       ['lights',renderer.lightCount||0],
       ['props',renderer.propCount||0],
       ['heap',mem],
+      ['frame+gpu (sync)',renderer.syncTiming?`${(t.gpu||0).toFixed(2)} ms`:'off'],
+      ['render scale',`${this.quality.renderScale??1}×`],
       ['— pass —',''],
       ['g-buffer',`${(t.gbuffer||0).toFixed(2)} ms`],
       ['lights',`${(t.lights||0).toFixed(2)} ms`],

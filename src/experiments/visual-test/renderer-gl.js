@@ -52,10 +52,15 @@ export class VisualTestRenderer{
     // main thread actually loses.
     // CPU time spent issuing each pass. GL commands are asynchronous, so on a
     // working GPU these are submission costs and near zero — the honest
-    // whole-frame number is the interval the harness measures. `syncTiming`
-    // inserts a finish() after the passes to get a real end-to-end GPU figure,
-    // at the price of destroying pipelining; it is a diagnostic, not a mode to
-    // benchmark in.
+    // whole-frame number is the interval the harness measures.
+    //
+    // `syncTiming` measures the whole frame including the GPU: the clock starts
+    // at the top of render() and stops after a finish(), so `timings.gpu` is
+    // directly comparable to the frame interval. That is the number that says
+    // whether a run is at its ceiling or merely at the monitor's — a frame
+    // interval of 4.2 ms with 1 ms of work in it has four times the headroom
+    // and looks identical without this. It destroys pipelining, so it is a
+    // diagnostic rather than a mode to benchmark in.
     this.timings={gbuffer:0,lights:0,particles:0,bloom:0,composite:0,upload:0,entities:0,gpu:0};
     this.syncTiming=false;
 
@@ -402,7 +407,8 @@ export class VisualTestRenderer{
     this.updateAtmosphere(dt);
 
     const view=this.viewMatrix();
-    let mark=performance.now();
+    const frameStart=performance.now();
+    let mark=frameStart;
 
     // 1. G-buffer.
     gl.bindFramebuffer(gl.FRAMEBUFFER,this.gbufferFbo);
@@ -539,9 +545,8 @@ export class VisualTestRenderer{
     this.timings.composite=performance.now()-mark;
 
     if(this.syncTiming){
-      const t=performance.now();
       gl.finish();
-      this.timings.gpu=performance.now()-t;
+      this.timings.gpu=performance.now()-frameStart;
     }
   }
 
