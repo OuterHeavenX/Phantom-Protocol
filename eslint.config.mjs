@@ -34,6 +34,7 @@ export default [
         CanvasPattern:'readonly',DOMMatrix:'readonly',btoa:'readonly',atob:'readonly',
         confirm:'readonly',prompt:'readonly',
         Response:'readonly',Request:'readonly',Headers:'readonly',
+        URLSearchParams:'readonly',URL:'readonly',WebGL2RenderingContext:'readonly',
         CompressionStream:'readonly',DecompressionStream:'readonly',
         TextEncoder:'readonly',TextDecoder:'readonly',AbortController:'readonly'
       }

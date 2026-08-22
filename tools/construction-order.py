@@ -129,9 +129,49 @@ def guarded(src,end):
     bug when nothing is standing by to catch it."""
     return bool(re.match(r'\s*(?:\|\||\?\?|\?\.)',src[end:end+3]))
 
+_deferred_cache={}
+
 def deferred(src,pos):
-    """True when this call sits inside a callback and therefore does not run
-    during construction."""
+    """True when this position sits inside a nested function body, and so does
+    not run during construction.
+
+    The first version of this looked back only as far as the nearest statement
+    separator, which meant a call inside a block inside an arrow — the shape of
+    every `addEventListener('x',e=>{ ... })` in the project — read as running
+    immediately and produced a run of false positives."""
+    spans=_deferred_cache.get(id(src))
+    if spans is None:
+        spans=[]
+        depth=0
+        pending=[]        # depths at which a nested function body is expected
+        open_bodies=[]    # (depth, start) for bodies currently open
+        i=0
+        n=len(src)
+        while i<n:
+            c=src[i]
+            if c=='=' and i+1<n and src[i+1]=='>':
+                pending.append(depth); i+=2; continue
+            if src.startswith('function',i) and (i==0 or not (src[i-1].isalnum() or src[i-1] in '_$')):
+                pending.append(depth); i+=8; continue
+            if c=='{':
+                if pending and pending[-1]==depth:
+                    pending.pop()
+                    open_bodies.append((depth,i))
+                depth+=1
+            elif c=='}':
+                depth-=1
+                if open_bodies and open_bodies[-1][0]==depth:
+                    _,start=open_bodies.pop()
+                    spans.append((start,i))
+            elif c==';' or c==',':
+                # A concise arrow body ends at the next separator at its depth.
+                if pending and pending[-1]==depth:
+                    pending.pop()
+            i+=1
+        _deferred_cache[id(src)]=spans
+    for a,b in spans:
+        if a<pos<b:return True
+    # A concise arrow body: `x=>this.foo()` with no braces at all.
     cut=max(src.rfind(';',0,pos),src.rfind('{',0,pos),src.rfind('}',0,pos),src.rfind(',',0,pos))
     span=src[cut:pos]
     return '=>' in span or re.search(r'\bfunction\b',span)
@@ -193,14 +233,17 @@ def walk(cls,method,aliases,defined,later,chain,seen,owner_cls):
                 cls=cls,method=method,field=fld,chain=' -> '.join(chain)))
             continue
         if is_call:
-            walk(owner_cls,fld,{'this'},defined,later,
+            # `defined|local`, not `defined`: a field this method assigned a few
+            # lines up is available to whatever it calls next, and passing only
+            # the constructor's set made every such call look like a bug.
+            walk(owner_cls,fld,{'this'},defined|local,later,
                  chain+[f'{cls}.{method} -> .{fld}()'],seen,owner_cls)
     # Calls to this class's own methods carry the alias along.
     if 'this' not in aliases:
         for m in re.finditer(r'this\.([A-Za-z_$][\w$]*)\s*\(',src):
             if deferred(src,m.start()): continue
             if m.group(1) in info['methods']:
-                walk(cls,m.group(1),aliases,defined,later,
+                walk(cls,m.group(1),aliases,defined|local,later,
                      chain+[f'{cls}.{method} -> this.{m.group(1)}()'],seen,owner_cls)
     # Objects handed the alias build immediately and can call straight back.
     for nm in re.finditer(r'\bnew\s+([A-Z]\w*)\s*\(',src):

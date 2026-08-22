@@ -38,6 +38,27 @@ const screens=new Screens(save,startRun,audio);
 // invisible to anything that did not go through the real UI.
 window.__screens=screens;
 
+// ---------------------------------------------------------------------------
+// Experimental visual test
+// ---------------------------------------------------------------------------
+//
+// ?visualtest=1 boots src/experiments/visual-test instead of the game. The
+// import is dynamic, so with the flag absent none of the experiment is even
+// fetched, and this is the only line of production code that knows it exists.
+// It runs before any menu is rendered and returns, so nothing below sets up.
+const VISUAL_TEST=new URLSearchParams(location.search).get('visualtest')==='1';
+if(VISUAL_TEST){
+  import('./experiments/visual-test/boot.js')
+    .then(m=>m.bootVisualTest({audio,input,save}))
+    .catch(err=>{
+      console.error('[red-static] visual test failed to boot',err);
+      document.querySelector('#app').innerHTML=
+        `<div style="padding:40px;font:13px ui-monospace,monospace;color:#dceceb">
+           <h1>Visual test failed to boot</h1><pre>${String(err&&err.stack||err)}</pre>
+           <p><a style="color:#76e7d4" href="?">Back to RED STATIC</a></p></div>`;
+    });
+}
+
 screens.onSaveReplaced=next=>{
   save=next;
   screens.setSave(save);
@@ -74,12 +95,17 @@ function applyGlobalSettings(){
 // over it, so dismissing the title fades straight through to a menu that is
 // already there. START is also the gesture that unlocks audio, which is why
 // the title track opens under the artwork rather than after it.
-screens.menu();
-new Splash({
-  audio,
-  onStart:()=>{},
-  onSettings:()=>screens.settings()
-}).mount(document.body);
+// Skipped under ?visualtest=1: the experiment owns the whole page, and a menu
+// and a title screen built underneath it would both fight it for the canvas
+// and quietly distort every number it reports.
+if(!VISUAL_TEST){
+  screens.menu();
+  new Splash({
+    audio,
+    onStart:()=>{},
+    onSettings:()=>screens.settings()
+  }).mount(document.body);
+}
 
 // ---------------------------------------------------------------------------
 // Run lifecycle

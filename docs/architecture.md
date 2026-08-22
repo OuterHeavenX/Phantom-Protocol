@@ -127,6 +127,21 @@ different cards), and the resolved seed itself.
 Watching one never writes to the save — no payout, no unlocks, no medical, no walker
 record.
 
+## Experiments
+
+`src/experiments/` holds work that is not part of the game. Nothing in it is
+imported by production code except a single dynamic `import()` in `src/main.js`
+behind a URL flag, so with the flag absent none of it is fetched.
+
+`src/experiments/visual-test/` — **BLACKSITE VISUAL TEST**, reached at
+`?visualtest=1`. An experimental WebGL2 renderer over the real simulation,
+built to find out how far the presentation can be pushed and whether a GPU path
+is worth having. `?visualtest=1&renderer=2d` runs the same level through the
+production Canvas 2D renderer as a control. See that directory's README for the
+pipeline and for how to run the benchmark on your own hardware.
+
+The production BLACKSITE ZERO is untouched by any of it.
+
 ## Static checks
 
 There is no build step, so nothing type-checks this code on the way past. Two
