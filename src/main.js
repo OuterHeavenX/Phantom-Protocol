@@ -46,7 +46,20 @@ window.__screens=screens;
 // import is dynamic, so with the flag absent none of the experiment is even
 // fetched, and this is the only line of production code that knows it exists.
 // It runs before any menu is rendered and returns, so nothing below sets up.
-const VISUAL_TEST=new URLSearchParams(location.search).get('visualtest')==='1';
+const VT_PARAM=new URLSearchParams(location.search).get('visualtest');
+const VISUAL_TEST=VT_PARAM!==null&&VT_PARAM!=='0'&&VT_PARAM.toLowerCase()!=='false';
+
+// Announces which build is actually executing. index.html watches for this: a
+// cached module from before a feature existed ignores that feature's URL flag
+// in silence, and the resulting "it just runs the normal game" is impossible
+// to tell from a bug without something to check against.
+window.__redstatic={
+  visualTest:VISUAL_TEST,
+  features:['fieldkits','vaultlocks','replay','gunsmithpresets','gamepad','visualtest']
+};
+console.info('[red-static] boot · visualtest=%s · %s',
+  VISUAL_TEST,window.__redstatic.features.join(','));
+
 if(VISUAL_TEST){
   import('./experiments/visual-test/boot.js')
     .then(m=>m.bootVisualTest({audio,input,save}))
