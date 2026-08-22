@@ -35,6 +35,7 @@ export default [
         confirm:'readonly',prompt:'readonly',
         Response:'readonly',Request:'readonly',Headers:'readonly',
         URLSearchParams:'readonly',URL:'readonly',WebGL2RenderingContext:'readonly',
+        getSelection:'readonly',
         CompressionStream:'readonly',DecompressionStream:'readonly',
         TextEncoder:'readonly',TextDecoder:'readonly',AbortController:'readonly'
       }

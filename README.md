@@ -13,6 +13,50 @@ Serve the folder as a static site, or publish the repository root through GitHub
 python3 -m http.server 8080     # then open http://localhost:8080
 ```
 
+Opening `index.html` from the filesystem does not work: native ES modules are
+blocked over `file://`. It has to be served.
+
+### Testing on a phone or tablet
+
+Serve from a machine on the same network — `python3 -m http.server 8080` already
+binds every interface — find that machine's LAN address, and open it on the
+device:
+
+```
+# macOS
+ipconfig getifaddr en0
+# Linux
+hostname -I | awk '{print $1}'
+# Windows
+ipconfig | findstr IPv4
+```
+
+Then browse to `http://<that-address>:8080` on the phone. Nothing needs
+installing on the device.
+
+Two things behave differently over plain http, because it is not a secure
+context: the clipboard API is unavailable (buttons that copy fall back to
+selecting the text for a long-press), and `performance.memory` is Chrome-only,
+so the heap readout says `n/a` on Safari. Neither affects the game.
+
+## BLACKSITE VISUAL TEST
+
+An isolated rendering experiment — an experimental WebGL2 renderer over the real
+simulation, built to find out how far the presentation can be pushed and whether
+a GPU path is worth having. It is opt-in, it does not ship, and with the flag
+absent none of it is even fetched.
+
+| URL | What it does |
+| --- | --- |
+| `?visualtest=1` | The experimental renderer, HIGH preset |
+| `?visualtest=1&preset=ultra` | Start on `low` / `medium` / `high` / `ultra` |
+| `?visualtest=1&renderer=2d` | **The control** — same level and simulation, production Canvas 2D renderer |
+| `?visualtest=1&enemies=200` | Start at a given hostile count |
+
+Press `RUN 25→200 SWEEP` to benchmark your own hardware; `F2` hides the overlay.
+Full detail, and the results measured so far, are in
+[`src/experiments/visual-test/README.md`](src/experiments/visual-test/README.md).
+
 ## Controls
 
 | Action | Keyboard / Mouse | Gamepad | Touch |

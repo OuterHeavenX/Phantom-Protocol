@@ -132,17 +132,47 @@ export class Harness{
     }
     el.querySelector('#vtHide').addEventListener('click',()=>this.toggleVisible());
     el.querySelector('#vtSweep').addEventListener('click',()=>this.startSweep());
-    this.copyBtn.addEventListener('click',()=>{
-      navigator.clipboard?.writeText(this.resultsEl.textContent);
-      this.copyBtn.textContent='COPIED';
-      setTimeout(()=>{this.copyBtn.textContent='COPY RESULTS'},1400);
-    });
+    this.copyBtn.addEventListener('click',()=>this.copyResults());
 
     window.addEventListener('keydown',e=>{
       if(e.key==='F2'){e.preventDefault();this.toggleVisible()}
     });
     this.syncButtons();
     this.syncToggles();
+  }
+
+  // navigator.clipboard exists only in a secure context, so on a phone reading
+  // this over plain http from a laptop on the same network — which is the
+  // whole point of the exercise — it is undefined and the optional call this
+  // used to make silently did nothing while the button claimed COPIED.
+  // Selecting the text is the fallback: long-press, copy.
+  copyResults(){
+    const text=this.resultsEl.textContent;
+    if(navigator.clipboard?.writeText){
+      navigator.clipboard.writeText(text).then(
+        ()=>this.flashCopy('COPIED'),
+        ()=>this.selectResults()
+      );
+      return;
+    }
+    this.selectResults();
+  }
+
+  selectResults(){
+    const range=document.createRange();
+    range.selectNodeContents(this.resultsEl);
+    const selection=window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    // execCommand is deprecated and still the only thing that works here.
+    let done=false;
+    try{done=document.execCommand('copy')}catch{/* selection stands regardless */}
+    this.flashCopy(done?'COPIED':'SELECTED — LONG-PRESS TO COPY');
+  }
+
+  flashCopy(label){
+    this.copyBtn.textContent=label;
+    setTimeout(()=>{this.copyBtn.textContent='COPY RESULTS'},2200);
   }
 
   toggleVisible(){
