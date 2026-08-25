@@ -780,10 +780,18 @@ export class DeferredRenderer{
     // silhouette rim.
     this.engine.camera.apply(ctx);
     this.sprites.drawWorldMarkers(ctx);
+    // Collision debug rides on this layer rather than the sprite one: it must
+    // not be tonemapped, bloomed or given a silhouette rim, or it would stop
+    // being a faithful picture of the simulation. It is drawn from the same
+    // method the Canvas 2D path calls, so the two overlays are identical.
+    if(this.sprites.collisionDebug)this.sprites.drawCollisionDebug(ctx);
     ctx.restore();
     // The vignette is the composite shader's job here, so the 2D pass skips
     // its own rather than drawing a second one over it.
     this.sprites.drawScreenLayer(ctx,w,h,{vignette:false,delta:dt});
+    if(this.sprites.collisionDebug){
+      this.sprites.drawCollisionReadout(ctx,w,h,'Deferred WebGL2');
+    }
   }
 
   // ---- reporting ----------------------------------------------------------

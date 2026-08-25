@@ -202,3 +202,37 @@ Remaining:
    Not done, and deliberately: no GPU exists in the development environment, so every
    performance figure for the GL path still has to come from real hardware through
    `?visualtest=1`. Nothing in this repository claims otherwise.
+14. ~~Gameplay integrity and collision hardening, so the renderer cannot change
+   the rules.~~ Done. Eight defects reproduced and fixed, none of them
+   WebGL-only — every one predates the deferred renderer and was present in
+   Canvas 2D. The two that mattered most were not the ones the brief predicted:
+   * **A negative frame delta.** A requestAnimationFrame timestamp is the
+     moment the frame began, which can precede a `performance.now()` taken
+     later inside that same frame, and only the upper end of the delta was
+     clamped. One negative delta ran the camera's `damp` backwards and inverted
+     its zoom to about -574, which mirrors the whole view and every
+     screen-to-world conversion through the operative, for the two seconds it
+     took to converge back. It also drove the simulation accumulator negative
+     and stalled the fixed step. It showed up on the slowest startup path,
+     which is exactly where a phone lives.
+   * **The operative starting inside a wall**, in 14 of 80 generated sectors.
+     The start was resolved before vaults, cover and hazards were placed and
+     never re-checked; when no room had clearance the code returned an
+     unvalidated fallback. Fixing it also took sector reachability from 60-87%
+     to 98.7-99.5%, because the old reachability measurement had mostly been
+     measuring the broken spawn.
+   Movement is now one swept path — 15,021 tunnelling events across 180,000
+   dash-speed steps became 0. Spawn validation knows the radius of what it is
+   placing and which side of the geometry it is on: 0 of 12,000 deployments
+   land on ground the operative cannot reach.
+   The renderer-coupling audit found exactly two violations, both fixed: mouse
+   aim conflated CSS pixels with drawing-buffer pixels, so it was wrong on
+   every retina display and silently corrected itself when performance mode
+   dropped the buffer to dpr 1; and hostile deployment distance was read off
+   the camera, so a phone in portrait deployed hostiles 272 units away inside
+   590 units of visible ground.
+   No non-determinism was found in the simulation. Establishing that took five
+   rounds of fixing the *harness* — pre-roll state leaking through the RNG
+   stream, the contract clock, cover claims, hazard cycles and weapon cooldowns
+   — which is why `parity.mjs` now ships with a `2d:2d` control that has to
+   pass before any renderer claim is made.

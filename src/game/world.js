@@ -1,7 +1,26 @@
 import {Rng} from '../core/rng.js';
-import {clamp,dist2,segmentIntersectsRect,resolveCircleRect,pointInRect,SpatialHash} from '../core/math.js';
+import {clamp,dist2,TAU,segmentIntersectsRect,segmentRectEntry,resolveCircleRect,pointInRect,SpatialHash} from '../core/math.js';
 import {HAZARDS} from '../../data/maps.js';
 import {vaultKind,rollVaultKind} from '../../data/vaults.js';
+
+// Ceiling on how finely one frame's movement is chopped up for collision. A
+// normal step needs one; a dash needs three. The cap exists so a velocity
+// nothing in the game should ever produce cannot turn a frame into hundreds of
+// obstacle queries.
+const MAX_MOVE_SUBSTEPS=8;
+
+// Clearance the operative's start needs. Comfortably more than the 12-unit
+// body, so a spawn is in open ground rather than wedged against a crate.
+const PLAYER_SPAWN_CLEARANCE=34;
+
+// Grid pitch of the reachability map. Coarse on purpose: it answers "which
+// side of the geometry is this" and nothing finer.
+const REACH_CELL=32;
+
+// How many times depenetration is allowed to iterate before giving up. Three
+// resolves every corner geometry the generators produce; the loop exits early
+// the moment a pass moves nothing, which is the common case.
+const DEPENETRATION_PASSES=3;
 
 // Procedural sector generation. The world is a finite, fully-authored bounded
 // arena built from rooms and corridors rather than the previous build's
@@ -91,6 +110,92 @@ export class World{
     this.scatterDecor();
     this.buildCoverPoints();
     this.rebuildHash();
+
+    // Re-check the start once every last piece of geometry exists.
+    // (buildReachability runs after this, since it fills from the start.) It is
+    // resolved early so vaults and cover can be kept off it, but "kept off"
+    // was an intention rather than a guarantee: across eighty generated
+    // sectors the operative began inside solid geometry in fourteen of them.
+    // This is the only point in generation where the question can actually be
+    // answered.
+    const start=this.spawnPoint;
+    if(this.overlapsSolid(start.x,start.y,PLAYER_SPAWN_CLEARANCE)||
+       !this.playable(start.x,start.y,60)){
+      const clear=this.openPointNear(start.x,start.y,PLAYER_SPAWN_CLEARANCE,
+        {avoidVaults:true,pad:60});
+      if(clear){this.spawnPoint=clear}
+      else{
+        // Nothing within reach has the clearance, so make some. Carving is
+        // preferable to starting the operative inside a wall.
+        this.carve({x:start.x,y:start.y,w:180,h:180});
+        this.cover=this.cover.filter(c=>
+          Math.abs(c.x-start.x)>c.hw+90||Math.abs(c.y-start.y)>c.hh+90);
+        this.buildCoverPoints();
+        this.rebuildHash();
+      }
+    }
+
+    this.buildReachability();
+  }
+
+  // A coarse map of the ground the operative can actually walk to, flood
+  // filled from their start.
+  //
+  // Deploying a hostile somewhere it cannot path out of is not a spawn that
+  // looks wrong, it is a spawn that quietly removes a hostile from the
+  // contract — and in a sector with a sealed pocket it happens repeatedly.
+  // Generation leaves small enclosed pockets in a couple of theatres, so the
+  // spawn search now has to know which side of the geometry a candidate is on.
+  //
+  // One fill over a 32-unit grid at generation time, and a constant-time
+  // lookup per spawn afterwards.
+  buildReachability(){
+    const cell=REACH_CELL;
+    const cols=Math.ceil(this.width/cell),rows=Math.ceil(this.height/cell);
+    this.reachCols=cols;this.reachRows=rows;
+    const open=new Uint8Array(cols*rows);
+    for(let cx=0;cx<cols;cx++)for(let cy=0;cy<rows;cy++){
+      const x=cx*cell+cell/2,y=cy*cell+cell/2;
+      if(this.playable(x,y,16)&&!this.overlapsSolid(x,y,16))open[cx*rows+cy]=1;
+    }
+    const reach=new Uint8Array(cols*rows);
+    const start=this.playerSpawn();
+    const sx=clamp(Math.floor(start.x/cell),0,cols-1);
+    const sy=clamp(Math.floor(start.y/cell),0,rows-1);
+    const stack=[];
+    const seed=sx*rows+sy;
+    if(open[seed]){reach[seed]=1;stack.push(seed)}
+    while(stack.length){
+      const id=stack.pop();
+      const cx=(id/rows)|0,cy=id%rows;
+      for(let k=0;k<4;k++){
+        const nx=cx+(k===0?1:k===1?-1:0);
+        const ny=cy+(k===2?1:k===3?-1:0);
+        if(nx<0||ny<0||nx>=cols||ny>=rows)continue;
+        const nid=nx*rows+ny;
+        if(reach[nid]||!open[nid])continue;
+        reach[nid]=1;stack.push(nid);
+      }
+    }
+    this.reachGrid=reach;
+  }
+
+  // True when a point is on ground connected to the operative's own. Unknown
+  // points answer true: a coarse grid can miss a legitimately open spot, and
+  // refusing every spawn is worse than allowing a rare bad one.
+  reachable(x,y){
+    if(!this.reachGrid)return true;
+    const cx=clamp(Math.floor(x/REACH_CELL),0,this.reachCols-1);
+    const cy=clamp(Math.floor(y/REACH_CELL),0,this.reachRows-1);
+    if(this.reachGrid[cx*this.reachRows+cy])return true;
+    // The cell centre may be blocked while the point itself is fine, so a
+    // one-cell neighbourhood is consulted before refusing.
+    for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){
+      const nx=cx+dx,ny=cy+dy;
+      if(nx<0||ny<0||nx>=this.reachCols||ny>=this.reachRows)continue;
+      if(this.reachGrid[nx*this.reachRows+ny])return true;
+    }
+    return false;
   }
 
   // Sealed vaults. The chamber walls are ordinary geometry that reads as part
@@ -591,6 +696,12 @@ export class World{
       if(this.overlapsSolid(x,y,Math.max(spec.w,spec.h)/2+34))continue;
       // Leave vault interiors clear so the payout has somewhere to land.
       if(this.insideVault(x,y,30))continue;
+      // And leave the operative's start clear. Cover is scattered after the
+      // start is chosen, so without this a crate can be dropped straight onto
+      // it and the contract opens with the operative inside solid geometry.
+      if(this.spawnPoint&&
+         Math.abs(x-this.spawnPoint.x)<spec.w/2+PLAYER_SPAWN_CLEARANCE+20&&
+         Math.abs(y-this.spawnPoint.y)<spec.h/2+PLAYER_SPAWN_CLEARANCE+20)continue;
       this.addCover(x,y,spec);
       placed++;
     }
@@ -697,18 +808,67 @@ export class World{
     return false;
   }
 
+  // Move a circular entity by a displacement, resolving geometry on the way.
+  //
+  // Every mover in the game goes through this. The previous arrangement added
+  // the whole displacement and then called resolveCollision to push the entity
+  // back out of anything it had ended up inside, which only works while one
+  // step is shorter than the geometry it crosses. A dashing operative covers
+  // roughly 21 world units in a 1/60 step and the shallowest cover in the game
+  // is 24 units deep, so a dash into low cover could finish on the far side
+  // with nothing left overlapping to push it back — the wall-clipping the
+  // owner reported.
+  //
+  // Substepping by the entity's own radius makes that impossible by
+  // construction rather than by tuning: no substep is longer than the entity
+  // is wide, so it cannot step over a solid it would have had to pass through.
+  // Almost every call is a single substep, so the normal cost is one compare;
+  // the substep count is capped so a pathological velocity cannot turn one
+  // frame into a hundred collision queries.
+  moveEntity(entity,dx,dy,radius=entity.radius||12){
+    const distance=Math.hypot(dx,dy);
+    const limit=Math.max(4,radius*.75);
+    const steps=distance>limit?Math.min(MAX_MOVE_SUBSTEPS,Math.ceil(distance/limit)):1;
+    const stepX=dx/steps,stepY=dy/steps;
+    let corrected=false;
+    for(let i=0;i<steps;i++){
+      entity.x+=stepX;
+      entity.y+=stepY;
+      if(this.resolveCollision(entity,radius))corrected=true;
+    }
+    return corrected;
+  }
+
   // Push a circular entity out of every obstacle it is currently inside.
   // Returns true when a correction was applied.
   resolveCollision(entity,radius=entity.radius||12){
     let corrected=false;
-    const nearby=this.obstacleHash.query(entity.x,entity.y,radius+90,queryScratch);
-    for(const obstacle of nearby){
-      if(obstacle.broken)continue;
-      const push=resolveCircleRect(entity.x,entity.y,radius,obstacle.x,obstacle.y,obstacle.hw,obstacle.hh);
-      if(push){entity.x+=push.x;entity.y+=push.y;corrected=true}
+    // Arena bounds first, depenetration second. The clamp used to run last,
+    // which meant that for any solid sitting near the sector edge it could
+    // shove the entity back into the geometry depenetration had just pushed it
+    // out of, and the entity stayed buried. Whatever runs last wins, so the
+    // thing that must win runs last.
+    const clampedX=clamp(entity.x,radius+8,this.width-radius-8);
+    const clampedY=clamp(entity.y,radius+8,this.height-radius-8);
+    if(clampedX!==entity.x||clampedY!==entity.y){
+      entity.x=clampedX;entity.y=clampedY;corrected=true;
     }
-    entity.x=clamp(entity.x,radius+8,this.width-radius-8);
-    entity.y=clamp(entity.y,radius+8,this.height-radius-8);
+    const nearby=this.obstacleHash.query(entity.x,entity.y,radius+90,queryScratch);
+    // Several passes, because one is not enough in a corner: pushing out of
+    // the wall on the left can push straight into the crate below, and that
+    // crate has already been visited. A single pass left a body buried in
+    // roughly one squeeze in a hundred. Passes stop as soon as nothing moves,
+    // so open ground still costs exactly one.
+    for(let pass=0;pass<DEPENETRATION_PASSES;pass++){
+      let moved=false;
+      for(const obstacle of nearby){
+        if(obstacle.broken)continue;
+        const push=resolveCircleRect(entity.x,entity.y,radius,obstacle.x,obstacle.y,obstacle.hw,obstacle.hh);
+        if(push){entity.x+=push.x;entity.y+=push.y;moved=true}
+      }
+      if(!moved)break;
+      corrected=true;
+    }
     return corrected;
   }
 
@@ -729,14 +889,22 @@ export class World{
     const midX=(x1+x2)/2,midY=(y1+y2)/2;
     const radius=Math.hypot(x2-x1,y2-y1)/2+80;
     const nearby=this.obstacleHash.query(midX,midY,radius,queryScratch);
-    let closest=null,closestD=Infinity;
+    let closest=null,closestT=Infinity;
     for(const obstacle of nearby){
       if(obstacle.broken)continue;
       if(ignoreLowCover&&!obstacle.blocksSight)continue;
-      if(!segmentIntersectsRect(x1,y1,x2,y2,obstacle.x,obstacle.y,obstacle.hw,obstacle.hh))continue;
-      const d=dist2(x1,y1,obstacle.x,obstacle.y);
-      if(d<closestD){closestD=d;closest=obstacle}
+      const t=segmentRectEntry(x1,y1,x2,y2,obstacle.x,obstacle.y,obstacle.hw,obstacle.hh);
+      if(t===null)continue;
+      // Nearest along the ray, not nearest centre: a long thin pipe whose
+      // centre is far away can still be the first thing a shot meets.
+      if(t<closestT){closestT=t;closest=obstacle}
     }
+    // Where the shot actually met the surface, so the impact mark lands on the
+    // wall rather than at wherever the projectile had been integrated to. At
+    // 1500 units/second that was up to 25 units deep inside the geometry.
+    this.lastHitT=closest?closestT:0;
+    this.lastHitX=x1+(x2-x1)*this.lastHitT;
+    this.lastHitY=y1+(y2-y1)*this.lastHitT;
     return closest;
   }
 
@@ -754,32 +922,99 @@ export class World{
   }
 
   // A valid open spawn position, biased away from the player.
-  findSpawn(rng,awayFrom,minDistance=520,maxDistance=1100){
-    for(let attempt=0;attempt<28;attempt++){
+  //
+  // `radius` is the entity that has to fit there. It used to be a fixed 26 for
+  // everything, so a carrier or a command signature — three times that across
+  // — was routinely deployed already overlapping a wall, and arrived shoved
+  // out of it by the depenetration pass or wedged against it.
+  findSpawn(rng,awayFrom,minDistance=520,maxDistance=1100,radius=26){
+    const fromX=awayFrom?.x??this.width/2;
+    const fromY=awayFrom?.y??this.height/2;
+    // Clearance relaxes as the attempts run out: a dense industrial floor has
+    // very few points with a carrier's full clearance, and refusing to deploy
+    // at all is worse than deploying somewhere merely tight.
+    for(let attempt=0;attempt<32;attempt++){
+      const ease=attempt/32;
+      const clearance=Math.max(20,radius*(1-ease*.55));
       const angle=rng.angle();
       const distance=rng.range(minDistance,maxDistance);
-      const x=clamp((awayFrom?.x??this.width/2)+Math.cos(angle)*distance,80,this.width-80);
-      const y=clamp((awayFrom?.y??this.height/2)+Math.sin(angle)*distance,80,this.height-80);
+      const x=clamp(fromX+Math.cos(angle)*distance,80,this.width-80);
+      const y=clamp(fromY+Math.sin(angle)*distance,80,this.height-80);
       // Never deploy hostiles into a sealed chamber they cannot leave, or
       // into a dead zone they cannot path out of.
-      if(!this.overlapsSolid(x,y,26)&&!this.insideVault(x,y,24)&&
-         this.playable(x,y,70))return{x,y};
+      if(!this.overlapsSolid(x,y,clearance)&&!this.insideVault(x,y,24)&&
+         this.playable(x,y,70)&&this.reachable(x,y))return{x,y};
     }
-    // Fall back to the arena centre offset, which generation keeps clear.
-    return{x:clamp(this.width/2,80,this.width-80),y:clamp(this.height/2,80,this.height-80)};
+    return this.fallbackSpawn(radius);
+  }
+
+  // Open ground near a point, found by walking rings outwards from it.
+  //
+  // The one primitive both fallback paths need. It never consults
+  // `playerSpawn`, so the player's own start can be resolved with it without
+  // recursing.
+  openPointNear(x,y,radius=26,{avoidVaults=true,pad=70}={}){
+    if(!this.overlapsSolid(x,y,radius)&&
+       (!avoidVaults||!this.insideVault(x,y,24))&&
+       this.playable(x,y,pad))return{x,y};
+    for(let ring=1;ring<=14;ring++){
+      const distance=ring*90;
+      const steps=8+ring*2;
+      for(let i=0;i<steps;i++){
+        const angle=(i/steps)*TAU+ring*.37;
+        const px=clamp(x+Math.cos(angle)*distance,80,this.width-80);
+        const py=clamp(y+Math.sin(angle)*distance,80,this.height-80);
+        if(!this.overlapsSolid(px,py,radius)&&
+           (!avoidVaults||!this.insideVault(px,py,24))&&
+           this.playable(px,py,pad))return{x:px,y:py};
+      }
+    }
+    return null;
+  }
+
+  // Somewhere known to be open, for when the biased search has failed.
+  //
+  // This used to return the arena centre on the stated assumption that
+  // "generation keeps it clear". Three layouts put geometry there — the arena
+  // ring, the modular grid and the vault chamber — so the assumption was
+  // wrong and the failure mode was a hostile deployed inside a wall. The
+  // operative's own start is a point generation now guarantees, so a ring walk
+  // outwards from it is a fallback that has actually been checked.
+  fallbackSpawn(radius=26){
+    const start=this.playerSpawn();
+    return this.openPointNear(start.x,start.y,radius)||{x:start.x,y:start.y};
   }
 
   // Player start: the most open room we generated. Resolved once during
   // generation, before vaults and cover are placed, so both can be kept clear
   // of it — a vault built around the spawn would seal the operative in.
   computePlayerSpawn(){
-    if(!this.rooms.length)return{x:this.width/2,y:this.height/2};
-    let best=this.rooms[0],bestArea=0;
+    // Every candidate is validated before it is returned, and an unvalidated
+    // one is never returned at all. The previous version fell back to
+    // `rooms[0]` when no room had clearance, and to the bare arena centre when
+    // a layout produced no rooms; across eighty generated sectors that put the
+    // operative inside solid geometry in fourteen of them, which is the
+    // wall-clipping-at-spawn the owner hit.
+    const fits=(x,y)=>!this.overlapsSolid(x,y,PLAYER_SPAWN_CLEARANCE)&&
+                      this.playable(x,y,60);
+    let best=null,bestArea=-1;
     for(const room of this.rooms){
       const area=room.w*room.h;
-      if(area>bestArea&&!this.overlapsSolid(room.x,room.y,40)){bestArea=area;best=room}
+      if(area>bestArea&&fits(room.x,room.y)){bestArea=area;best=room}
     }
-    return{x:best.x,y:best.y};
+    if(best)return{x:best.x,y:best.y};
+    // No room had the clearance. Search outwards from the largest room we do
+    // have, or from the middle of the sector when there are no rooms at all.
+    const anchor=this.rooms.reduce((a,r)=>!a||r.w*r.h>a.w*a.h?r:a,null)
+      ||{x:this.width/2,y:this.height/2};
+    const open=this.openPointNear(anchor.x,anchor.y,PLAYER_SPAWN_CLEARANCE,
+      {avoidVaults:true,pad:60});
+    if(open)return open;
+    // Nothing in the sector has operative clearance. Generation should make
+    // this impossible; carving a hole is better than starting inside a wall.
+    this.carve({x:this.width/2,y:this.height/2,w:200,h:200});
+    this.rebuildHash();
+    return{x:this.width/2,y:this.height/2};
   }
 
   playerSpawn(){

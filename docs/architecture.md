@@ -144,6 +144,23 @@ runs the production Canvas 2D renderer as the control, and `?visualtest=1&theatr
 picks any of the ten. A number measured there is therefore a number about the game.
 See that directory's README.
 
+## Movement and collision
+
+One path: `World.moveEntity(entity,dx,dy,radius)`. It substeps by the entity's
+own radius so no substep is longer than the entity is wide, which makes
+tunnelling impossible by construction rather than by tuning. The operative,
+hostiles and deployables all go through it; flying units bypass geometry
+entirely and are only clamped to the arena.
+
+`World.resolveCollision` is still the depenetration primitive underneath, but
+nothing should call it directly to move something — that was the arrangement
+that let a dash finish on the far side of a wall.
+
+Projectiles do not use it at all. They sweep: `raycastObstacle` against
+geometry, which also reports the entry point so the impact lands on the
+surface, and `segmentHitsCircle` against hostiles, because at 1500 units per
+second a step is wider than most targets.
+
 ## Static checks
 
 There is no build step, so nothing type-checks this code on the way past. Two
@@ -202,6 +219,13 @@ so taking a 2D context to check something first permanently forecloses WebGL2 on
 sorted by world Y each frame so overlap reads correctly. The lighting pass renders
 additive radial gradients into a half-resolution offscreen canvas which is composited
 with `globalCompositeOperation = 'lighter'`; it is skipped entirely in performance mode.
+
+Neither renderer may influence the simulation. That is checked rather than
+assumed — see `docs/collision-integrity.md` and `tools/parity.mjs`, which runs
+the same seed and the same scripted input under both and compares simulation
+state. Two things used to violate it and no longer do: hostile deployment
+distance was read from the camera's pixel dimensions, and pointer aim conflated
+CSS pixels with drawing-buffer pixels.
 
 **Deferred WebGL2** (`src/render/gl/`) replaces the floor, geometry, lighting and post
 with an instanced G-buffer, instanced light volumes, a bloom chain and a filmic

@@ -19,6 +19,7 @@ import {FocusNav} from './ui/focusnav.js';
 import {audio} from './core/audio.js';
 import {profiler} from './core/profiler.js';
 import {resolveBuild} from './game/gunsmith.js';
+import {clamp} from './core/math.js';
 
 // Application entry point. Owns the top-level state machine (menu ⇄ run),
 // the render loop and the wiring between the simulation, the renderer and
@@ -208,7 +209,7 @@ function startRun(config){
     canvas.height=height;
     canvas.style.width=`${window.innerWidth}px`;
     canvas.style.height=`${window.innerHeight}px`;
-    engine.resize(width,height);
+    engine.resize(width,height,window.innerWidth,window.innerHeight);
     renderer.resize(width,height);
   };
   resize();
@@ -292,6 +293,10 @@ function createRenderer(hud,engine,settings){
       gl.destroy?.();
     }catch(err){
       console.warn('[red-static] deferred renderer failed, falling back to Canvas 2D',err);
+      // A throw part-way through construction can still have inserted the
+      // renderer's screen-space UI canvas into the page. Nothing owns it now,
+      // and left behind it sits blank over the game forever.
+      for(const stray of document.querySelectorAll('.gl-ui-layer'))stray.remove();
     }
     // The canvas may now hold a dead or half-built GL context, and a canvas
     // cannot trade one context for another. Replacing the element is the only
@@ -312,7 +317,16 @@ function createRenderer(hud,engine,settings){
 function tick(now){
   if(!session)return;
   const {engine,renderer,hud,levelUp,pause}=session;
-  const dt=Math.min(.1,(now-session.last)/1000);
+  // Clamped at both ends. The upper bound stops a stall compounding; the lower
+  // one exists because a requestAnimationFrame timestamp is the moment the
+  // frame began, which can precede a performance.now() taken later inside that
+  // same frame — so the first delta after a slow startRun could be negative by
+  // most of a second. A negative delta ran the camera's damp backwards and
+  // inverted its zoom to about -574, which mirrors the world through the
+  // operative and inverts aim with it, for the two seconds it took to converge
+  // back. It also drove the simulation accumulator negative and stalled the
+  // fixed step until it recovered.
+  const dt=clamp((now-session.last)/1000,0,.1);
   session.last=now;
 
   input.poll();

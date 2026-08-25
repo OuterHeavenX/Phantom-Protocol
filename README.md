@@ -196,6 +196,15 @@ anything that fails falls back rather than breaking. See
 All sprites are drawn procedurally as animated vector figures — the repository ships no
 image assets beyond the optional authored environment packs.
 
+**Collision and gameplay integrity.** The renderer is downstream of the
+simulation and is not permitted to change it. Movement goes through one swept
+path that cannot tunnel; spawns are validated against the entity's own radius
+and against a reachability map flood-filled from the operative's start; aim
+converts CSS pixels to world space explicitly; and hostile deployment distance
+is a world-space constant rather than a reading off the camera. `?collisiondebug=1`
+draws every gameplay shape from live simulation data under either renderer. See
+[`docs/collision-integrity.md`](docs/collision-integrity.md).
+
 **Audio.** Sound effects are fully synthesized at runtime from oscillators and shaped
 noise (`src/core/audio.js`) — a complete sound library with no samples.
 

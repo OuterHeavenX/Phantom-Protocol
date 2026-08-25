@@ -1,6 +1,7 @@
 import {ENEMIES,ENEMIES_BY_ID,ELITES,CHOPPER,CARRIER} from '../../data/enemies.js';
 import {MINIBOSSES} from '../../data/bosses.js';
 import {clamp,TAU} from '../core/math.js';
+import {MAX_VISIBLE_WIDTH,MAX_VISIBLE_HEIGHT} from '../core/camera.js';
 import {Squad} from './ai.js';
 
 // Spawn director. Owns pacing: how many hostiles, of what type, in what
@@ -13,6 +14,32 @@ const WAVE_STATES={LULL:'lull',DEPLOY:'deploy',SUSTAIN:'sustain',SURGE:'surge'};
 // Wall-clock span over which threat escalation reaches its ceiling, regardless
 // of how long the contract itself runs.
 const ESCALATION_SECONDS=12*60;
+
+// How far from the operative reinforcements arrive, in world units.
+//
+// This used to be `camera.viewHalfWidth(margin)`, which made hostile
+// deployment a function of the browser window. A wide desktop deployed at
+// about 460 units; an iPhone in portrait at about 272 — well inside the 590
+// units of ground that phone can see vertically, so on the primary handheld
+// target hostiles materialised in plain view. It also moved with the cosmetic
+// zoom punch on a boss reveal, and with the performance-mode setting, because
+// both change the camera.
+//
+// The camera never shows more than MAX_VISIBLE_WIDTH x MAX_VISIBLE_HEIGHT of
+// world, so half that rectangle's diagonal is the nearest a hostile can deploy
+// and still be off screen on every device and at every zoom. It lands inside
+// the range the desktop build already used, which is why this is a
+// renderer-independence fix rather than a pacing change.
+const DEPLOY_RADIUS=Math.hypot(MAX_VISIBLE_WIDTH,MAX_VISIBLE_HEIGHT)/2;
+
+// Carriers are the nearest thing to deploy, on purpose: one drives in on the
+// ground with only local avoidance to steer by, so every extra metre of
+// geometry between it and the operative is another chance to wedge. "Nearest"
+// is expressed as the smallest spread on top of DEPLOY_RADIUS rather than as a
+// smaller radius — a first attempt at 0.82x put a carrier inside an iPhone's
+// visible rectangle at around seventy degrees off horizontal, which is exactly
+// the class of viewport-dependent bug this whole change is removing.
+const CARRIER_SPREAD=60;
 
 export class Director{
   constructor(engine,options){
@@ -247,11 +274,11 @@ export class Director{
     const engine=this.engine;
     const rng=engine.rng;
     const angle=request.bearing+(rng.next()-.5)*(request.spread??.6);
-    const distance=engine.camera.viewHalfWidth(180)+rng.range(0,260);
+    const distance=DEPLOY_RADIUS+rng.range(0,180);
     const point=engine.world.findSpawn(rng,{
       x:engine.player.x+Math.cos(angle)*distance,
       y:engine.player.y+Math.sin(angle)*distance
-    },0,180);
+    },0,180,(ENEMIES_BY_ID[request.archetype?.id]?.radius||request.archetype?.radius||12)+4);
 
     const enemy=engine.spawnEnemy(request.archetype,point.x,point.y,request.options);
     if(!enemy)return null;
@@ -274,11 +301,11 @@ export class Director{
     const tierCap=Math.min(ELITES.length,2+Math.floor(this.escalation*ELITES.length));
     const elite=rng.pick(ELITES.slice(0,tierCap));
     const angle=rng.angle();
-    const distance=engine.camera.viewHalfWidth(200);
+    const distance=DEPLOY_RADIUS;
     const point=engine.world.findSpawn(rng,{
       x:engine.player.x+Math.cos(angle)*distance,
       y:engine.player.y+Math.sin(angle)*distance
-    },0,200);
+    },0,200,(elite.radius||18)+6);
     const enemy=engine.spawnEliteEnemy(elite,point.x,point.y);
     if(enemy){
       enemy.awareness=1;
@@ -301,7 +328,7 @@ export class Director{
     let deployed=0;
     for(let i=0;i<count;i++){
       const angle=bearing+(i-(count-1)/2)*.45;
-      const distance=engine.camera.viewHalfWidth(220)+rng.range(60,220);
+      const distance=DEPLOY_RADIUS+rng.range(0,160);
       const x=clamp(engine.player.x+Math.cos(angle)*distance,60,engine.world.width-60);
       const y=clamp(engine.player.y+Math.sin(angle)*distance,60,engine.world.height-60);
       // Flying, so it does not need a clear ground spawn — only to be inside
@@ -333,11 +360,11 @@ export class Director{
       // Just beyond the edge of view. A carrier has to drive in on the ground
       // with only local avoidance to steer by, so every extra metre of
       // geometry between it and the operative is another chance to wedge.
-      const distance=engine.camera.viewHalfWidth(60)+rng.range(20,90);
+      const distance=DEPLOY_RADIUS+rng.range(0,CARRIER_SPREAD);
       const point=engine.world.findSpawn(rng,{
         x:engine.player.x+Math.cos(angle)*distance,
         y:engine.player.y+Math.sin(angle)*distance
-      },0,220);
+      },0,220,(CARRIER.radius||30)+8);
       const carrier=engine.spawnEnemy(CARRIER,point.x,point.y,{});
       if(!carrier)continue;
       carrier.awareness=1;

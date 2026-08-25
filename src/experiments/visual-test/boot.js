@@ -170,7 +170,7 @@ function runLoop({app,canvas,engine,renderer,quality,params,input,onResize,onPre
     canvas.height=Math.floor(window.innerHeight*dpr);
     canvas.style.width=`${window.innerWidth}px`;
     canvas.style.height=`${window.innerHeight}px`;
-    engine.resize(canvas.width,canvas.height);
+    engine.resize(canvas.width,canvas.height,window.innerWidth,window.innerHeight);
     renderer.resize(canvas.width,canvas.height);
     onResize?.(canvas.width,canvas.height);
   };
@@ -182,7 +182,9 @@ function runLoop({app,canvas,engine,renderer,quality,params,input,onResize,onPre
   const frame=now=>{
     const ms=now-last;
     last=now;
-    const dt=Math.min(.1,ms/1000);
+    // Clamped at both ends for the same reason the game loop is: a rAF
+    // timestamp can precede a performance.now() taken inside the same frame.
+    const dt=Math.max(0,Math.min(.1,ms/1000));
     input.poll();
     // The operative never dies here: a stress test that ends after ninety
     // seconds cannot be swept.

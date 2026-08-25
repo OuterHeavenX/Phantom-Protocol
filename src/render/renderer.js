@@ -3,7 +3,7 @@ import {Weather} from './weather.js';
 import {profiler} from '../core/profiler.js';
 import {drawLandmark} from './landmarks.js';
 import {EnvironmentArt,drawSprite,drawSlicedWall} from './environment.js';
-import {EXTRACTION_RADIUS,EXTRACTION_HOLD} from '../game/engine.js';
+import {EXTRACTION_RADIUS,EXTRACTION_HOLD,FIXED_STEP} from '../game/engine.js';
 import {vaultKind} from '../../data/vaults.js';
 import {REVIVE_RADIUS} from '../game/squadmate.js';
 import {
@@ -31,6 +31,16 @@ import {
 // Cover whose visible form is an authored landmark rather than a generic box.
 const LANDMARK_COLLIDERS=new Set(['fuselage','trunk','boulder','wreck']);
 
+// ?collisiondebug=1 draws every gameplay shape in the sector over the top of
+// whichever renderer is running. Developer tooling: it is off unless asked
+// for, and nothing about it is reachable from normal play.
+const COLLISION_DEBUG=(()=>{
+  try{
+    const value=new URLSearchParams(location.search).get('collisiondebug');
+    return value!==null&&value!=='0'&&value.toLowerCase()!=='false';
+  }catch{return false}
+})();
+
 export class Renderer{
   constructor(canvas,ctx,engine){
     this.canvas=canvas;
@@ -48,6 +58,9 @@ export class Renderer{
     this.lastFrame=performance.now();
     this.fps=60;
     this.floorPattern=null;
+    // Developer collision visualisation, off unless ?collisiondebug=1 is on the
+    // URL. Read once here rather than per frame.
+    this.collisionDebug=COLLISION_DEBUG;
     this.buildFloorPattern();
     // Per-theatre ambient weather; theatres without a profile cost nothing.
     this.weather=new Weather(engine.map?.weather,this.settings);
@@ -149,6 +162,7 @@ export class Renderer{
     this.drawMissionMarkers(ctx);
     this.drawSquadMarkers(ctx);
     this.drawOptic(ctx);
+    if(this.collisionDebug)this.drawCollisionDebug(ctx);
 
     ctx.restore();
 
@@ -163,6 +177,7 @@ export class Renderer{
     }
 
     this.drawPost(ctx,width,height);
+    if(this.collisionDebug)this.drawCollisionReadout(ctx,width,height,'Canvas 2D');
     // Closes the render section and the frame. The simulation half was marked
     // in Engine.update, so the two together account for the whole frame.
     profiler.mark('render');
@@ -1443,6 +1458,154 @@ export class Renderer{
     ctx.imageSmoothingEnabled=true;
     ctx.drawImage(this.lightCanvas,0,0,camera.width,camera.height);
     ctx.globalCompositeOperation='source-over';
+    ctx.restore();
+  }
+
+  // ---- Collision debug ----------------------------------------------------
+  //
+  // Developer-only, behind ?collisiondebug=1. Every shape below is read from
+  // the live simulation — world.walls, world.cover, entity.radius, the same
+  // hazard.radius the damage test uses — and never reconstructed from sprite
+  // bounds. That is the whole point: if the drawn shape and the played shape
+  // ever disagree, this overlay is wrong in the same direction as the bug, and
+  // it would prove nothing.
+  //
+  // Both renderers call this with a camera-transformed context, so what it
+  // shows is identical under Canvas 2D and WebGL2.
+  drawCollisionDebug(ctx){
+    const engine=this.engine;
+    const world=engine.world;
+    const camera=engine.camera;
+    const halfW=camera.viewHalfWidth(220);
+    const halfH=camera.viewHalfHeight(220);
+    const near=(x,y,pad=0)=>Math.abs(x-camera.x)<halfW+pad&&Math.abs(y-camera.y)<halfH+pad;
+
+    ctx.save();
+    ctx.lineWidth=1.5;
+    ctx.font='10px ui-monospace,monospace';
+
+    const box=(o,stroke,fill)=>{
+      if(!near(o.x,o.y,Math.max(o.hw,o.hh)))return;
+      if(fill){ctx.fillStyle=fill;ctx.fillRect(o.x-o.hw,o.y-o.hh,o.hw*2,o.hh*2)}
+      ctx.strokeStyle=stroke;
+      ctx.strokeRect(o.x-o.hw,o.y-o.hh,o.hw*2,o.hh*2);
+    };
+    const circle=(x,y,r,stroke,dash=null)=>{
+      if(!(r>0)||!near(x,y,r))return;
+      ctx.setLineDash(dash||[]);
+      ctx.strokeStyle=stroke;
+      ctx.beginPath();ctx.arc(x,y,r,0,TAU);ctx.stroke();
+      ctx.setLineDash([]);
+    };
+
+    // Solid geometry. Perimeter and interior walls are distinguished because
+    // "the doorway is too narrow" and "the arena edge is where I think it is"
+    // are different questions.
+    for(const wall of world.walls){
+      box(wall,wall.type==='perimeter'?'#ff5b7a':'#7fb4ff',
+        wall.type==='perimeter'?null:'rgba(127,180,255,.10)');
+    }
+    // Cover: destructible in amber, permanent in blue, broken struck through.
+    for(const cover of world.cover){
+      if(cover.broken){
+        if(near(cover.x,cover.y,40)){
+          ctx.strokeStyle='rgba(120,130,140,.5)';
+          ctx.beginPath();
+          ctx.moveTo(cover.x-cover.hw,cover.y-cover.hh);
+          ctx.lineTo(cover.x+cover.hw,cover.y+cover.hh);
+          ctx.stroke();
+        }
+        continue;
+      }
+      box(cover,cover.destructible?'#ffb35c':'#76e7d4','rgba(255,179,92,.08)');
+    }
+    // Vault chambers: the blocker geometry, not the art.
+    for(const vault of world.vaults){
+      if(!near(vault.x,vault.y,vault.half))continue;
+      ctx.strokeStyle='#c895ff';
+      ctx.setLineDash([6,5]);
+      ctx.strokeRect(vault.x-vault.half,vault.y-vault.half,vault.half*2,vault.half*2);
+      ctx.setLineDash([]);
+    }
+
+    // Hazards. Two rings, deliberately: the solid one is the radius the damage
+    // test actually uses against the operative's centre, the dashed one is
+    // that radius plus the operative's body. Anything between them looks like
+    // contact and is not treated as contact — the one mismatch in the game
+    // that is intentional, and this is how to see it.
+    for(const hazard of world.hazards){
+      const live=hazard.active||hazard.passive;
+      circle(hazard.x,hazard.y,hazard.radius,live?'#ff5b30':'rgba(255,91,48,.45)');
+      circle(hazard.x,hazard.y,hazard.radius+engine.player.radius,'rgba(255,91,48,.35)',[4,4]);
+    }
+
+    // Entities, at the radius collision and hit detection use.
+    for(const enemy of engine.enemies){
+      if(enemy.dead)continue;
+      circle(enemy.x,enemy.y,enemy.radius,enemy.flying?'#c895ff':'#ff8a5c');
+    }
+    if(engine.boss&&!engine.boss.dead)circle(engine.boss.x,engine.boss.y,engine.boss.radius,'#ff5b5b');
+    for(const mate of engine.squad||[])if(!mate.down)circle(mate.x,mate.y,mate.radius,'#8fd8ff');
+    for(const p of engine.projectiles)circle(p.x,p.y,Math.max(2,p.radius),'#ffe08a');
+    for(const p of engine.enemyProjectiles)circle(p.x,p.y,Math.max(2,p.radius),'#ff8a5c');
+
+    // Pickups: the body, and the magnet range that pulls them in.
+    for(const pickup of engine.pickups){
+      circle(pickup.x,pickup.y,6,'#8bff9b');
+      circle(pickup.x,pickup.y,engine.player.radius+10,'rgba(139,255,155,.3)',[3,3]);
+    }
+
+    // The operative. Body, magnet reach, and the extraction hold radius.
+    const player=engine.player;
+    circle(player.x,player.y,player.radius,'#76e7d4');
+    circle(player.x,player.y,110*(engine.stats.magnet||1),'rgba(118,231,212,.25)',[3,5]);
+    if(engine.extractionPoint){
+      circle(engine.extractionPoint.x,engine.extractionPoint.y,EXTRACTION_RADIUS,'#f5d27a',[8,6]);
+    }
+    // Where the AI thinks it can stand.
+    for(const point of world.coverPoints||[]){
+      if(!near(point.x,point.y,12))continue;
+      ctx.fillStyle=point.claimedBy?'rgba(255,179,92,.7)':'rgba(120,140,150,.45)';
+      ctx.fillRect(point.x-2,point.y-2,4,4);
+    }
+    ctx.restore();
+  }
+
+  // The screen-space half of the debug flag: what is running, and where the
+  // operative actually is in world coordinates. Written to be readable on a
+  // phone held at arm's length, because that is the device it exists for.
+  drawCollisionReadout(ctx,width,height,rendererName){
+    const engine=this.engine;
+    const player=engine.player;
+    const lines=[
+      `renderer  ${rendererName}`,
+      `theatre   ${engine.map?.id||'?'}`,
+      `fps       ${this.fps}`,
+      `sim       ${Math.round(1/FIXED_STEP)} Hz fixed`,
+      `player    ${player.x.toFixed(1)}, ${player.y.toFixed(1)}`,
+      `world     ${engine.world.width} x ${engine.world.height}`,
+      `hostiles  ${engine.enemies.filter(e=>!e.dead).length}`,
+      `rounds    ${engine.projectiles.length}+${engine.enemyProjectiles.length}`,
+      `walls     ${engine.world.walls.length}  cover ${engine.world.cover.length}`,
+      `hazards   ${engine.world.hazards.length}`
+    ];
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    const scale=Math.max(1,Math.min(2,width/900));
+    ctx.scale(scale,scale);
+    // Sits clear of the bottom-left weapon widget, which is where the readout
+    // landed first and was half hidden behind it on a phone.
+    const w=190,h=lines.length*13+12;
+    const x=8,y=(height/scale)-h-76;
+    ctx.fillStyle='rgba(4,10,14,.82)';
+    ctx.fillRect(x,y,w,h);
+    ctx.strokeStyle='rgba(118,231,212,.5)';
+    ctx.lineWidth=1;
+    ctx.strokeRect(x+.5,y+.5,w,h);
+    ctx.font='10px ui-monospace,monospace';
+    ctx.fillStyle='#9fd6cf';
+    ctx.textAlign='left';
+    lines.forEach((line,i)=>ctx.fillText(line,x+8,y+18+i*13));
     ctx.restore();
   }
 
