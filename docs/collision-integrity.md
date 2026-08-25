@@ -117,6 +117,19 @@ can be bit-identical under both renderers while one draws it upside down. And
 eyeballing failed too — a debug-overlay screenshot was read as showing sprites
 inside their collision circles when it was showing the opposite.
 
+There are three canvases uploaded as textures in this pipeline — the sprite
+layer, the authored-floor blit and (as a DOM element, so never uploaded) the UI
+layer. Two of the three orientations were checked by reasoning; one of those
+two was wrong. Both are now checked by experiment: `tools/align.mjs` for the
+sprite layer, `tools/ground-orientation.mjs` for the floor blit, which is
+correct and now verified rather than asserted.
+
+A note on that second check, because it nearly produced a false alarm: at a low
+difference threshold the bloom spread across the entire frame dominates the
+diff and the centroid lands dead centre, which reads as a flip when nothing is
+wrong. The verdict comes from per-quadrant counts of strongly-changed pixels,
+not from a centroid.
+
 `tools/align.mjs` closes the gap. It recolours hostiles to key colours absent
 from every theatre palette, finds each one's centroid in the composited frame,
 and compares it in pixels against the world-to-screen position of its collider.

@@ -14,6 +14,7 @@ node; the parity one needs a browser and a served copy of the game.
 | `parity.mjs [theatres] [ticks] [a:b]` | node + playwright + a server | Does the renderer change the game? Runs the same seed and the same scripted input under two renderers and compares simulation state, never pixels. The fourth argument picks the pair; `2d:2d` is the control that must pass first. |
 | `diverge.mjs [renderer]` | node + playwright + a server | When parity fails, where? Runs the same build twice and reports the first tick, entity and field that disagree. |
 | `align.mjs [gl\|2d] [--shake]` | node + playwright + a server | Does the renderer draw a hostile where its collider is? Recolours hostiles to palette-safe key colours, finds each one's centroid in the composited frame, and compares it in pixels with the world-to-screen position of its collider. Exits non-zero on a miss. |
+| `ground-orientation.mjs` | node + playwright + a server | Is the authored-floor blit the right way up? Paints a patch in the ground canvas's top-left quadrant and diffs the composited frame against one without it. |
 
 ```sh
 node tools/clip.mjs 6000 --legacy     # the old behaviour, for comparison
@@ -28,6 +29,7 @@ node tools/diverge.mjs 2d                                # when one of them fail
 
 node tools/align.mjs gl && node tools/align.mjs gl --shake
 node tools/align.mjs 2d
+node tools/ground-orientation.mjs
 ```
 
 **Run `align.mjs` on any renderer change.** Simulation parity cannot catch a
