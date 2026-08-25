@@ -322,22 +322,51 @@ export class DeferredRenderer{
     this.sprites.resize?.(width,height);
   }
 
-  // World to clip. Matches the 2D camera exactly, so switching renderer does
-  // not move anything by a pixel.
+  // World to clip, reproducing Camera.apply() exactly — including the screen
+  // shake and the roll that go with it.
+  //
+  // This is the whole of Camera.apply written as a matrix:
+  //
+  //   screen = R(roll) · (zoom·(world − camera) + shake) + centre
+  //
+  // The shake and the roll used to be missing here, and that was the single
+  // most destructive bug in the deferred path. Camera.apply applies both, so
+  // everything the Canvas 2D code draws — every hostile, the operative,
+  // projectiles, decals, hazards, markers — moved with the shake, while the
+  // floor, the walls and all the lighting drawn in GL stayed rock still.
+  // Shake fires on every hit, kill and explosion, so during any firefight the
+  // entities slid as a group against a motionless world by up to 26 pixels.
+  // It reads exactly as the hostiles being stuck to the operative and the
+  // lights wandering, and it is why nothing lined up with its collision.
   viewMatrix(){
     const camera=this.engine.camera;
-    const zoom=camera.zoom;
-    const sx=2*zoom/this.width;
-    const sy=-2*zoom/this.height;
-    return new Float32Array([sx,0,0, 0,sy,0, -camera.x*sx,-camera.y*sy,1]);
+    const z=camera.zoom;
+    const roll=camera.rotation||0;
+    const cos=Math.cos(roll),sin=Math.sin(roll);
+    const kx=2/this.width,ky=-2/this.height;
+    // The camera offset carried into screen space, shake included.
+    const ux=-z*camera.x+(camera.shakeX||0);
+    const uy=-z*camera.y+(camera.shakeY||0);
+    return new Float32Array([
+      kx*cos*z,        ky*sin*z,        0,
+      kx*-sin*z,       ky*cos*z,        0,
+      kx*(cos*ux-sin*uy), ky*(sin*ux+cos*uy), 1
+    ]);
   }
 
+  // Clip back to world, for the lighting pass. The exact inverse of the above,
+  // so a light lands on the surface it is lighting even mid-shake.
   invViewMatrix(){
     const camera=this.engine.camera;
-    const zoom=camera.zoom;
-    const sx=2*zoom/this.width;
-    const sy=-2*zoom/this.height;
-    return new Float32Array([1/sx,0,0, 0,1/sy,0, camera.x,camera.y,1]);
+    const z=camera.zoom||1;
+    const roll=camera.rotation||0;
+    const cos=Math.cos(roll),sin=Math.sin(roll);
+    const hx=this.width/(2*z),hy=this.height/(2*z);
+    return new Float32Array([
+      cos*hx,  -sin*hx, 0,
+      -sin*hy, -cos*hy, 0,
+      camera.x-(camera.shakeX||0)/z, camera.y-(camera.shakeY||0)/z, 1
+    ]);
   }
 
   // ---- lights -------------------------------------------------------------

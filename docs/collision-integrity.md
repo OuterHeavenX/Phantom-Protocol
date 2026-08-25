@@ -97,7 +97,34 @@ frames in 180,000 steps. Against the fixed code, zero of each.
 That is the lesson worth keeping: a collision test that only ever touches
 geometry where the broad phase is strongest will pass a broken broad phase.
 
-**No defect in this pass was WebGL-only.** Every one predates the deferred
+### Two that were WebGL-only, found after the first pass shipped
+
+Both are presentation defects: the simulation was correct and the renderer drew
+it in the wrong place.
+
+| Defect | Root cause |
+|---|---|
+| **Every sprite composited vertically mirrored** | A 2D canvas puts its top row at texture `v=0`, while the composite's `vUv.y=1` is the top of the screen, so the sprite texture needed sampling upside down — as the authored-ground blit already did. It did not. Every hostile, tracer, muzzle flash, decal and hazard telegraph was drawn mirrored about the horizontal centre of the screen. The operative sits near that centre, so *the operative looked correct*, which is why it survived review; everything else appeared to swing around the operative as the camera moved. |
+| **The GL view matrix omitted camera shake and roll** | `Camera.apply` applies both; `viewMatrix` applied neither. Shake fires on every hit, kill and explosion, up to 26 pixels. So during any firefight the floor, the walls and all the lighting stood still while every 2D-drawn thing — hostiles, the operative, projectiles, markers — slid as a group. |
+
+Together these are what "all enemies move along with the main character", "spot
+light moves up and down" and "hard to tell what is collision" actually were.
+
+**How they survived the first pass, and what now covers them.** Every check in
+that pass compared *simulation state* or was a screenshot read by eye.
+Simulation parity cannot catch a presentation bug by construction: the world
+can be bit-identical under both renderers while one draws it upside down. And
+eyeballing failed too — a debug-overlay screenshot was read as showing sprites
+inside their collision circles when it was showing the opposite.
+
+`tools/align.mjs` closes the gap. It recolours hostiles to key colours absent
+from every theatre palette, finds each one's centroid in the composited frame,
+and compares it in pixels against the world-to-screen position of its collider.
+Reverting either fix makes it fail by 400-plus pixels; with both in place the
+worst offset is 7px, which is the sprite's own asymmetric centroid, and the two
+renderers agree with each other to within 0.7px.
+
+**No defect in the original pass was WebGL-only.** Every one predates the deferred
 renderer and is present in Canvas 2D. The renderer work made several of them
 easier to see; it caused none of them.
 

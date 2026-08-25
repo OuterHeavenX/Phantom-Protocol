@@ -598,7 +598,19 @@ void main(){
   // Entities are drawn by the existing Canvas 2D sprite code and composited
   // here. They take the scene's light, but never less than a readable floor:
   // a hostile crossing an unlit corridor is a gameplay problem, not a mood.
-  vec4 ent=texture(uEntities,vUv);
+  // The sprite layer is a 2D canvas uploaded as a texture, and a canvas puts
+  // its top row at v=0 while this pass's vUv.y=1 is the top of the screen. It
+  // therefore has to be sampled upside down, exactly as the authored-ground
+  // blit already does.
+  //
+  // Without this every sprite in the game was mirrored about the horizontal
+  // centre of the screen. The operative sits near that centre so the operative
+  // looked correct, which is why it survived review; everything else — every
+  // hostile, every tracer, every muzzle flash, every decal and every hazard
+  // telegraph — was drawn nowhere near the collider it belonged to, and
+  // appeared to swing around the operative as the camera moved.
+  vec2 entUv=vec2(vUv.x,1.0-vUv.y);
+  vec4 ent=texture(uEntities,entUv);
 
   // Contrast-adaptive silhouette rim, applied outside the sprite.
   //
@@ -610,10 +622,10 @@ void main(){
   // bright background or lightens them over a dark one. A hostile is therefore
   // separated from whatever is behind it no matter what the lighting is doing.
   if(uRim>0.0&&ent.a<0.85){
-    float n=texture(uEntities,vUv+vec2(0.0,-uEntityTexel.y)).a;
-    float s=texture(uEntities,vUv+vec2(0.0, uEntityTexel.y)).a;
-    float w=texture(uEntities,vUv+vec2(-uEntityTexel.x,0.0)).a;
-    float e=texture(uEntities,vUv+vec2( uEntityTexel.x,0.0)).a;
+    float n=texture(uEntities,entUv+vec2(0.0,-uEntityTexel.y)).a;
+    float s=texture(uEntities,entUv+vec2(0.0, uEntityTexel.y)).a;
+    float w=texture(uEntities,entUv+vec2(-uEntityTexel.x,0.0)).a;
+    float e=texture(uEntities,entUv+vec2( uEntityTexel.x,0.0)).a;
     float around=max(max(n,s),max(w,e));
     // Only solid things get an outline. Particles, smoke and decals are soft,
     // their coverage never reaches this, and they are left alone.
