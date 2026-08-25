@@ -197,3 +197,78 @@ Combine it with either renderer:
 ?collisiondebug=1                     whatever AUTOMATIC picks
 ?collisiondebug=1&visualtest=1        over the benchmark harness
 ```
+
+## Measured results
+
+All figures below were produced by the harnesses in `tools/`, in headless
+Chromium. There is no GPU in this environment — WebGL2 runs on SwiftShader — so
+**no frame-rate figure here means anything about a real device.** Everything
+reported is a correctness count, which is hardware-independent.
+
+### Wall clipping — `clip.mjs`, 180,000 dash-speed steps, all ten theatres
+
+| | tunnelled | buried in geometry |
+|---|---:|---:|
+| Original (`bce7bae`), centre-aimed charges | 15,021 | 12 |
+| Original (`bce7bae`), face-aimed charges | 1,469 | 611 |
+| Current | **0** | **0** |
+
+The first row is why the second exists. Aiming only at solids' centres charged
+the one place a centre-indexed broad phase worked.
+
+### Sector geometry — `doorway.mjs`, 100 generated sectors per theatre set
+
+| | before | after |
+|---|---:|---:|
+| Operative starts inside geometry | 14 in 80 | **0 in 100** |
+| Spawn candidates inside geometry | 0 | 0 |
+| Invalid fallback spawns | 0 | 0 |
+| Hazards inside walls | 0 | 0 |
+| Deployments onto unreachable ground | not checked | **0 of 12,000** |
+| Reachable ground, worst theatre excluding PROVING | 62.0% | **98.6%** |
+| Reachable ground, best | 99.4% | 99.5% |
+
+PROVING GROUND stays at 60% by design; every unreachable cell measured is
+outside the arena ring and none is inside it.
+
+### Renderer parity — `parity.mjs`, 600–900 ticks, simulation state compared
+
+Control (`2d:2d`) green on BLACKSITE ZERO, ASHEN MIRE and PROVING GROUND before
+any renderer claim was made.
+
+| Theatre | Canvas 2D vs WebGL2 |
+|---|---|
+| BLACKSITE ZERO | PARITY OK |
+| ARCTIC RELAY | PARITY OK |
+| SUNKEN DISTRICT | PARITY OK |
+| CINDER FOUNDRY | PARITY OK |
+| MERIDIAN PLATFORM | PARITY OK |
+| CROSSFALL SPAN | PARITY OK |
+| HOLLOW VALLEY | PARITY OK |
+| ASHEN MIRE | PARITY OK |
+| DERELICT HANGAR | PARITY OK |
+| PROVING GROUND | PARITY OK |
+
+### Presentation changes must not move the world — `scratchpad/resize.mjs`
+
+Orientation flip, a browser-UI height change, a return to the original size,
+pause and resume, across five configurations including an iPhone-portrait
+viewport and a simulated driver failure that forces the canvas element to be
+replaced:
+
+* operative moved 0.0000 world units in every case
+* sector geometry unchanged in every case
+* exactly one game canvas in the document in every case
+* a fixed CSS pointer position resolved to the **same world angle at dpr 1 and
+  dpr 2** — the direct proof of the aim fix, since before it the two disagreed
+
+### Gameplay matrix — `scratchpad/matrix.mjs`, exercised not asserted
+
+BLACKSITE ZERO and ASHEN MIRE, under both renderers: 119 and 24 drives straight
+into interior wall faces with 0 pass-throughs and 0 buried; 56 and 22 diagonal
+corner drives with 0 buried; 28 and 26 cover collisions with 0 buried; 40
+hostiles placed with 0 inside geometry, 0 on unreachable ground and 0 samples
+inside geometry while manoeuvring; rounds fired with 0 ending up inside
+geometry; hazards damaging inside their drawn ring and **0 damage taken outside
+it**; every pickup collected; pause and resume with the operative moving 0
+units; and the results screen reached on run end. No page errors.
