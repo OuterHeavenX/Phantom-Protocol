@@ -578,6 +578,9 @@ uniform float uScanline;
 uniform float uExposure;
 uniform vec2 uEntityTexel;
 uniform float uRim;
+uniform sampler2D uSurface;
+uniform vec2 uSurfaceTexel;
+uniform float uSolidEdge;
 out vec4 oColor;
 ${NOISE}
 
@@ -641,6 +644,44 @@ void main(){
     float lightHere=clamp(dot(c,vec3(0.33)),0.0,1.0);
     vec3 entityLit=ent.rgb*(0.62+lightHere*0.75);
     c=mix(c,entityLit,ent.a);
+  }
+
+  // Ground the geometry.
+  //
+  // The height field already drives the lighting, but a top-down camera gives
+  // the eye almost nothing else to judge depth by, and the operative has to be
+  // able to tell at a glance what will stop them. This reads the height
+  // difference across a few pixels and draws the two cues a real object would
+  // give: a dark contact line on the floor at the foot of anything that stands
+  // up, and a lit edge along its top lip.
+  //
+  // It is derived from the same height the collision geometry produced, so it
+  // cannot disagree with what is solid — decoration is authored flat and gets
+  // no edge at all, which is the whole point.
+  if(uSolidEdge>0.0){
+    float h=texture(uSurface,vUv).b;
+    // A directional cast shadow, as if the key light were up and to the left.
+    // Marching a few taps out along one direction gives the shadow length and
+    // a soft edge; a symmetric halo just makes things glow darkly and still
+    // reads flat from directly above.
+    vec2 dir=uSurfaceTexel*vec2(-1.0,-1.0);
+    float shadow=0.0;
+    for(int i=1;i<=4;i++){
+      float above=texture(uSurface,vUv+dir*float(i)*2.6).b;
+      shadow=max(shadow,clamp((above-h)*6.0,0.0,1.0)*(1.0-float(i-1)*0.19));
+    }
+    // The lit lip along the top edge, on the side the light comes from.
+    float back=texture(uSurface,vUv-dir*2.0).b;
+    float lip=clamp((h-back)*8.0,0.0,1.0)*step(0.02,h);
+    // A tight contact line right where the object meets the floor, on every
+    // side, so nothing floats even where the cast shadow falls away.
+    float near=max(max(texture(uSurface,vUv-vec2(uSurfaceTexel.x,0.0)).b,
+                       texture(uSurface,vUv+vec2(uSurfaceTexel.x,0.0)).b),
+                   max(texture(uSurface,vUv-vec2(0.0,uSurfaceTexel.y)).b,
+                       texture(uSurface,vUv+vec2(0.0,uSurfaceTexel.y)).b));
+    float contact=clamp((near-h)*9.0,0.0,1.0);
+    c*=1.0-max(shadow*0.55,contact*0.62)*uSolidEdge;
+    c+=lip*0.30*uSolidEdge*(0.35+c);
   }
 
   if(uVignette>0.0){

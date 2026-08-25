@@ -137,19 +137,19 @@ const PROFILES={
     wall:{lum:.34,height:{perimeter:58,other:42}},
     sky:{lum:.42,tintFrom:'light'},
     passes:{
-      grating:{count:7},
-      hazardPaint:{count:9},
-      puddles:{count:6},
+      grating:{count:4},
+      hazardPaint:{count:5},
+      puddles:{count:3},
       plant:{count:6},
       containment:{count:5},
-      pipes:{count:9},
-      cables:{count:12},
+      pipes:{count:5},
+      cables:{count:7},
       stations:{count:22},
-      signage:{count:10},
-      crates:{count:34},
+      signage:{count:6},
+      crates:{count:19},
       overheads:{spacing:340,intensity:.95,radius:360,z:150,lum:.78},
       beacons:{count:9,color:'#ff2a20'},
-      brokenLights:{count:7}
+      brokenLights:{count:4}
     },
     atmosphere:'industrial'
   },
@@ -161,17 +161,17 @@ const PROFILES={
     wall:{lum:.30,height:{perimeter:54,other:38}},
     sky:{lum:.30,tintFrom:'accent'},
     passes:{
-      iceSheets:{count:14},
-      rocks:{count:22},
-      drifts:{count:26},
-      pipes:{count:3},
-      cables:{count:6},
+      iceSheets:{count:8},
+      rocks:{count:12},
+      drifts:{count:14},
+      pipes:{count:2},
+      cables:{count:3},
       stations:{count:5},
-      signage:{count:4},
-      crates:{count:12},
+      signage:{count:2},
+      crates:{count:7},
       masts:{count:9,intensity:1.15,z:210,radius:540,lum:.86},
       beacons:{count:4,color:'#8fd8ff'},
-      brokenLights:{count:3}
+      brokenLights:{count:2}
     },
     atmosphere:'snow'
   },
@@ -183,18 +183,18 @@ const PROFILES={
     wall:{lum:.28,height:{perimeter:56,other:44}},
     sky:{lum:.15,tintFrom:'light'},
     passes:{
-      floodwater:{count:22},
-      puddles:{count:18},
-      foliage:{count:14,lum:.20},
-      hazardPaint:{count:6},
-      pipes:{count:7},
-      cables:{count:16},
+      floodwater:{count:12},
+      puddles:{count:10},
+      foliage:{count:8,lum:.20},
+      hazardPaint:{count:3},
+      pipes:{count:4},
+      cables:{count:9},
       stations:{count:9},
-      signage:{count:12},
-      crates:{count:20},
+      signage:{count:7},
+      crates:{count:11},
       streetLamps:{count:16,intensity:.9,z:170,radius:380,lum:.72},
       beacons:{count:5,color:'#6fe0c8'},
-      brokenLights:{count:9}
+      brokenLights:{count:5}
     },
     atmosphere:'mist'
   },
@@ -205,18 +205,18 @@ const PROFILES={
     wall:{lum:.30,height:{perimeter:62,other:46}},
     sky:{lum:.13,tintFrom:'light'},
     passes:{
-      grating:{count:9},
-      moltenChannels:{count:9},
-      hazardPaint:{count:12},
+      grating:{count:5},
+      moltenChannels:{count:5},
+      hazardPaint:{count:7},
       plant:{count:11},
-      pipes:{count:18},
-      cables:{count:14},
+      pipes:{count:10},
+      cables:{count:8},
       stations:{count:16},
-      signage:{count:12},
-      crates:{count:30},
+      signage:{count:7},
+      crates:{count:16},
       overheads:{spacing:440,intensity:.8,radius:400,z:170,lum:.62,tintFrom:'hazard'},
       beacons:{count:8,color:'#ff5b30'},
-      brokenLights:{count:8}
+      brokenLights:{count:4}
     },
     atmosphere:'foundry'
   },
@@ -228,16 +228,16 @@ const PROFILES={
     wall:{lum:.30,height:{perimeter:56,other:44}},
     sky:{lum:.16,tintFrom:'accent'},
     passes:{
-      panelRuns:{count:26},
+      panelRuns:{count:14},
       containment:{count:6},
-      pipes:{count:12},
-      cables:{count:10},
+      pipes:{count:7},
+      cables:{count:6},
       stations:{count:28},
-      signage:{count:14},
-      crates:{count:18},
+      signage:{count:8},
+      crates:{count:10},
       overheads:{spacing:330,intensity:.9,radius:360,z:160,lum:.80,tintFrom:'accent'},
       beacons:{count:7,color:'#c895ff'},
-      brokenLights:{count:5}
+      brokenLights:{count:3}
     },
     atmosphere:'vacuum'
   },
@@ -251,15 +251,15 @@ const PROFILES={
     passes:{
       openWater:{},
       laneMarkings:{step:260},
-      puddles:{count:26},
-      suspension:{count:22},
-      pipes:{count:5},
+      puddles:{count:14},
+      suspension:{count:12},
+      pipes:{count:3},
       stations:{count:6},
-      signage:{count:10},
-      crates:{count:10},
+      signage:{count:6},
+      crates:{count:6},
       streetLamps:{count:22,intensity:1,z:200,radius:400,lum:.74,tintFrom:'hazard'},
       beacons:{count:6,color:'#ffcf6a'},
-      brokenLights:{count:6}
+      brokenLights:{count:3}
     },
     atmosphere:'rain'
   },
@@ -271,13 +271,13 @@ const PROFILES={
     wall:{lum:.32,height:{perimeter:64,other:46}},
     sky:{lum:.28,tintFrom:'accent'},
     passes:{
-      drifts:{count:38},
-      rocks:{count:26},
-      foliage:{count:30,lum:.16},
-      iceSheets:{count:8},
-      cables:{count:4},
-      crates:{count:8},
-      signage:{count:3},
+      drifts:{count:21},
+      rocks:{count:14},
+      foliage:{count:16,lum:.16},
+      iceSheets:{count:4},
+      cables:{count:2},
+      crates:{count:4},
+      signage:{count:2},
       flares:{count:11,intensity:1.4,z:26,radius:360,color:'#ff8a4c'},
       beacons:{count:3,color:'#bfe3f5'},
       brokenLights:{count:2}
@@ -292,16 +292,16 @@ const PROFILES={
     wall:{lum:.26,height:{perimeter:56,other:40}},
     sky:{lum:.12,tintFrom:'light'},
     passes:{
-      floodwater:{count:30},
-      foliage:{count:52,lum:.18},
-      rocks:{count:12},
-      puddles:{count:14},
-      cables:{count:20},
-      crates:{count:10},
-      signage:{count:5},
+      floodwater:{count:16},
+      foliage:{count:29,lum:.18},
+      rocks:{count:7},
+      puddles:{count:8},
+      cables:{count:11},
+      crates:{count:6},
+      signage:{count:3},
       bioluminescence:{count:34,intensity:.8,z:18,radius:220,color:'#9ad86f'},
       beacons:{count:3,color:'#d8e05a'},
-      brokenLights:{count:4}
+      brokenLights:{count:2}
     },
     atmosphere:'spores'
   },
@@ -314,16 +314,16 @@ const PROFILES={
     sky:{lum:.15,tintFrom:'light'},
     passes:{
       apronMarkings:{step:300},
-      hazardPaint:{count:5},
+      hazardPaint:{count:3},
       plant:{count:5},
-      pipes:{count:8},
-      cables:{count:10},
+      pipes:{count:4},
+      cables:{count:6},
       stations:{count:12},
-      signage:{count:14},
-      crates:{count:38},
+      signage:{count:8},
+      crates:{count:21},
       overheads:{spacing:540,intensity:1.15,z:280,radius:640,lum:.84,tintFrom:'accent'},
       beacons:{count:5,color:'#ff8a4c'},
-      brokenLights:{count:7}
+      brokenLights:{count:4}
     },
     atmosphere:'dust'
   },
@@ -335,12 +335,12 @@ const PROFILES={
     wall:{lum:.32,height:{perimeter:70,other:48}},
     sky:{lum:.14,tintFrom:'accent'},
     passes:{
-      panelRuns:{count:18},
+      panelRuns:{count:10},
       stations:{count:16},
-      signage:{count:8},
+      signage:{count:4},
       overheads:{spacing:330,intensity:1.05,radius:380,z:200,lum:.85,tintFrom:'accent'},
       beacons:{count:10,color:'#ff5b5b'},
-      brokenLights:{count:3}
+      brokenLights:{count:2}
     },
     atmosphere:'ember'
   }
@@ -399,6 +399,19 @@ export function buildDressing(world,map,seed=1){
   const lights=[];
   const emitters=[];
 
+  // The one rule this file exists to keep: **if it stands up, it stops you.**
+  //
+  // `solid` is passed only by the pass that draws `world.walls` and
+  // `world.cover` — the geometry the simulation actually collides against.
+  // Everything else is decoration and is forced flat here, in the one place
+  // that builds a prop, so the rule cannot be broken by forgetting it.
+  //
+  // It was broken by forgetting it. The dressing scattered standing crates,
+  // machinery, containment cylinders, rocks and foliage that used the *same
+  // materials* as real cover, so between a third and a half of everything with
+  // height in a sector was walk-through decoration indistinguishable from the
+  // solid article. "The same item can be walked over in one area and not in
+  // the other" is exactly what that produces.
   const prop=(x,y,hw,hh,material,opts={})=>{
     const rgb=opts.rgb||[.22,.24,.26];
     props.push({
@@ -407,7 +420,7 @@ export function buildDressing(world,map,seed=1){
       material:MATERIAL[material]??material,
       r:rgb[0],g:rgb[1],b:rgb[2],
       emissive:opts.emissive||0,
-      height:opts.height??0,
+      height:opts.solid?(opts.height??0):0,
       roughness:opts.roughness??.7,
       phase:opts.phase??random()*100,
       animation:opts.animation??0
@@ -449,7 +462,33 @@ export function buildDressing(world,map,seed=1){
   // geometry, such as a lamp on a parapet or a cable spanning a gap.
   const anySpot=()=>[range(W*.04,W*.96),range(H*.04,H*.96)];
 
+  // Real cover of the given types, in a deterministic order, each piece handed
+  // out only once. This is how a dressing pass adds industrial or laboratory
+  // character without adding a single object the operative can walk through:
+  // it decorates what is already solid.
+  const claimed=new Set();
+  const solidCover=(types,slot=0)=>{
+    if(!world)return[];
+    const want=new Set(types);
+    const pool=world.cover
+      .filter(c=>!c.broken&&want.has(c.type)&&!claimed.has(c))
+      .sort((a,b)=>(a.x-b.x)||(a.y-b.y));
+    // Rotated by the slot, so two passes drawing from overlapping types do not
+    // both start at the same end of the sector.
+    const start=pool.length?(slot*7)%pool.length:0;
+    const ordered=pool.slice(start).concat(pool.slice(0,start));
+    for(const c of ordered)claimed.add(c);
+    return ordered;
+  };
+
   const P=profile.passes;
+
+  // Which pieces of real cover are drawn as containment cylinders. Resolved
+  // before the geometry pass runs, because that is the pass that draws them —
+  // marking a piece afterwards would change nothing.
+  const containmentHosts=new Set(
+    P?.containment?solidCover(['pillar','crate','machinery'],1)
+      .slice(0,P.containment.count):[]);
   const accentLight=emit(palette.accent||'#ffffff');
   const warmLight=emit(palette.hazard||'#ffb35c');
   const coolLight=emit(palette.light?.match(/#[0-9a-f]{3,6}/i)?.[0]||palette.accent||'#ffffff');
@@ -495,7 +534,7 @@ export function buildDressing(world,map,seed=1){
       const perimeter=wall.type==='perimeter';
       const rgb=perimeter?edgeRgb:wallRgb;
       prop(wall.x,wall.y,wall.hw,wall.hh,'wall',{
-        rgb,
+        rgb,solid:true,
         height:perimeter?profile.wall.height.perimeter:profile.wall.height.other,
         roughness:.5
       });
@@ -504,17 +543,23 @@ export function buildDressing(world,map,seed=1){
     const overrides=COVER_OVERRIDE[resolved.id]||{};
     for(const cover of world.cover){
       if(LANDMARK_COVER.has(cover.type))continue;
-      const name=overrides[cover.type]||COVER_MATERIAL[cover.type]||'crate';
+      const name=containmentHosts.has(cover)
+        ?'containment'
+        :(overrides[cover.type]||COVER_MATERIAL[cover.type]||'crate');
       const lit=name==='containment'||name==='screen';
       const organic=name==='foliage'||name==='rock'||name==='snow';
       const source=lit?palette.accent
         :organic?(name==='snow'?palette.wallEdge:palette.floorAlt)
         :palette.wallEdge;
       const rgb=lit?albedo(palette.accent,.42):albedo(source,organic?.26:range(.28,.40));
+      // Taller than before, deliberately. Height is what the lighting pass
+      // differences into a normal and ray-marches for contact shadows, so it
+      // is the whole of how solid a thing looks — and the operative has to be
+      // able to tell at a glance what will stop them.
       prop(cover.x,cover.y,cover.hw,cover.hh,name,{
-        rgb,
+        rgb,solid:true,
         emissive:lit?1.6:0,
-        height:name==='hazardStripe'?10:organic?range(26,44):range(20,34),
+        height:name==='hazardStripe'?18:organic?range(40,58):range(34,50),
         roughness:organic?.9:.7,
         animation:lit?1:0
       });
@@ -526,7 +571,7 @@ export function buildDressing(world,map,seed=1){
     for(const [x,y,hw,hh] of [
       [W/2,t/2,W/2,t/2],[W/2,H-t/2,W/2,t/2],
       [t/2,H/2,t/2,H/2],[W-t/2,H/2,t/2,H/2]
-    ])prop(x,y,hw,hh,'wall',{rgb,height:46,roughness:.5});
+    ])prop(x,y,hw,hh,'wall',{rgb,solid:true,height:46,roughness:.5});
   }
 
   // ---- Dressing passes ---------------------------------------------------
@@ -672,39 +717,45 @@ export function buildDressing(world,map,seed=1){
     }
   }
 
+  // Working plant. It does not build machinery any more — it *dresses the
+  // machinery the simulation already placed*, so an industrial floor still
+  // reads as one and every silhouette on it is something that stops you.
+  // Panels, vents and exhaust attach to a real collider and add no volume of
+  // their own.
   if(P.plant){
-    const bodyRgb=albedo(palette.wall,.34);
+    const bodies=solidCover(['machinery','container','pillar']);
+    const panelRgb=albedo(palette.accent,.55);
     const ventRgb=albedo(palette.wall,.22);
-    for(let i=0;i<P.plant.count;i++){
-      const spot=findSpot(140);
-      if(!spot)continue;
-      const [x,y]=spot;
-      const hw=range(90,130),hh=range(70,100);
-      prop(x,y,hw,hh,'machine',{rgb:bodyRgb,height:34,roughness:.42,animation:1});
-      const dir=x<W/2?1:-1;
+    for(let i=0;i<Math.min(P.plant.count,bodies.length);i++){
+      const c=bodies[i];
+      const dir=c.x<W/2?1:-1;
+      // Indicator panels on the face, inside the collider's own footprint.
       for(let k=0;k<3;k++){
-        const px=x+dir*(hw+10),py=y-hh*.5+k*hh*.5;
-        prop(px,py,7,14,'panel',
-          {rgb:albedo(palette.accent,.55),emissive:range(1.6,3),height:6,animation:1});
+        const px=c.x+dir*(c.hw*.62),py=c.y-c.hh*.45+k*c.hh*.45;
+        prop(px,py,5,Math.max(5,c.hh*.16),'panel',
+          {rgb:panelRgb,emissive:range(1.6,3),animation:1});
         light(px,py,120,accentLight,
           {intensity:.5,kind:LIGHT.pulse,speed:range(.6,1.6),z:20});
       }
-      prop(x-dir*(hw+14),y,12,hh*.6,'vent',{rgb:ventRgb,height:14,roughness:.7});
-      emitters.push({x:x-dir*(hw+14),y,kind:'steam',rate:14,scale:1});
-      emitters.push({x,y:y-hh,kind:'smoke',rate:4,scale:1.4});
+      prop(c.x-dir*(c.hw*.7),c.y,7,c.hh*.5,'vent',{rgb:ventRgb,roughness:.7});
+      emitters.push({x:c.x-dir*(c.hw+10),y:c.y,kind:'steam',rate:11,scale:1});
+      emitters.push({x:c.x,y:c.y-c.hh-8,kind:'smoke',rate:3,scale:1.4});
     }
   }
 
+  // Containment cylinders, likewise: a real pillar or crate re-skinned as one,
+  // never a new object. A glowing cylinder the operative walks straight
+  // through is the single most misleading thing this dressing used to draw.
   if(P.containment){
     const rgb=albedo(palette.accent,.40);
-    for(let i=0;i<P.containment.count;i++){
-      const spot=findSpot(70);
-      if(!spot)continue;
-      const [x,y]=spot;
-      prop(x,y,44,44,'containment',
-        {rgb,emissive:range(.9,1.5),height:52,roughness:.15,animation:1});
-      light(x,y,230,accentLight,{intensity:.85,kind:LIGHT.pulse,phase:i*1.3,speed:.5,z:44});
-      emitters.push({x,y,kind:'glow',rate:8,scale:.7});
+    let i=0;
+    for(const c of containmentHosts){
+      light(c.x,c.y,230,accentLight,{intensity:.85,kind:LIGHT.pulse,phase:i*1.3,speed:.5,z:44});
+      emitters.push({x:c.x,y:c.y,kind:'glow',rate:8,scale:.7});
+      // The glow it throws on the deck around its base: flat, and safe.
+      prop(c.x,c.y,c.hw*1.7,c.hh*1.7,'puddle',
+        {rgb,emissive:.45,roughness:.05,animation:1});
+      i++;
     }
   }
 
@@ -750,17 +801,15 @@ export function buildDressing(world,map,seed=1){
     }
   }
 
+  // Monitors, mounted on cover that is actually there.
   if(P.stations){
-    const bodyRgb=albedo(palette.wall,.28);
     const screenRgb=albedo(palette.accent,.55);
-    for(let i=0;i<P.stations.count;i++){
-      const spot=findSpot(80);
-      if(!spot)continue;
-      const [x,y]=spot;
-      prop(x,y,52,26,'machine',{rgb:bodyRgb,height:24,roughness:.5});
-      prop(x,y-6,40,16,'screen',
-        {rgb:screenRgb,emissive:range(1.8,3.2),height:26,animation:1});
-      light(x,y,190,accentLight,{intensity:.6,kind:LIGHT.flicker,speed:range(2,5),z:30});
+    const hosts=solidCover(['crate','container','machinery','lowcover'],2);
+    for(let i=0;i<Math.min(P.stations.count,hosts.length);i++){
+      const c=hosts[i];
+      prop(c.x,c.y-c.hh*.2,Math.min(40,c.hw*.7),Math.min(16,c.hh*.45),'screen',
+        {rgb:screenRgb,emissive:range(1.8,3.2),animation:1});
+      light(c.x,c.y,190,accentLight,{intensity:.6,kind:LIGHT.flicker,speed:range(2,5),z:30});
     }
   }
 
@@ -772,16 +821,19 @@ export function buildDressing(world,map,seed=1){
     }
   }
 
+  // Loose crates used to be scattered here as pure decoration, in the same
+  // material as the crates the simulation places as cover, at the same size.
+  // They are the reason the operative could walk through something they had
+  // just taken cover behind twenty metres earlier. What is left is the mark a
+  // crate leaves when it is dragged away: flat, and obviously flat.
   if(P.crates){
-    const rgb=albedo(palette.hazard,.34);
-    for(let i=0;i<P.crates.count;i++){
-      const s=range(24,46);
-      const spot=findSpot(s+14,12);
+    const rgb=albedo(palette.hazard,.22);
+    for(let i=0;i<Math.round(P.crates.count*.4);i++){
+      const spot=findSpot(40,12);
       if(!spot)continue;
-      prop(spot[0],spot[1],s,s*range(.8,1.1),'crate',{
-        rgb:[rgb[0]*range(.8,1.2),rgb[1]*range(.8,1.15),rgb[2]*range(.7,1.1)],
-        height:range(18,34),roughness:.75,rotation:range(-.25,.25)
-      });
+      const s=range(22,40);
+      prop(spot[0],spot[1],s,s*range(.8,1.1),'sign',
+        {rgb,roughness:.9,rotation:range(-.25,.25)});
     }
   }
 
@@ -796,7 +848,7 @@ export function buildDressing(world,map,seed=1){
     const radius=o.radius??430;
     for(let x=o.spacing*.65;x<W;x+=o.spacing){
       for(let y=o.spacing*.65;y<H;y+=o.spacing){
-        prop(x,y,26,8,'lightHousing',{rgb:housing,emissive:2.4,height:60});
+        prop(x,y,26,8,'lightHousing',{rgb:housing,emissive:1.3});
         light(x,y,radius,tint,{intensity:o.intensity,z:o.z});
       }
     }
@@ -810,7 +862,7 @@ export function buildDressing(world,map,seed=1){
     const housing=[tint[0]*m.lum,tint[1]*m.lum,tint[2]*m.lum];
     for(let i=0;i<m.count;i++){
       const spot=findSpot(120,20)||anySpot();
-      prop(spot[0],spot[1],14,14,'lightHousing',{rgb:housing,emissive:3,height:80});
+      prop(spot[0],spot[1],14,14,'lightHousing',{rgb:housing,emissive:1.7});
       light(spot[0],spot[1],m.radius??560,tint,{intensity:m.intensity,z:m.z});
     }
   }
@@ -821,7 +873,7 @@ export function buildDressing(world,map,seed=1){
     const housing=[tint[0]*s.lum,tint[1]*s.lum,tint[2]*s.lum];
     for(let i=0;i<s.count;i++){
       const [x,y]=anySpot();
-      prop(x,y,10,20,'lightHousing',{rgb:housing,emissive:2.6,height:70});
+      prop(x,y,10,20,'lightHousing',{rgb:housing,emissive:1.5});
       light(x,y,s.radius??420,tint,{intensity:s.intensity,z:s.z});
     }
   }
@@ -834,7 +886,7 @@ export function buildDressing(world,map,seed=1){
     for(let i=0;i<f.count;i++){
       const spot=findSpot(60,14)||anySpot();
       prop(spot[0],spot[1],9,9,'lightHousing',
-        {rgb:[tint[0]*.9,tint[1]*.6,tint[2]*.4],emissive:3.6,height:8,animation:1});
+        {rgb:[tint[0]*.9,tint[1]*.6,tint[2]*.4],emissive:2.2,animation:1});
       light(spot[0],spot[1],f.radius??360,tint,
         {intensity:f.intensity,kind:LIGHT.flicker,speed:range(3,7),z:f.z??26});
       emitters.push({x:spot[0],y:spot[1],kind:'ember',rate:6,scale:.8});
@@ -870,7 +922,7 @@ export function buildDressing(world,map,seed=1){
     for(let i=0;i<Math.min(b.count,ring.length);i++){
       const [x,y]=ring[i];
       prop(x,y,14,14,'lightHousing',
-        {rgb:[tint[0]*.9,tint[1]*.25,tint[2]*.22],emissive:3.4,height:70,phase:i*1.9,animation:1});
+        {rgb:[tint[0]*.9,tint[1]*.25,tint[2]*.22],emissive:2.0,phase:i*1.9,animation:1});
       light(x,y,430,tint,{intensity:1.25,kind:LIGHT.rotate,phase:i*1.9,speed:.85,z:80});
     }
   }
@@ -881,7 +933,7 @@ export function buildDressing(world,map,seed=1){
     for(let i=0;i<P.brokenLights.count;i++){
       const x=range(W*.16,W*.84),y=range(H*.16,H*.84);
       prop(x,y,22,7,'lightHousing',
-        {rgb:[tint[0]*.8,tint[1]*.85,tint[2]*.9],emissive:1.4,height:58,animation:1});
+        {rgb:[tint[0]*.8,tint[1]*.85,tint[2]*.9],emissive:.9,animation:1});
       light(x,y,420,tint,{intensity:1.1,kind:LIGHT.strobe,speed:range(6,13),z:140});
     }
   }

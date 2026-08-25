@@ -236,3 +236,23 @@ Remaining:
    stream, the contract clock, cover claims, hazard cycles and weapon cooldowns
    — which is why `parity.mjs` now ships with a `2d:2d` control that has to
    pass before any renderer claim is made.
+15. ~~Make it possible to tell, at a glance, what is solid.~~ Done, and it was a
+   bug rather than a preference. The GL dressing scattered standing crates,
+   machinery, containment cylinders, rocks and foliage in the *same materials
+   and sizes* as real cover: 31–57% of everything with height in a sector was
+   walk-through decoration identical to the solid article. Hence "the same item
+   can be walked over in one area and not in the other".
+   The rule is now structural — height is only accepted from the pass that
+   draws `world.walls` and `world.cover`, enforced inside `prop()` itself, so
+   it cannot be broken by forgetting it a second time. Fake standing props
+   across all ten theatres: 0.
+   Theatres keep their character by dressing cover that is already there rather
+   than inventing objects: panels, vents, exhaust, monitors and containment
+   glow attach to a real collider. Floor decoration was cut by roughly a third
+   and is authored flat.
+   Solid things then had to look solid, so the composite derives a directional
+   cast shadow and a lit top lip from the same height field the collision
+   geometry produced — it cannot disagree with what is solid, and flat
+   decoration gets no edge at all.
+   Renderer-only: no collider, spawn, hazard or pacing value changed. Parity,
+   pixel alignment and the clipping stress all still pass.

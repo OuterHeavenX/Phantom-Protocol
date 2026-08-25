@@ -87,6 +87,28 @@ finished pixels; here they are albedo, so a colour is taken for its hue and
 rebalanced to a target reflectance. Hue is the identity; brightness belongs to the
 lighting.
 
+**If it stands up, it stops you.** Height is passed to `prop()` only by the
+pass that draws `world.walls` and `world.cover`; every other pass is forced
+flat in the one place a prop is built, so the rule cannot be broken by
+forgetting it.
+
+It was broken by forgetting it. The dressing used to scatter standing crates,
+machinery, containment cylinders, rocks and foliage using the *same materials
+and sizes* as real cover, so between a third and a half of everything with
+height in a sector was walk-through decoration indistinguishable from the solid
+article — which is what "the same item can be walked over in one area and not
+in the other" actually is. A theatre now gets its industrial or laboratory
+character by **dressing cover the simulation already placed** — panels, vents,
+exhaust plumes, monitors and containment glow attach to a real collider and add
+no volume of their own — and floor decoration is authored flat and reads flat.
+
+Solid geometry is then made to look solid. The composite reads the same height
+field the collision geometry produced and draws the two cues a real object
+gives: a directional cast shadow, as if the key light were up and to the left,
+and a lit lip along the top edge. Because it is derived from that height, it
+cannot disagree with what is solid — flat decoration gets no edge at all, which
+is the whole point.
+
 Two hard rules hold in every profile:
 
 1. Every wall and every piece of cover the simulation placed gets a prop. Nothing

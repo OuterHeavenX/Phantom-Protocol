@@ -38,6 +38,10 @@ const base={
   // a hostile against lit plating is harder to pick out than the same hostile
   // against the Canvas 2D renderer's flat floor.
   silhouetteRim:.75,
+  // Contact shadow and top-lip highlight derived from the height field, so
+  // anything the operative can be stopped by visibly stands on the floor and
+  // anything flat visibly does not.
+  solidEdge:1,
   bloomPasses:2,
   atmosphereCount:900,
   atmosphereRate:1,
@@ -54,7 +58,7 @@ export const PRESETS={
     bloom:false,particles:true,engineParticles:true,atmosphere:false,
     materialDetail:false,decals:false,
     atmosphereCount:0,atmosphereRate:0,
-    grain:0,scanline:0,vignette:.6,ambient:.22,silhouetteRim:.7
+    grain:0,scanline:0,vignette:.6,ambient:.22,silhouetteRim:.7,solidEdge:.85
   },
   MEDIUM:{
     ...base,

@@ -760,6 +760,10 @@ export class DeferredRenderer{
     gl.uniform1f(cp.uniforms.uExposure,q.exposure??1.25);
     gl.uniform2f(cp.uniforms.uEntityTexel,1/this.spriteCanvas.width,1/this.spriteCanvas.height);
     gl.uniform1f(cp.uniforms.uRim,q.silhouetteRim??.75);
+    useTexture(gl,3,this.targets.surface.texture,cp.uniforms.uSurface);
+    gl.uniform2f(cp.uniforms.uSurfaceTexel,
+      1/this.targets.surface.width,1/this.targets.surface.height);
+    gl.uniform1f(cp.uniforms.uSolidEdge,q.solidEdge??1);
     gl.bindVertexArray(this.quad.vao);
     gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     gl.bindVertexArray(null);
