@@ -34,6 +34,8 @@ import {masteryBonuses} from '../../data/operatives.js';
 const FIXED_STEP=1/60;
 const MAX_STEPS=5;
 export const EXTRACTION_RADIUS=95;
+// Seconds remaining at which the extraction window calls out again.
+const EXTRACTION_CALLS=[30,15,5];
 export const EXTRACTION_HOLD=2.5;
 // Movement bonus while the extraction window is open. Withdrawing across a
 // saturated sector on foot was reliably the deadliest part of a contract;
@@ -606,6 +608,30 @@ export class Engine{
     }else{
       this.extractionTimer-=dt;
       if(this.extractionTimer<=0)this.finish(false,'EXTRACTION WINDOW MISSED');
+      // The window announces itself once, and a single four-second banner is
+      // nothing at all against a command signature and a full screen of
+      // hostiles — which is exactly when the window opens on a long contract.
+      // Losing a twenty-minute run to a message you never saw is not a
+      // difficulty. It repeats while the operative is still away from the
+      // beacon, and gets more insistent as the window closes.
+      const point=this.extractionPoint;
+      const away=!point||dist(this.player.x,this.player.y,point.x,point.y)>EXTRACTION_RADIUS;
+      // Three moments, not a metronome. The window is already stated
+      // permanently by the HUD phase line, the countdown and the beacon arrow;
+      // this is the part that has to cut through a firefight, and a banner
+      // every few seconds stops being read at all.
+      // `_extractCalled` holds the lowest threshold already called, so each one
+      // fires exactly once as the clock passes it.
+      const seconds=Math.ceil(this.extractionTimer);
+      for(const at of EXTRACTION_CALLS){
+        if(seconds>at||at>=this._extractCalled)continue;
+        this._extractCalled=at;
+        if(away){
+          this.announce(`EXTRACTION // ${at}s LEFT`,at<=15?'#ff7068':'#f5d27a',2.4);
+          this.audio.play('alarm',{volume:at<=15?.7:.5});
+        }
+        break;
+      }
     }
 
     this.comboTimer-=dt;
@@ -2939,7 +2965,8 @@ export class Engine{
     this.extraction=true;
     this.extractionTimer=60;
     this.extractionPoint=this.world.extractionPoint(this.player);
-    this.announce('EXTRACTION WINDOW OPEN // REACH THE BEACON','#f5d27a',4);
+    this.announce('EXTRACTION OPEN // REACH THE BEACON','#f5d27a',4);
+    this._extractCalled=Infinity;
     this.codec.fire('extraction');
     this.announce('EXFIL PROTOCOL // MOVEMENT BOOSTED','#8bff9b',3);
     this.audio.play('alarm',{volume:.9});
@@ -3034,8 +3061,20 @@ export class Engine{
   }
 
   announce(text,color='#76e7d4',duration=2.2){
+    // The same line arriving twice is one message that has not been dealt with
+    // yet, not two. It refreshes rather than stacking — a boss spawn used to
+    // print its own name under itself, and a repeating call would have piled
+    // up a column of identical banners.
+    const existing=this.announcements.find(a=>a.text===text);
+    if(existing){
+      existing.life=Math.max(existing.life,duration);
+      existing.maxLife=Math.max(existing.maxLife,duration);
+      existing.color=color;
+      return;
+    }
     this.announcements.push({text,color,life:duration,maxLife:duration});
-    if(this.announcements.length>4)this.announcements.shift();
+    // Three at once is already a wall of text on a phone.
+    if(this.announcements.length>3)this.announcements.shift();
   }
 
   addFloatingText(x,y,text,color){this.fx.text(x,y,text,color,{size:14,life:1.4})}

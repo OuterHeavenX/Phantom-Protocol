@@ -79,12 +79,13 @@ const template=(operative,ability,engine)=>`
         <p class="codec-text" id="codecText"></p>
       </div>
     </div>
+
+    <div class="boss-bar" id="bossBar" hidden>
+      <div class="boss-name"><span id="bossName"></span><em id="bossPhase"></em></div>
+      <div class="bar boss"><i id="bossHp"></i></div>
+    </div>
   </div>
 
-  <div class="boss-bar" id="bossBar" hidden>
-    <div class="boss-name"><span id="bossName"></span><em id="bossPhase"></em></div>
-    <div class="bar boss"><i id="bossHp"></i></div>
-  </div>
 
   <div class="hud-bottom">
     <div class="loadout" id="loadoutStrip"></div>

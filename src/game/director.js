@@ -60,6 +60,8 @@ export class Director{
     this.lastPressureSample=0;
     this.bossSpawned=false;
     this.bossesSpawned=0;
+    // Scheduled events that came due at a moment they could not run.
+    this.pendingEvents=[];
     this.scriptedEvents=this.buildEventSchedule(options.duration);
     this.eventIndex=0;
     this.totalSpawned=0;
@@ -388,6 +390,14 @@ export class Director{
       const event=this.scriptedEvents[this.eventIndex++];
       this.fireEvent(event);
     }
+    // Events that could not fire when they came due. Retried in order, and
+    // only while the contract is still running: an event that arrives during
+    // the extraction window has missed its moment and is dropped rather than
+    // dropped on the operative on their way out.
+    if(this.pendingEvents.length&&!this.engine.extraction){
+      const held=this.pendingEvents.shift();
+      this.fireEvent(held);
+    }
   }
 
   fireEvent(event){
@@ -424,7 +434,16 @@ export class Director{
       }
       case 'boss':
       case 'finalBoss':{
-        engine.spawnBoss(this.bossId);
+        // `spawnBoss` refuses while a signature is already in the sector, and
+        // this used to swallow the refusal. A twenty-minute contract schedules
+        // one at 42% and its climax at 74%; measured on a real timeline, the
+        // first was still alive when the second came due, so the contract's
+        // final boss silently never happened. The event is held instead and
+        // retried once the sector is clear.
+        if(!engine.spawnBoss(this.bossId)){
+          this.pendingEvents.push(event);
+          break;
+        }
         this.bossesSpawned++;
         break;
       }
@@ -434,8 +453,15 @@ export class Director{
 
   // Text describing the current phase, shown on the HUD.
   phaseLabel(){
+    // Extraction outranks the signature. It used to be the other way around,
+    // which meant that on a contract whose boss was still standing when the
+    // clock ran out — the common case on a long one — the HUD went on saying
+    // COMMAND SIGNATURE ACTIVE for the whole sixty-second window and never
+    // once told the operative the door was open. The window closed on them.
+    if(this.engine.extraction){
+      return this.engine.boss?'EXTRACT NOW // SIGNATURE ACTIVE':'EXTRACTION PHASE';
+    }
     if(this.engine.boss)return 'COMMAND SIGNATURE ACTIVE';
-    if(this.engine.extraction)return 'EXTRACTION PHASE';
     const progress=this.progress;
     if(this.state===WAVE_STATES.SURGE)return 'HOSTILE SURGE';
     if(progress>.85)return 'TOTAL LOCKDOWN';

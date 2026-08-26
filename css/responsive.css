@@ -73,9 +73,15 @@
   .vitals{grid-area:1/1;max-width:none}
   .tally{grid-area:1/2}
   .mission{grid-area:2/1/auto/-1;min-width:0;margin:0}
-  .codec{grid-area:3/1/auto/-1}
-  .hud-top-left{grid-area:5/1/auto/-1;gap:6px}
-  .replay-badge{grid-area:4/1/auto/-1;justify-self:center}
+  /* The signature's health, as a row of the stack rather than a panel floating
+     at a fixed 104px — which on a phone landed directly on the mission panel,
+     so the contract name, the clock, the extraction countdown and the boss
+     name were all printed over each other. It is the one element in this
+     region that was not a real grid item, and it was the one that collided. */
+  .boss-bar{grid-area:3/1/auto/-1;width:auto;margin:0}
+  .codec{grid-area:4/1/auto/-1}
+  .replay-badge{grid-area:5/1/auto/-1;justify-self:center}
+  .hud-top-left{grid-area:6/1/auto/-1;gap:6px}
   .mission-head{font-size:9px}
   .mission-head #timerValue{font-size:14px}
   .phase{font-size:7.5px}
@@ -91,10 +97,7 @@
   .tally-row{gap:8px;font-size:9px}
   .combo{font-size:11px}
 
-  .boss-bar{
-    left:8px;right:8px;transform:none;width:auto;
-    top:max(104px,calc(env(safe-area-inset-top) + 96px));
-  }
+
 
   /* Collapse the loadout to fixed-size icon chips: four named weapon cards
      consumed the whole left half of a phone screen and buried the play area. */
