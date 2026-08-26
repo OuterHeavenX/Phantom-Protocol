@@ -14,6 +14,7 @@ export class Camera{
     this.x=0;this.y=0;
     this.width=width;this.height=height;
     this.zoom=1;this.targetZoom=1;this.baseZoom=1;
+    this.pixelScaleX=1;this.pixelScaleY=1;
     this.shake=0;this.shakeDecay=3.2;
     this.offsetX=0;this.offsetY=0;
     this.lookAhead=90;
@@ -23,8 +24,14 @@ export class Camera{
     this.time=0;
   }
 
-  resize(width,height){
+  // `width`/`height` are drawing-buffer pixels. `cssWidth`/`cssHeight` are the
+  // element's layout size, which is what a pointer event reports — the two
+  // differ by the device pixel ratio, and conflating them is why mouse aim was
+  // wrong on every retina display (see cssToWorld).
+  resize(width,height,cssWidth=width,cssHeight=height){
     this.width=width;this.height=height;
+    this.pixelScaleX=cssWidth>0?width/cssWidth:1;
+    this.pixelScaleY=cssHeight>0?height/cssHeight:1;
     // Show a fixed slice of the world regardless of resolution or device
     // pixel ratio, so a high-DPR phone and a desktop see the same tactical
     // picture (the previous ratio-of-diagonals formula made a retina display
@@ -37,6 +44,7 @@ export class Camera{
 
   follow(target,aim,dt){
     if(!target)return;
+    dt=Math.max(0,dt)||0;
     const leadX=aim?aim.x*this.lookAhead:0;
     const leadY=aim?aim.y*this.lookAhead:0;
     this.offsetX=damp(this.offsetX,leadX,3,dt);
@@ -56,6 +64,13 @@ export class Camera{
   }
 
   update(dt,intensity=1){
+    // Never integrate backwards. `damp` run with a negative delta does not
+    // ease towards its target, it explodes away from it — a single frame with
+    // dt of -1 took the zoom from 1 to about -574, and a negative zoom mirrors
+    // the entire view and every screen-to-world conversion through the
+    // operative. The caller clamps too; this is the guard that matters,
+    // because this is the value that blows up.
+    dt=Math.max(0,dt)||0;
     this.time+=dt;
     this.trauma=Math.max(0,this.trauma-this.shakeDecay*dt*.55);
     const t=this.trauma*this.trauma*intensity;
@@ -74,6 +89,20 @@ export class Camera{
     ctx.rotate(this.rotation);
     ctx.scale(this.zoom,this.zoom);
     ctx.translate(-this.x+(this.shakeX||0)/this.zoom,-this.y+(this.shakeY||0)/this.zoom);
+  }
+
+  // A pointer position, in the CSS pixels the browser reports, to world space.
+  //
+  // The bug this replaces: aim read clientX/clientY straight into
+  // screenToWorld, which works in buffer pixels. On a dpr-2 display the buffer
+  // is twice the layout size, so the pointer was treated as being half as far
+  // from the centre as it really was — the effective crosshair was stuck in
+  // the top-left quadrant and only agreed with the cursor at dead centre.
+  // Turning on performance mode dropped the buffer to dpr 1 and the aim
+  // silently became correct, which is why it read as a graphics setting
+  // changing how the game played.
+  cssToWorld(cx,cy){
+    return this.screenToWorld(cx*(this.pixelScaleX||1),cy*(this.pixelScaleY||1));
   }
 
   screenToWorld(sx,sy){

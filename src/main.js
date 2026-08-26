@@ -11,12 +11,15 @@ import {LevelUpScreen} from './ui/levelup.js';
 import {PauseMenu} from './ui/pause.js';
 import {Engine} from './game/engine.js';
 import {Renderer} from './render/renderer.js';
+import {DeferredRenderer} from './render/gl/deferred.js';
+import {shouldUseGL,probeWebGL2} from './render/gl/support.js';
 import {Input,isTouchDevice} from './core/input.js';
 import {BUTTON} from './core/gamepad.js';
 import {FocusNav} from './ui/focusnav.js';
 import {audio} from './core/audio.js';
 import {profiler} from './core/profiler.js';
 import {resolveBuild} from './game/gunsmith.js';
+import {clamp} from './core/math.js';
 
 // Application entry point. Owns the top-level state machine (menu ⇄ run),
 // the render loop and the wiring between the simulation, the renderer and
@@ -37,6 +40,40 @@ const screens=new Screens(save,startRun,audio);
 // checked by rendering it, and three of this project's worst bugs were
 // invisible to anything that did not go through the real UI.
 window.__screens=screens;
+
+// ---------------------------------------------------------------------------
+// Experimental visual test
+// ---------------------------------------------------------------------------
+//
+// ?visualtest=1 boots src/experiments/visual-test instead of the game. The
+// import is dynamic, so with the flag absent none of the experiment is even
+// fetched, and this is the only line of production code that knows it exists.
+// It runs before any menu is rendered and returns, so nothing below sets up.
+const VT_PARAM=new URLSearchParams(location.search).get('visualtest');
+const VISUAL_TEST=VT_PARAM!==null&&VT_PARAM!=='0'&&VT_PARAM.toLowerCase()!=='false';
+
+// Announces which build is actually executing. index.html watches for this: a
+// cached module from before a feature existed ignores that feature's URL flag
+// in silence, and the resulting "it just runs the normal game" is impossible
+// to tell from a bug without something to check against.
+window.__redstatic={
+  visualTest:VISUAL_TEST,
+  features:['fieldkits','vaultlocks','replay','gunsmithpresets','gamepad','visualtest']
+};
+console.info('[red-static] boot · visualtest=%s · %s',
+  VISUAL_TEST,window.__redstatic.features.join(','));
+
+if(VISUAL_TEST){
+  import('./experiments/visual-test/boot.js')
+    .then(m=>m.bootVisualTest({audio,input,save}))
+    .catch(err=>{
+      console.error('[red-static] visual test failed to boot',err);
+      document.querySelector('#app').innerHTML=
+        `<div style="padding:40px;font:13px ui-monospace,monospace;color:#dceceb">
+           <h1>Visual test failed to boot</h1><pre>${String(err&&err.stack||err)}</pre>
+           <p><a style="color:#76e7d4" href="?">Back to RED STATIC</a></p></div>`;
+    });
+}
 
 screens.onSaveReplaced=next=>{
   save=next;
@@ -74,12 +111,17 @@ function applyGlobalSettings(){
 // over it, so dismissing the title fades straight through to a menu that is
 // already there. START is also the gesture that unlocks audio, which is why
 // the title track opens under the artwork rather than after it.
-screens.menu();
-new Splash({
-  audio,
-  onStart:()=>{},
-  onSettings:()=>screens.settings()
-}).mount(document.body);
+// Skipped under ?visualtest=1: the experiment owns the whole page, and a menu
+// and a title screen built underneath it would both fight it for the canvas
+// and quietly distort every number it reports.
+if(!VISUAL_TEST){
+  screens.menu();
+  new Splash({
+    audio,
+    onStart:()=>{},
+    onSettings:()=>screens.settings()
+  }).mount(document.body);
+}
 
 // ---------------------------------------------------------------------------
 // Run lifecycle
@@ -137,11 +179,10 @@ function startRun(config){
   const engine=new Engine(placeholder,engineConfig);
 
   const hud=new Hud(app,engine);
-  const canvas=hud.el.canvas;
-  const ctx=canvas.getContext('2d',{alpha:false});
+  // The renderer may have to replace the canvas element to recover from a
+  // failed GL initialisation, so it hands back the one actually in the page.
+  const {renderer,canvas}=createRenderer(hud,engine,save.settings);
   engine.canvas=canvas;
-
-  const renderer=new Renderer(canvas,ctx,engine);
   const levelUp=new LevelUpScreen(engine,save);
   const pause=new PauseMenu(engine,save,{
     onSettingsChange:()=>{
@@ -168,7 +209,7 @@ function startRun(config){
     canvas.height=height;
     canvas.style.width=`${window.innerWidth}px`;
     canvas.style.height=`${window.innerHeight}px`;
-    engine.resize(width,height);
+    engine.resize(width,height,window.innerWidth,window.innerHeight);
     renderer.resize(width,height);
   };
   resize();
@@ -222,10 +263,70 @@ function startRun(config){
   session.raf=requestAnimationFrame(tick);
 }
 
+// ---------------------------------------------------------------------------
+// Renderer selection
+// ---------------------------------------------------------------------------
+//
+// Two renderers ship: the Canvas 2D one that has always run the game, and the
+// deferred WebGL2 one. They present the same surface, so this is the only
+// place that knows there is a choice.
+//
+// A canvas gets exactly one context for its lifetime, so the decision has to
+// be made before anything touches it — taking a 2D context to "check
+// something first" permanently forecloses WebGL2 on that canvas. The
+// capability probe therefore runs on a throwaway 1x1 canvas.
+//
+// Anything that goes wrong falls back rather than failing: a browser without
+// WebGL2, a driver that refuses to link a shader, a machine where the only
+// implementation is a software rasteriser. The 2D renderer is not a
+// degraded mode, it is the shipping renderer, and every theatre still looks
+// right under it.
+function createRenderer(hud,engine,settings){
+  let canvas=hud.el.canvas;
+  if(shouldUseGL(settings)){
+    try{
+      const gl=new DeferredRenderer(canvas,engine);
+      if(!gl.failed){
+        console.info('[red-static] renderer: deferred WebGL2 · %s',probeWebGL2().renderer);
+        return{renderer:gl,canvas};
+      }
+      gl.destroy?.();
+    }catch(err){
+      console.warn('[red-static] deferred renderer failed, falling back to Canvas 2D',err);
+      // A throw part-way through construction can still have inserted the
+      // renderer's screen-space UI canvas into the page. Nothing owns it now,
+      // and left behind it sits blank over the game forever.
+      for(const stray of document.querySelectorAll('.gl-ui-layer'))stray.remove();
+    }
+    // The canvas may now hold a dead or half-built GL context, and a canvas
+    // cannot trade one context for another. Replacing the element is the only
+    // way back to Canvas 2D.
+    const fresh=canvas.cloneNode(false);
+    fresh.width=canvas.width;
+    fresh.height=canvas.height;
+    canvas.replaceWith(fresh);
+    hud.el.canvas=fresh;
+    canvas=fresh;
+  }
+  const ctx=canvas.getContext('2d',{alpha:false});
+  // Nothing left to draw with. Better to say so than to run a blank frame loop.
+  if(!ctx)throw new Error('No 2D canvas context available');
+  return{renderer:new Renderer(canvas,ctx,engine),canvas};
+}
+
 function tick(now){
   if(!session)return;
   const {engine,renderer,hud,levelUp,pause}=session;
-  const dt=Math.min(.1,(now-session.last)/1000);
+  // Clamped at both ends. The upper bound stops a stall compounding; the lower
+  // one exists because a requestAnimationFrame timestamp is the moment the
+  // frame began, which can precede a performance.now() taken later inside that
+  // same frame — so the first delta after a slow startRun could be negative by
+  // most of a second. A negative delta ran the camera's damp backwards and
+  // inverted its zoom to about -574, which mirrors the world through the
+  // operative and inverts aim with it, for the two seconds it took to converge
+  // back. It also drove the simulation accumulator negative and stalled the
+  // fixed step until it recovered.
+  const dt=clamp((now-session.last)/1000,0,.1);
   session.last=now;
 
   input.poll();

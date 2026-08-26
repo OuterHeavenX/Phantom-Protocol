@@ -176,3 +176,111 @@ Remaining:
    Still uncovered, and deliberately: a field the constructor initialises to a
    placeholder and fills in later reads as null rather than undefined, which is a
    different bug and a far noisier signal — most placeholders are legitimate.
+13. ~~Ship the deferred WebGL2 renderer, in every theatre rather than only in the
+   experiment.~~ Done. `src/render/gl/` is now a second production renderer with the
+   same public surface as the Canvas 2D one, selected in `createRenderer` and
+   controlled by `Settings → Presentation → Renderer`. Per-theatre dressing in
+   `dressing.js` gives all ten sectors their own ground material, prop mix and
+   lighting rig, coloured from the palette each already had. Seven outdoor materials
+   were added to the G-buffer shader — ground, sheet water, foliage, roadway, rock,
+   snow, molten slag — because the original set was an interior set and nine of the
+   ten theatres are not interiors.
+   Three things the promotion turned up that the experiment had not:
+   * The experiment ran in one big empty hall, so its dressing ran a walkway down the
+     spine of the sector and painted hazard bands across it. In a real corridor grid
+     that crossed forty walls. Both are scattered placements now.
+   * BLACKSITE ZERO ships authored floor art, and a GL floor threw it away. The
+     deferred path now lays a painted floor into the G-buffer as albedo and skips its
+     own plates, so the art survives and gains per-pixel lighting rather than losing
+     to it.
+   * The readability regression the experiment recorded as a blocker was real, and is
+     fixed: the composite runs a contrast-adaptive silhouette rim over the sprite
+     layer, and world-space markers moved off that layer so they are not fringed by it.
+   Exposure was tuned by measurement against the Canvas 2D renderer in the same sector
+   at the same contract seed, not by eye — an early build sat about 40% above the 2D
+   mean with its top decile clipped to white.
+   Not done, and deliberately: no GPU exists in the development environment, so every
+   performance figure for the GL path still has to come from real hardware through
+   `?visualtest=1`. Nothing in this repository claims otherwise.
+14. ~~Gameplay integrity and collision hardening, so the renderer cannot change
+   the rules.~~ Done. Eight defects reproduced and fixed, none of them
+   WebGL-only — every one predates the deferred renderer and was present in
+   Canvas 2D. The two that mattered most were not the ones the brief predicted:
+   * **A negative frame delta.** A requestAnimationFrame timestamp is the
+     moment the frame began, which can precede a `performance.now()` taken
+     later inside that same frame, and only the upper end of the delta was
+     clamped. One negative delta ran the camera's `damp` backwards and inverted
+     its zoom to about -574, which mirrors the whole view and every
+     screen-to-world conversion through the operative, for the two seconds it
+     took to converge back. It also drove the simulation accumulator negative
+     and stalled the fixed step. It showed up on the slowest startup path,
+     which is exactly where a phone lives.
+   * **The operative starting inside a wall**, in 14 of 80 generated sectors.
+     The start was resolved before vaults, cover and hazards were placed and
+     never re-checked; when no room had clearance the code returned an
+     unvalidated fallback. Fixing it also took sector reachability from 60-87%
+     to 98.7-99.5%, because the old reachability measurement had mostly been
+     measuring the broken spawn.
+   Movement is now one swept path — 15,021 tunnelling events across 180,000
+   dash-speed steps became 0. Spawn validation knows the radius of what it is
+   placing and which side of the geometry it is on: 0 of 12,000 deployments
+   land on ground the operative cannot reach.
+   The renderer-coupling audit found exactly two violations, both fixed: mouse
+   aim conflated CSS pixels with drawing-buffer pixels, so it was wrong on
+   every retina display and silently corrected itself when performance mode
+   dropped the buffer to dpr 1; and hostile deployment distance was read off
+   the camera, so a phone in portrait deployed hostiles 272 units away inside
+   590 units of visible ground.
+   No non-determinism was found in the simulation. Establishing that took five
+   rounds of fixing the *harness* — pre-roll state leaking through the RNG
+   stream, the contract clock, cover claims, hazard cycles and weapon cooldowns
+   — which is why `parity.mjs` now ships with a `2d:2d` control that has to
+   pass before any renderer claim is made.
+15. ~~Make it possible to tell, at a glance, what is solid.~~ Done, and it was a
+   bug rather than a preference. The GL dressing scattered standing crates,
+   machinery, containment cylinders, rocks and foliage in the *same materials
+   and sizes* as real cover: 31–57% of everything with height in a sector was
+   walk-through decoration identical to the solid article. Hence "the same item
+   can be walked over in one area and not in the other".
+   The rule is now structural — height is only accepted from the pass that
+   draws `world.walls` and `world.cover`, enforced inside `prop()` itself, so
+   it cannot be broken by forgetting it a second time. Fake standing props
+   across all ten theatres: 0.
+   Theatres keep their character by dressing cover that is already there rather
+   than inventing objects: panels, vents, exhaust, monitors and containment
+   glow attach to a real collider. Floor decoration was cut by roughly a third
+   and is authored flat.
+   Solid things then had to look solid, so the composite derives a directional
+   cast shadow and a lit top lip from the same height field the collision
+   geometry produced — it cannot disagree with what is solid, and flat
+   decoration gets no edge at all.
+   Renderer-only: no collider, spawn, hazard or pacing value changed. Parity,
+   pixel alignment and the clipping stress all still pass.
+16. ~~Tie the molten channels to real hazards.~~ Done. Burning ground was
+   theatre dressing invented by the renderer: the pools that read as lethal in
+   foundry and the hangar sat wherever the dressing pass felt like putting
+   them, and the hazards that actually burn were somewhere else. The molten
+   pass now walks `world.hazards` instead, so every drawn pool is a hazard and
+   every damaging hazard is drawn — 6 of 6 in both theatres, each pool sitting
+   exactly on its collider, with the ember emitters and the pulse light on the
+   same coordinates.
+17. ~~Fix the camera judder.~~ Done, and it was not the camera. The simulation
+   advances in whole 1/60 quanta while the display does not, so on anything
+   that is not exactly 60 Hz the world advanced zero pixels on one frame and a
+   full step on the next. Measured on the real engine at the real rates: the
+   operative's on-screen position juddered by **4.9 px per frame** at 72, 90,
+   120 and 144 Hz, and by 4.6 px even at 60 Hz once frame deltas are jittered
+   the way a browser actually delivers them. An iPhone Pro runs ProMotion at
+   120 Hz, which is the worst case of the four.
+   Actors are now drawn between their previous and current simulated
+   positions, `alpha` being how much of the next step the accumulator already
+   holds, and the swap happens in place so every existing draw site — sprites,
+   lights, minimap, HUD markers — smooths without knowing it exists. The same
+   figure after the change: **0.011–0.075 px**. Sector scrolling improved from
+   0.19–1.05 px to 0.01–0.99 px; the residue there is the camera's own damping
+   responding to uneven frame deltas, an order of magnitude below what was
+   fixed.
+   The simulation never sees an interpolated coordinate — the swap is undone
+   before the next step — so replays and daily contracts are unaffected.
+   `tools/smooth.mjs` measures it, and reports STALLED rather than a flawless
+   zero if the operative it is measuring never actually moved.

@@ -55,6 +55,48 @@ export function resolveCircleRect(cx,cy,r,rx,ry,hw,hh){
   return{x:0,y:Math.sign(dy||1)*overlapY};
 }
 
+// Where along a segment it first enters a box, as a fraction in 0..1, or null
+// if it never does. `segmentIntersectsRect` answers whether; this answers
+// where, which is what an impact mark needs to land on the surface instead of
+// wherever the projectile had been integrated to that step.
+export function segmentRectEntry(x1,y1,x2,y2,rx,ry,hw,hh){
+  if(pointInRect(x1,y1,rx,ry,hw,hh))return 0;
+  const left=rx-hw,right=rx+hw,top=ry-hh,bottom=ry+hh;
+  let t0=0,t1=1;
+  const dx=x2-x1,dy=y2-y1;
+  for(const [p,q] of [[-dx,x1-left],[dx,right-x1],[-dy,y1-top],[dy,bottom-y1]]){
+    if(Math.abs(p)<1e-9){if(q<0)return null;continue}
+    const t=q/p;
+    if(p<0){if(t>t1)return null;if(t>t0)t0=t}
+    else{if(t<t0)return null;if(t<t1)t1=t}
+  }
+  return t0;
+}
+
+// Nearest approach of a moving point to a static circle, as a fraction of the
+// segment in 0..1, or null when it never comes within `radius`.
+//
+// This is what stops a fast projectile passing through a hostile: testing only
+// the step's end point misses anything the round flew over in between, and at
+// 1500 units/second a step is 25 units — wider than most hostiles.
+export function segmentHitsCircle(x1,y1,x2,y2,cx,cy,radius){
+  const dx=x2-x1,dy=y2-y1;
+  const fx=x1-cx,fy=y1-cy;
+  const a=dx*dx+dy*dy;
+  if(a<1e-9)return fx*fx+fy*fy<=radius*radius?0:null;
+  const b=2*(fx*dx+fy*dy);
+  const c=fx*fx+fy*fy-radius*radius;
+  const disc=b*b-4*a*c;
+  if(disc<0)return null;
+  const root=Math.sqrt(disc);
+  const t0=(-b-root)/(2*a);
+  const t1=(-b+root)/(2*a);
+  if(t0>=0&&t0<=1)return t0;
+  if(t1>=0&&t1<=1)return t1;
+  // Starting inside counts as an immediate hit; entirely before or after does not.
+  return t0<0&&t1>1?0:null;
+}
+
 export function segmentIntersectsRect(x1,y1,x2,y2,rx,ry,hw,hh){
   const left=rx-hw,right=rx+hw,top=ry-hh,bottom=ry+hh;
   if(pointInRect(x1,y1,rx,ry,hw,hh)||pointInRect(x2,y2,rx,ry,hw,hh))return true;
@@ -73,19 +115,38 @@ export function segmentIntersectsRect(x1,y1,x2,y2,rx,ry,hw,hh){
 // Uniform grid used for broad-phase neighbour queries. Rebuilt each frame;
 // far cheaper than the O(n^2) sweeps the previous build ran on every enemy.
 export class SpatialHash{
-  constructor(cellSize=96){this.cellSize=cellSize;this.cells=new Map()}
+  constructor(cellSize=96){this.cellSize=cellSize;this.cells=new Map();this.stamp=0}
 
   clear(){this.cells.clear()}
 
   key(cx,cy){return cx*73856093^cy*19349663}
 
+  // Indexed across the item's whole extent, not just the cell its centre
+  // happens to land in.
+  //
+  // Centre-only indexing is silently wrong for anything larger than a cell,
+  // and the walls in this game are much larger: a sector perimeter is over two
+  // thousand units long. Collision resolution queries about a hundred units
+  // around the entity, so a wall whose centre was further away than that was
+  // not returned at all — the operative walked through the middle of every
+  // long wall and only collided with it near its centre. Every consumer of
+  // this class was affected: collision, line of sight, projectile raycasts and
+  // hostile proximity.
+  //
+  // Static geometry is inserted once per rebuild and entities are a single
+  // cell each, so the extra buckets cost nothing measurable.
   insert(item){
     const c=this.cellSize;
-    const cx=Math.floor(item.x/c),cy=Math.floor(item.y/c);
-    const k=this.key(cx,cy);
-    let bucket=this.cells.get(k);
-    if(!bucket){bucket=[];this.cells.set(k,bucket)}
-    bucket.push(item);
+    const hw=item.hw??item.radius??0;
+    const hh=item.hh??item.radius??0;
+    const minX=Math.floor((item.x-hw)/c),maxX=Math.floor((item.x+hw)/c);
+    const minY=Math.floor((item.y-hh)/c),maxY=Math.floor((item.y+hh)/c);
+    for(let cx=minX;cx<=maxX;cx++)for(let cy=minY;cy<=maxY;cy++){
+      const k=this.key(cx,cy);
+      let bucket=this.cells.get(k);
+      if(!bucket){bucket=[];this.cells.set(k,bucket)}
+      bucket.push(item);
+    }
   }
 
   rebuild(items){
@@ -98,11 +159,22 @@ export class SpatialHash{
   query(x,y,radius,out=[]){
     out.length=0;
     const c=this.cellSize;
+    // An item spanning several cells is now in several buckets, so the result
+    // has to be de-duplicated. A per-query stamp on the item does it without
+    // allocating: callers that accumulate — applying blast damage to everything
+    // returned, say — would otherwise hit the same target once per cell it
+    // straddles.
+    const stamp=++this.stamp;
     const minX=Math.floor((x-radius)/c),maxX=Math.floor((x+radius)/c);
     const minY=Math.floor((y-radius)/c),maxY=Math.floor((y+radius)/c);
     for(let cx=minX;cx<=maxX;cx++)for(let cy=minY;cy<=maxY;cy++){
       const bucket=this.cells.get(this.key(cx,cy));
-      if(bucket)for(const item of bucket)out.push(item);
+      if(!bucket)continue;
+      for(const item of bucket){
+        if(item.__hashStamp===stamp)continue;
+        item.__hashStamp=stamp;
+        out.push(item);
+      }
     }
     return out;
   }

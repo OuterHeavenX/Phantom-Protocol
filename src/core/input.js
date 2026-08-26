@@ -195,7 +195,8 @@ export class Input{
       return{x:this.aimX/m,y:this.aimY/m,manual:true};
     }
     if(this.lastScheme==='keyboard'&&this.pointerMoved&&camera&&player){
-      const world=camera.screenToWorld(this.pointerX,this.pointerY);
+      // clientX/clientY are CSS pixels; the camera works in buffer pixels.
+      const world=camera.cssToWorld(this.pointerX,this.pointerY);
       const dx=world.x-player.x,dy=world.y-player.y;
       const m=Math.hypot(dx,dy);
       if(m>4)return{x:dx/m,y:dy/m,manual:true};

@@ -13,6 +13,50 @@ Serve the folder as a static site, or publish the repository root through GitHub
 python3 -m http.server 8080     # then open http://localhost:8080
 ```
 
+Opening `index.html` from the filesystem does not work: native ES modules are
+blocked over `file://`. It has to be served.
+
+### Testing on a phone or tablet
+
+Serve from a machine on the same network — `python3 -m http.server 8080` already
+binds every interface — find that machine's LAN address, and open it on the
+device:
+
+```
+# macOS
+ipconfig getifaddr en0
+# Linux
+hostname -I | awk '{print $1}'
+# Windows
+ipconfig | findstr IPv4
+```
+
+Then browse to `http://<that-address>:8080` on the phone. Nothing needs
+installing on the device.
+
+Two things behave differently over plain http, because it is not a secure
+context: the clipboard API is unavailable (buttons that copy fall back to
+selecting the text for a long-press), and `performance.memory` is Chrome-only,
+so the heap readout says `n/a` on Safari. Neither affects the game.
+
+## BLACKSITE VISUAL TEST
+
+An isolated rendering experiment — an experimental WebGL2 renderer over the real
+simulation, built to find out how far the presentation can be pushed and whether
+a GPU path is worth having. It is opt-in, it does not ship, and with the flag
+absent none of it is even fetched.
+
+| URL | What it does |
+| --- | --- |
+| `?visualtest=1` | The experimental renderer, HIGH preset |
+| `?visualtest=1&preset=ultra` | Start on `low` / `medium` / `high` / `ultra` |
+| `?visualtest=1&renderer=2d` | **The control** — same level and simulation, production Canvas 2D renderer |
+| `?visualtest=1&enemies=200` | Start at a given hostile count |
+
+Press `RUN 25→200 SWEEP` to benchmark your own hardware; `F2` hides the overlay.
+Full detail, and the results measured so far, are in
+[`src/experiments/visual-test/README.md`](src/experiments/visual-test/README.md).
+
 ## Controls
 
 | Action | Keyboard / Mouse | Gamepad | Touch |
@@ -128,12 +172,38 @@ sustain and surge states, deploys hostiles as coherent squads from one or two be
 schedules minibosses and set-piece events across the contract, and adjusts pressure based
 on how comfortable the player currently is.
 
-**Rendering.** A ten-stage layered pipeline (`src/render/renderer.js`): tiled floor,
-persistent decals, hazards, geometry with height offsets, ground effects, y-sorted
-entities with shadows, projectiles, beams, pooled particles, an additive half-resolution
-lighting pass, then post (vignette, flash, minimap, off-screen threat markers). All
-sprites are drawn procedurally as animated vector figures — the repository ships no
-image assets.
+**Rendering.** Two renderers, same public surface, chosen in one place.
+
+The Canvas 2D one (`src/render/renderer.js`) is a ten-stage layered pipeline: tiled
+floor, persistent decals, hazards, geometry with height offsets, ground effects,
+y-sorted entities with shadows, projectiles, beams, pooled particles, an additive
+half-resolution lighting pass, then post (vignette, flash, minimap, off-screen threat
+markers).
+
+The deferred WebGL2 one (`src/render/gl/`) draws the same contract in all ten theatres
+with per-pixel lighting, contact shadows, bloom and procedural materials: an instanced
+G-buffer, instanced light volumes, a separable bloom chain and a filmic composite. It
+does not reimplement a single sprite — hostiles, projectiles, decals, landmarks and
+markers are still drawn by the 2D code and composited over the lit scene, so nothing
+in the game changes shape when the renderer does. A theatre with painted floor art has
+that art laid into the G-buffer as albedo and lit, rather than replaced.
+
+`Settings → Presentation → Renderer` picks between them; AUTOMATIC takes the deferred
+path wherever there is real hardware behind WebGL2 and Canvas 2D everywhere else, and
+anything that fails falls back rather than breaking. See
+[`docs/deferred-renderer.md`](docs/deferred-renderer.md).
+
+All sprites are drawn procedurally as animated vector figures — the repository ships no
+image assets beyond the optional authored environment packs.
+
+**Collision and gameplay integrity.** The renderer is downstream of the
+simulation and is not permitted to change it. Movement goes through one swept
+path that cannot tunnel; spawns are validated against the entity's own radius
+and against a reachability map flood-filled from the operative's start; aim
+converts CSS pixels to world space explicitly; and hostile deployment distance
+is a world-space constant rather than a reading off the camera. `?collisiondebug=1`
+draws every gameplay shape from live simulation data under either renderer. See
+[`docs/collision-integrity.md`](docs/collision-integrity.md).
 
 **Audio.** Sound effects are fully synthesized at runtime from oscillators and shaped
 noise (`src/core/audio.js`) — a complete sound library with no samples.
@@ -366,6 +436,7 @@ data/     content registries (operatives, weapons, passives, enemies, bosses, ma
 src/core/ rng, math + spatial hash, camera, input, synthesized audio
 src/game/ engine, world generation, AI, weapons, abilities, boss, director, fx
 src/render/ layered renderer and procedural sprite library
+src/render/gl/ deferred WebGL2 renderer and per-theatre scene dressing
 src/ui/   menus, HUD, adaptation screen, pause menu, animated menu background
 src/save/ persistence and progression evaluation
 css/      general, HUD, responsive

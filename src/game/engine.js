@@ -1,7 +1,7 @@
 import {Rng} from '../core/rng.js';
 import {profiler} from '../core/profiler.js';
 import {Camera} from '../core/camera.js';
-import {clamp,damp,dist,dist2,normalize,compact,approachAngle,SpatialHash,TAU} from '../core/math.js';
+import {clamp,damp,dist,dist2,normalize,compact,approachAngle,segmentHitsCircle,SpatialHash,TAU} from '../core/math.js';
 import {World} from './world.js';
 import {Director} from './director.js';
 import {EnemyBrain,AI_STATES} from './ai.js';
@@ -150,6 +150,8 @@ export class Engine{
     // ---- Run state --------------------------------------------------------
     this.elapsed=0;
     this.accumulator=0;
+    this.interpAlpha=0;
+    this._interpApplied=false;
     this.timeRemaining=config.duration*60;
     this.extraction=false;
     this.extractionTimer=25;
@@ -297,7 +299,7 @@ export class Engine{
     const spawn=this.world.findSpawn(this.rng,{
       x:this.player.x+Math.cos(angle)*70,
       y:this.player.y+Math.sin(angle)*70
-    },0,120);
+    },0,120,14);
     this.squad.push(new Squadmate(this,mate,spawn));
   }
 
@@ -408,20 +410,98 @@ export class Engine{
     trait?.[hook]?.(this,...args);
   }
 
-  resize(width,height){
-    this.camera.resize(width,height);
+  // Drawing-buffer size first, then the element's layout size. The second pair
+  // is what turns a pointer event into a world position; without it aim is
+  // wrong by the device pixel ratio. Both renderers call this with the same
+  // numbers, which is what keeps aim identical between them.
+  resize(width,height,cssWidth,cssHeight){
+    this.camera.resize(width,height,cssWidth,cssHeight);
   }
 
   // -------------------------------------------------------------------------
   // Main loop
   // -------------------------------------------------------------------------
 
+  // ---- Render interpolation ----------------------------------------------
+  // The simulation advances in whole 1/60 quanta, but the display does not.
+  // On a 120 Hz panel that means every other frame advances the world by zero
+  // and the one after it by a full step — the actors, and with them the camera
+  // that damps toward the operative, arrive in visible 4 px hops. Measured on
+  // the loop model: p95 judder 4.01 px at 120 Hz, 4.06 px at 144 Hz, and zero
+  // at exactly 60 Hz, which is why it only shows up on good hardware.
+  //
+  // The fix is to remember where each actor stood before the step and draw it
+  // partway between there and where it stands now, `alpha` being how much of
+  // the next step the accumulator is already holding. Positions are swapped in
+  // place rather than passed alongside, so every existing draw site — sprites,
+  // lights, minimap, HUD markers — smooths without knowing this exists. The
+  // swap is undone before the next step, so the simulation never sees an
+  // interpolated coordinate and replays stay bit-identical.
+  interpolatedGroups(){
+    return [this.enemies,this.pickups,this.turrets,this.phantoms,this.squad,
+      this.decoys,this.grenades,this.mines,
+      this.player?[this.player]:null,this.boss?[this.boss]:null];
+  }
+
+  captureInterpolation(){
+    for(const group of this.interpolatedGroups()){
+      if(!group)continue;
+      for(const e of group){if(e){e.rx=e.x;e.ry=e.y;}}
+    }
+  }
+
+  applyInterpolation(){
+    if(this._interpApplied)return;
+    // Note that alpha 0 means "draw the previous state", not "draw the current
+    // one": the display trails the simulation by up to one step, which is the
+    // price of never guessing at a position the simulation has not produced.
+    // Skipping the swap at alpha 0 was worse than no interpolation at all — on
+    // a 120 Hz panel it left every second frame fully advanced and every other
+    // one halfway back, so the operative shuffled forward and back by 4.9 px
+    // instead of gliding.
+    const alpha=this.interpAlpha;
+    this._interpApplied=true;
+    for(const group of this.interpolatedGroups()){
+      if(!group)continue;
+      for(const e of group){
+        // Entities spawned during the step have no previous position, so they
+        // appear where the simulation put them rather than sliding in from a
+        // coordinate they never occupied.
+        if(!e||e.rx===undefined)continue;
+        e._ix=e.x;e._iy=e.y;
+        e.x=e.rx+(e.x-e.rx)*alpha;
+        e.y=e.ry+(e.y-e.ry)*alpha;
+      }
+    }
+  }
+
+  restoreInterpolation(){
+    if(!this._interpApplied)return;
+    this._interpApplied=false;
+    for(const group of this.interpolatedGroups()){
+      if(!group)continue;
+      for(const e of group){
+        if(!e||e._ix===undefined)continue;
+        e.x=e._ix;e.y=e._iy;
+        e._ix=undefined;e._iy=undefined;
+      }
+    }
+  }
+
   // Fixed-timestep simulation with an accumulator, so behaviour is identical
   // at 30, 60 and 144 Hz. The previous build scaled everything by a variable
   // dt clamped to 33ms, which made high-refresh displays play differently.
   update(realDt,input){
     if(this.ended)return;
+    // A negative or non-finite delta must never reach the accumulator: it
+    // stalls the fixed step until the debt is paid off, and every downstream
+    // system that integrates on real time goes backwards with it.
+    realDt=Math.max(0,realDt)||0;
     this.frame++;
+    // Hit-stop and pause return early without stepping, and leave the actors
+    // where they were last drawn; only a frame that will actually advance the
+    // simulation needs the true coordinates back.
+    if(this.fx.hitStop<=0&&!this.paused&&this.pendingLevelUps===0)this.restoreInterpolation();
 
     if(this.fx.hitStop>0){
       this.fx.hitStop-=realDt;
@@ -453,6 +533,11 @@ export class Engine{
     }
     profiler.count_('steps',steps);
     profiler.mark('sim');
+    // Whatever the accumulator still holds is the fraction of the next step
+    // the display is already into. Everything below this line — the camera
+    // included — sees the smoothed positions.
+    this.interpAlpha=clamp(this.accumulator/FIXED_STEP,0,1);
+    if(this.settings.renderInterpolation!==false)this.applyInterpolation();
     profiler.peak('enemies',this.enemies.length);
     profiler.peak('particles',this.fx.stats?.particles||0);
 
@@ -464,6 +549,7 @@ export class Engine{
   }
 
   step(dt,input){
+    this.captureInterpolation();
     this.elapsed+=dt;
     this.dt=dt;
     if(this.director.progress>=.5)this.codec.fire('halfway');
@@ -685,9 +771,10 @@ export class Engine{
     }
 
     const previousX=player.x,previousY=player.y;
-    player.x+=player.vx*dt;
-    player.y+=player.vy*dt;
-    this.world.resolveCollision(player,player.radius);
+    // Swept rather than teleport-then-depenetrate. A dash covers more ground
+    // in one step than the shallowest cover is deep, and resolving only at the
+    // destination let it finish on the far side of a wall.
+    this.world.moveEntity(player,player.vx*dt,player.vy*dt,player.radius);
     this.telemetry.distance+=dist(previousX,previousY,player.x,player.y);
     player.walkPhase+=Math.hypot(player.vx,player.vy)*dt*.05;
 
@@ -903,7 +990,7 @@ export class Engine{
     const point=this.world.findSpawn(this.rng,{
       x:this.player.x+Math.cos(angle)*600,
       y:this.player.y+Math.sin(angle)*600
-    },0,240);
+    },0,240,Math.round((elite.radius||16)*(spec.scale||1))+6);
     const enemy=this.spawnEliteEnemy(elite,point.x,point.y);
     if(!enemy)return null;
     enemy.hp*=spec.hpMult;enemy.maxHp*=spec.hpMult;
@@ -935,7 +1022,7 @@ export class Engine{
       const point=this.world.findSpawn(this.rng,{
         x:carrier.x+Math.cos(angle)*(carrier.radius+24),
         y:carrier.y+Math.sin(angle)*(carrier.radius+24)
-      },0,90);
+      },0,90,(archetype.radius||12)+4);
       const unit=this.spawnEnemy(archetype,point.x,point.y);
       if(!unit)continue;
       unit.awareness=1;
@@ -959,7 +1046,7 @@ export class Engine{
       const point=this.world.findSpawn(this.rng,{
         x:(origin?.x??this.player.x)+Math.cos(angle)*260,
         y:(origin?.y??this.player.y)+Math.sin(angle)*260
-      },0,160);
+      },0,160,(archetype.radius||12)+4);
       const enemy=this.spawnEnemy(archetype,point.x,point.y);
       if(enemy){
         enemy.awareness=1;
@@ -1014,17 +1101,19 @@ export class Engine{
         this.breakCoverAround(enemy);
       }
 
-      enemy.x+=enemy.vx*dt;
-      enemy.y+=enemy.vy*dt;
       // Aircraft are over the sector, not in it: geometry neither stops them
       // nor shelters the operative from them. They are still held inside the
       // arena bounds so they cannot drift out of the fight.
       if(enemy.flying){
+        enemy.x+=enemy.vx*dt;
+        enemy.y+=enemy.vy*dt;
         enemy.x=clamp(enemy.x,enemy.radius,this.world.width-enemy.radius);
         enemy.y=clamp(enemy.y,enemy.radius,this.world.height-enemy.radius);
         enemy.rotor=(enemy.rotor||0)+dt*26;
       }else{
-        const corrected=this.world.resolveCollision(enemy,enemy.radius);
+        // Charging archetypes are the fastest things on the ground and were
+        // the ones that walked through cover.
+        const corrected=this.world.moveEntity(enemy,enemy.vx*dt,enemy.vy*dt,enemy.radius);
         if(corrected&&enemy.chargeTimer>0)enemy.chargeTimer=0;
       }
       enemy.angle=Math.atan2(player.y-enemy.y,player.x-enemy.x);
@@ -1545,7 +1634,7 @@ export class Engine{
     const point=this.world.findSpawn(this.rng,{
       x:this.player.x+Math.cos(angle)*520,
       y:this.player.y+Math.sin(angle)*520
-    },0,260);
+    },0,260,(def.radius||34)+8);
     // Boss durability tracks how strong the operative can plausibly be by the
     // time it appears: a 30-minute contract hands the player an evolved
     // loadout at level 40+, which deleted the old flat-HP bosses in seconds.
@@ -1582,7 +1671,7 @@ export class Engine{
     const point=this.world.findSpawn(this.rng,{
       x:this.player.x+Math.cos(angle)*420,
       y:this.player.y+Math.sin(angle)*420
-    },0,240);
+    },0,240,42);
     this.boss=new Nemesis(record,point.x,point.y,nemesisScaling(record,this));
     // Held separately from `this.boss`, which is cleared the moment it dies or
     // walks out — the outcome still has to be readable at the end of the run.
@@ -1803,22 +1892,39 @@ export class Engine{
           tickInterval:.4,color:'#ff8a4c',friendly:true});
       }
 
-      // Geometry.
+      // Geometry. The round is walked back to where it actually met the
+      // surface before it detonates, so the impact mark, the spark and any
+      // blast radius are on the wall rather than inside it.
       const obstacle=this.world.raycastObstacle(p.px,p.py,p.x,p.y,true);
       if(obstacle){
         if(obstacle.destructible)this.world.damageCover(obstacle,p.damage);
         if(!p.beam){
+          p.x=this.world.lastHitX;
+          p.y=this.world.lastHitY;
           this.hitProjectileTerminal(p);
           continue;
         }
       }
 
-      // Enemies.
-      const candidates=this.enemyHash.query(p.x,p.y,p.radius+40,neighbourScratch);
+      // Enemies. Swept along the step rather than tested at its end point: a
+      // round travelling 1500 units a second moves 25 world units per step,
+      // which is wider than most hostiles, so an end-point test let fast
+      // weapons shoot straight through a target that was squarely in the way.
+      // The query is centred on the middle of the step and widened to cover
+      // its whole length, or the broad phase would miss the same targets the
+      // narrow phase was about to catch.
+      const midX=(p.px+p.x)*.5,midY=(p.py+p.y)*.5;
+      const sweep=Math.hypot(p.x-p.px,p.y-p.py)*.5;
+      const candidates=this.enemyHash.query(midX,midY,sweep+p.radius+40,neighbourScratch);
       for(const enemy of candidates){
         if(enemy.dead)continue;
         if(p.hitSet?.has(enemy))continue;
-        if(dist2(p.x,p.y,enemy.x,enemy.y)>(p.radius+enemy.radius)**2)continue;
+        const hitT=segmentHitsCircle(p.px,p.py,p.x,p.y,enemy.x,enemy.y,p.radius+enemy.radius);
+        if(hitT===null)continue;
+        // Report the hit where the round met the hostile, so damage numbers
+        // and blood land on the target rather than behind it.
+        const hitX=p.px+(p.x-p.px)*hitT;
+        const hitY=p.py+(p.y-p.py)*hitT;
 
         let damage=p.damage;
         if(p.falloff)damage*=clamp(1-p.age*1.4,.35,1);
@@ -1828,13 +1934,14 @@ export class Engine{
           weapon:p.weapon,knockback:p.knockback,critBonus:p.critBonus,
           status:p.status,statusChance:p.statusChance,
           angle:Math.atan2(p.vy,p.vx),fromX:p.px,fromY:p.py,source:'projectile',
-          hitX:p.x,hitY:p.y
+          hitX,hitY
         });
 
         if(p.pierceLeft>0){
           p.pierceLeft--;
           (p.hitSet||(p.hitSet=new Set())).add(enemy);
         }else{
+          p.x=hitX;p.y=hitY;
           this.hitProjectileTerminal(p);
           break;
         }
@@ -1864,7 +1971,8 @@ export class Engine{
 
       if(this.world.raycastObstacle(p.px,p.py,p.x,p.y,true)&&!p.piercing){
         p.dead=true;
-        this.fx.impact(p.x,p.y,Math.atan2(p.vy,p.vx),p.color,.7);
+        this.fx.impact(this.world.lastHitX,this.world.lastHitY,
+          Math.atan2(p.vy,p.vx),p.color,.7);
         continue;
       }
 
@@ -2053,8 +2161,7 @@ export class Engine{
         p.vx=damp(p.vx,dir.x*p.speed*drive,5,dt);
         p.vy=damp(p.vy,dir.y*p.speed*drive,5,dt);
       }
-      p.x+=p.vx*dt;p.y+=p.vy*dt;
-      this.world.resolveCollision(p,p.radius);
+      this.world.moveEntity(p,p.vx*dt,p.vy*dt,p.radius);
     }
     compact(this.phantoms,p=>!p.dead);
 

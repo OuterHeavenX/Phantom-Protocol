@@ -28,5 +28,36 @@
   </p>
 </noscript>
 <script type="module" src="./src/main.js"></script>
+<script>
+// Stale-module guard.
+//
+// This document is revalidated on every navigation; a cached ES module is not
+// always, and a checkout old enough not to know a URL flag ignores it in
+// silence. That failure looks exactly like "the feature is broken" — the page
+// loads, the game runs, and the thing you asked for simply is not there.
+//
+// main.js announces itself on window. If that has not happened shortly after
+// load, the scripts being executed are older than this document, and this says
+// so rather than letting the page look merely uncooperative. It is a
+// capability check, not a version check, so there is no number to keep in sync.
+(function(){
+  window.addEventListener('load',function(){
+    setTimeout(function(){
+      if(window.__redstatic)return;
+      var wanted=/[?&]visualtest=/i.test(location.search);
+      var el=document.createElement('div');
+      el.setAttribute('style',
+        'position:fixed;left:0;right:0;top:0;z-index:99999;padding:10px 14px;'+
+        'font:600 12px/1.6 ui-monospace,monospace;color:#04090e;background:#ffb35c;'+
+        'box-shadow:0 4px 18px rgba(0,0,0,.5)');
+      el.innerHTML='<b>STALE SCRIPTS.</b> This page is newer than the JavaScript '+
+        'your browser is running'+(wanted?', which is why <code>?visualtest=1</code> did nothing':'')+
+        '. Hard-reload (<b>Ctrl/Cmd + Shift + R</b>), or check the server is '+
+        'serving the checkout you think it is.';
+      document.body.appendChild(el);
+    },5000);
+  });
+})();
+</script>
 </body>
 </html>
