@@ -206,7 +206,7 @@ const PROFILES={
     sky:{lum:.13,tintFrom:'light'},
     passes:{
       grating:{count:5},
-      moltenChannels:{count:5},
+      moltenChannels:true,
       hazardPaint:{count:7},
       plant:{count:11},
       pipes:{count:10},
@@ -315,6 +315,7 @@ const PROFILES={
     passes:{
       apronMarkings:{step:300},
       hazardPaint:{count:3},
+      moltenChannels:true,
       plant:{count:5},
       pipes:{count:4},
       cables:{count:6},
@@ -698,22 +699,26 @@ export function buildDressing(world,map,seed=1){
     }
   }
 
-  if(P.moltenChannels){
-    // The plant's own light source. Every channel is also a light and a
-    // particle emitter, because a glowing surface that does not spill onto the
-    // floor beside it is a texture, not a fire.
-    const rgb=albedo(palette.hazard,.62);
-    for(let i=0;i<P.moltenChannels.count;i++){
-      const spot=findSpot(120,20);
-      if(!spot)continue;
-      const [x,y]=spot;
-      const horizontal=random()<.6;
-      const hw=horizontal?range(150,380):range(16,26);
-      const hh=horizontal?range(16,26):range(150,380);
-      prop(x,y,hw,hh,'molten',{rgb,emissive:range(1.3,2.1),roughness:.5,animation:1});
-      light(x,y,Math.max(hw,hh)*1.8+180,warmLight,
+  // Burning ground: molten slag, spilled fuel. Drawn **on the hazards the
+  // simulation actually placed**, never anywhere else.
+  //
+  // This pass used to scatter its own channels wherever there was room. They
+  // looked exactly like something that would burn you and did nothing at all,
+  // while the real hazard burned you somewhere else entirely — the same lie as
+  // a crate you can walk through, told about damage instead of collision. The
+  // pool is sized to the hazard's own radius, so what glows and what hurts are
+  // one shape.
+  if(P.moltenChannels&&world){
+    for(const hazard of world.hazards){
+      if(!hazard.passive||!hazard.damage)continue;
+      const rgb=albedo(hazard.color||palette.hazard,.62);
+      const tint=emit(hazard.color||palette.hazard);
+      const r=hazard.radius;
+      prop(hazard.x,hazard.y,r,r,'molten',
+        {rgb,emissive:range(1.4,2.2),roughness:.5,animation:1});
+      light(hazard.x,hazard.y,r*2.6+140,tint,
         {intensity:1.5,kind:LIGHT.pulse,speed:.35,z:14});
-      emitters.push({x,y,kind:'ember',rate:9,scale:1});
+      emitters.push({x:hazard.x,y:hazard.y,kind:'ember',rate:9,scale:1});
     }
   }
 

@@ -339,7 +339,12 @@ void main(){
       albedo=mix(albedo,albedo*0.5,scour*0.6);
       rough=clamp(0.55-ridge*0.3+scour*0.35,0.05,1.0);
       height+=drift*4.0-scour*2.0;
-    }else if(mat==21){                            // molten channel
+    }else if(mat==21){                            // burning ground
+      // Round, with a broken edge, because it is drawn at the radius of a real
+      // hazard and the two footprints have to be the same shape as well as the
+      // same size.
+      vec2 mc=(uv-0.5)*2.0;
+      if(length(mc)+fbm(uv*5.0+phase)*0.30-0.17>1.0)discard;
       // Flowing slag. Emissive is driven by the flow rather than constant, so
       // the channel has hot and cooling stretches instead of glowing evenly.
       float flow=fbm(world*0.03+vec2(uTime*0.22,uTime*0.05)+phase);

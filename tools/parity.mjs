@@ -47,6 +47,9 @@ async function run(theatre,mode){
     // software rasteriser — so without this the comparison would be of two
     // runs that had already diverged before the first scripted tick, and any
     // mismatch would say nothing about the renderer.
+    // The loop was cancelled mid-frame, so the actors may still be sitting at
+    // their interpolated draw positions rather than their simulated ones.
+    e.restoreInterpolation?.();e.interpAlpha=0;
     const spawn=e.world.playerSpawn();
     e.player.x=spawn.x;e.player.y=spawn.y;
     e.player.vx=0;e.player.vy=0;
@@ -65,6 +68,33 @@ async function run(theatre,mode){
     if(e.turrets)e.turrets.length=0;
     if(e.mines)e.mines.length=0;
     e.player.statuses.clear();
+    // Everything else the pre-roll left standing. The pre-roll is a real-time
+    // window, so its length differs between two runs of the same build, and
+    // anything it created and this does not clear is a difference the scripted
+    // section then amplifies. Squadmates are the worst of them: they shoot,
+    // they draw fire away from the operative, and they start wherever the
+    // pre-roll happened to leave them. Foundry's 2d-against-2d control failed
+    // on exactly this, drifting a few points of operative HP per run, before
+    // any renderer was involved.
+    for(const list of [e.squad,e.phantoms,e.grenades,e.decoys,e.meleeArcs,
+                       e.scheduled,e.world.decals])if(list)list.length=0;
+    e.effects?.clear?.();
+    e.boss=null;
+    e.player.dashTimer=0;e.player.dashCooldown=0;e.player.reloadTimer=0;
+    // `invulnerable` is the i-frame window. Left running, a hit that the
+    // operative shrugs off in one run lands in the other, which is a whole
+    // hostile burst of difference from a field the pre-roll set by accident.
+    e.player.invulnerable=0;e.player.hitFlash=0;e.player.vx=0;e.player.vy=0;
+    e.timeRemaining=e.durationMinutes*60;
+    e.stepIndex=0;
+    // Regeneration is a sub-point-per-second accumulator. Left at whatever
+    // fraction the pre-roll reached, it crosses 1 on a different tick in each
+    // run and the operative gains a point of HP one tick apart — the entire
+    // content of foundry's control failure, in a run where every position,
+    // every hostile and the random stream itself matched exactly.
+    e.player.regenAccumulator=0;
+    e.combo=0;e.comboTimer=0;e.timeDilation=1;
+    e.fx.hitStop=0;
     // Hazards run on their own clocks and those clocks advanced through the
     // pre-roll, which is a different length on each run. A hazard that is
     // mid-cycle rather than dormant damages hostiles, moves them, and takes
@@ -72,6 +102,14 @@ async function run(theatre,mode){
     e.world.hazards.forEach((h,i)=>{
       h.timer=(i*0.37)%(h.interval||3);
       h.warning=0;h.active=false;h.activeTimer=0;h.phase=i*1.13;
+      // `playerTick` is the standing-damage countdown a passive hazard starts
+      // the moment the operative steps into it, and `resolved` latches for the
+      // life of one activation. Neither is a world clock, so neither was being
+      // rewound — and a molten pool the pre-roll had already been stood in
+      // dealt its next nine points a tick earlier in one run than the other,
+      // with every hostile, every hazard clock and the random stream itself
+      // still in exact agreement. That was foundry's whole mismatch.
+      h.playerTick=0;h.resolved=false;
     });
     // Same for the random stream: the pre-roll drew a different number of
     // values on each renderer, so it is rewound to the contract seed. Combat

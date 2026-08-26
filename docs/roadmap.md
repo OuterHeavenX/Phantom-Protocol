@@ -256,3 +256,31 @@ Remaining:
    decoration gets no edge at all.
    Renderer-only: no collider, spawn, hazard or pacing value changed. Parity,
    pixel alignment and the clipping stress all still pass.
+16. ~~Tie the molten channels to real hazards.~~ Done. Burning ground was
+   theatre dressing invented by the renderer: the pools that read as lethal in
+   foundry and the hangar sat wherever the dressing pass felt like putting
+   them, and the hazards that actually burn were somewhere else. The molten
+   pass now walks `world.hazards` instead, so every drawn pool is a hazard and
+   every damaging hazard is drawn — 6 of 6 in both theatres, each pool sitting
+   exactly on its collider, with the ember emitters and the pulse light on the
+   same coordinates.
+17. ~~Fix the camera judder.~~ Done, and it was not the camera. The simulation
+   advances in whole 1/60 quanta while the display does not, so on anything
+   that is not exactly 60 Hz the world advanced zero pixels on one frame and a
+   full step on the next. Measured on the real engine at the real rates: the
+   operative's on-screen position juddered by **4.9 px per frame** at 72, 90,
+   120 and 144 Hz, and by 4.6 px even at 60 Hz once frame deltas are jittered
+   the way a browser actually delivers them. An iPhone Pro runs ProMotion at
+   120 Hz, which is the worst case of the four.
+   Actors are now drawn between their previous and current simulated
+   positions, `alpha` being how much of the next step the accumulator already
+   holds, and the swap happens in place so every existing draw site — sprites,
+   lights, minimap, HUD markers — smooths without knowing it exists. The same
+   figure after the change: **0.011–0.075 px**. Sector scrolling improved from
+   0.19–1.05 px to 0.01–0.99 px; the residue there is the camera's own damping
+   responding to uneven frame deltas, an order of magnitude below what was
+   fixed.
+   The simulation never sees an interpolated coordinate — the swap is undone
+   before the next step — so replays and daily contracts are unaffected.
+   `tools/smooth.mjs` measures it, and reports STALLED rather than a flawless
+   zero if the operative it is measuring never actually moved.

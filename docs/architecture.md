@@ -26,9 +26,22 @@ src/main.js  application state machine and render loop
 ## Simulation model
 
 The engine runs a **fixed timestep** of 1/60s driven by an accumulator, capped at five
-steps per frame to avoid a death spiral on a slow frame. Rendering interpolates nothing —
-it draws the latest simulated state — but because the step is fixed, gameplay is identical
+steps per frame to avoid a death spiral on a slow frame. Gameplay is therefore identical
 across refresh rates.
+
+The display, however, is not on that clock. Drawing the latest simulated state means that
+on anything other than exactly 60 Hz the world advances zero pixels on one frame and a
+whole step on the next — 4.9 px of judder per frame on a 120 Hz panel, measured. So the
+render **interpolates**: `Engine.step` records where each actor stood before the step, and
+after the step loop `Engine.applyInterpolation` moves them to
+`lerp(previous, current, accumulator / FIXED_STEP)`. The positions are swapped in place, so
+every draw site — sprites, lights, minimap, HUD markers, and the camera that damps toward
+the operative — smooths without knowing this exists. `Engine.restoreInterpolation` puts the
+true coordinates back before the next step, so the simulation never sees an interpolated
+value and replays stay bit-identical. The cost is that the picture trails the simulation by
+up to one step, which is the price of never drawing a position the simulation has not
+produced. `settings.renderInterpolation = false` turns it off, which is how
+`tools/smooth.mjs` measures the difference.
 
 Broad-phase queries go through a uniform `SpatialHash` rebuilt once per step. Every
 system that needs neighbours (AI separation, weapon targeting, explosions, beams,

@@ -30,7 +30,21 @@ node tools/diverge.mjs 2d                                # when one of them fail
 node tools/align.mjs gl && node tools/align.mjs gl --shake
 node tools/align.mjs 2d
 node tools/ground-orientation.mjs
+
+node tools/smooth.mjs                      # frame pacing at 60/72/90/120/144 Hz
+node tools/smooth.mjs 120 1800             # one rate, longer sample
 ```
+
+`smooth.mjs` drives the real engine at a chosen refresh rate and measures how
+evenly the picture actually travels — the second difference of on-screen
+position, in pixels, for both the scrolling sector and the operative within the
+frame. It empties the sector of geometry and hostiles first and walks a wide
+arc, because an operative who has walked into a wall stops moving and a run
+that measures nothing reads as perfectly smooth; a run whose camera barely
+travelled is reported as STALLED rather than passing. Every rate is measured
+twice, once on a metronome and once with frame deltas jittered by ±12% the way
+a browser really delivers them — an interpolator that only behaves on a
+metronome has not been tested.
 
 **Run `align.mjs` on any renderer change.** Simulation parity cannot catch a
 presentation bug by construction — the world can be bit-identical under both
