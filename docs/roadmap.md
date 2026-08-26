@@ -365,3 +365,24 @@ Remaining:
    equal-power crossfade — the one thing a single media element cannot do for
    itself. A track too short to overlap keeps the native loop, and so does one
    whose length the browser will not report.
+22. ~~The walker that never came.~~ `spawnNemesis` refuses on the same
+   condition as `spawnBoss` — a signature already in the sector — and the
+   director swallowed that refusal too. On a twenty-minute contract the walker
+   is scheduled at 44% against a boss at 42%: **twenty-four seconds apart**,
+   against a fight tuned to last minutes. Measured on a real timeline with the
+   record due: refused every time, so on any long contract where the operator's
+   record said the walker was due, it simply never arrived. The persistent
+   antagonist the save has been tracking across contracts was being eaten by
+   the schedule.
+   It queues behind the signature now: refused at t=528s, arrives at t=531s the
+   moment the boss goes down.
+   The retry itself also had to be rewritten. The first version retried on
+   every step regardless of whether the blocking condition had cleared — 18,722
+   refused calls in one contract. It now waits for the sector to be clear, caps
+   attempts so a refusal that can never succeed (a theatre naming a signature
+   that is not in the table, a walker event on a save with no record) leaves the
+   queue, and drops everything held once extraction opens rather than dropping a
+   fresh signature on someone on their way out.
+   Note for tuning, not fixed here: `boss@42%` and `nemesis@44%` still collide
+   by design. The mechanism no longer loses the walker, but the two encounters
+   arrive back to back rather than on their own beats.

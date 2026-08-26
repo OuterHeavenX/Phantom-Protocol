@@ -388,18 +388,37 @@ export class Director{
     while(this.eventIndex<this.scriptedEvents.length&&
           this.engine.elapsed>=this.scriptedEvents[this.eventIndex].at){
       const event=this.scriptedEvents[this.eventIndex++];
-      this.fireEvent(event);
+      if(!this.fireEvent(event))this.pendingEvents.push(event);
     }
-    // Events that could not fire when they came due. Retried in order, and
-    // only while the contract is still running: an event that arrives during
-    // the extraction window has missed its moment and is dropped rather than
-    // dropped on the operative on their way out.
-    if(this.pendingEvents.length&&!this.engine.extraction){
-      const held=this.pendingEvents.shift();
-      this.fireEvent(held);
-    }
+    this.retryHeldEvents();
   }
 
+  // Events that could not fire when they came due.
+  //
+  // Everything that can be held is held for one reason: a signature was
+  // already in the sector, and both `spawnBoss` and `spawnNemesis` refuse
+  // while one is. So there is nothing to retry until that is gone — the first
+  // version retried on every step regardless and made 18,722 refused calls in
+  // a single twenty-minute contract.
+  //
+  // The attempt cap is for the refusals that are not about the boss at all: a
+  // theatre naming a signature that is not in the table, or a walker event on
+  // a save with no record. Those can never succeed, and without a cap they
+  // would sit in the queue being retried for the rest of the contract.
+  retryHeldEvents(){
+    if(!this.pendingEvents.length)return;
+    // Past the clock the contract is asking the operative to leave, and a
+    // fresh signature is not a thing to drop on them on their way out.
+    if(this.engine.extraction){this.pendingEvents.length=0;return}
+    if(this.engine.boss)return;
+    const held=this.pendingEvents.shift();
+    if(this.fireEvent(held))return;
+    held.attempts=(held.attempts||0)+1;
+    if(held.attempts<3)this.pendingEvents.push(held);
+  }
+
+  // Returns false when the event came due at a moment it could not run, and
+  // wants holding for later. Anything else counts as handled.
   fireEvent(event){
     const engine=this.engine;
     switch(event.type){
@@ -429,7 +448,13 @@ export class Director{
         break;
       }
       case 'nemesis':{
-        engine.spawnNemesis();
+        // The walker refuses on the same condition as a signature, and on a
+        // twenty-minute contract it is scheduled at 44% against a boss at 42%
+        // — twenty-four seconds apart, against a fight tuned to last minutes.
+        // Measured: refused every time, so on any long contract where the
+        // operator's record said the walker was due, it never came. It queues
+        // behind the signature now instead of being lost.
+        if(!engine.spawnNemesis())return false;
         break;
       }
       case 'boss':
@@ -440,15 +465,13 @@ export class Director{
         // first was still alive when the second came due, so the contract's
         // final boss silently never happened. The event is held instead and
         // retried once the sector is clear.
-        if(!engine.spawnBoss(this.bossId)){
-          this.pendingEvents.push(event);
-          break;
-        }
+        if(!engine.spawnBoss(this.bossId))return false;
         this.bossesSpawned++;
         break;
       }
       default:break;
     }
+    return true;
   }
 
   // Text describing the current phase, shown on the HUD.
