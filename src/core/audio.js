@@ -18,6 +18,13 @@ import {trackFor,trackSources,MUSIC_FORMATS} from '../../data/music.js';
 
 // Seconds to crossfade between two pieces of music.
 const MUSIC_FADE=1.1;
+// Seconds of overlap when a track loops back on itself. An authored piece is a
+// few minutes long and a contract can run thirty, so the seam is heard ten
+// times or more in one run — `element.loop` jumps from the last sample to the
+// first with nothing in between, which is the abrupt end-and-restart. Two
+// elements per track playing the same file let the tail be faded into the head
+// instead, which is the one thing a single media element cannot do.
+const LOOP_FADE=2.4;
 export class AudioEngine{
   constructor(settings={}){
     this.ctx=null;
@@ -348,50 +355,141 @@ export class AudioEngine{
     let entry=this.trackNodes.get(track.file);
     if(entry)return entry;
 
-    const element=new Audio();
-    element.loop=true;
-    element.preload='auto';
-    // Offered as <source> children rather than a single src so the browser
-    // picks the first format it can actually decode.
-    for(const candidate of trackSources(track)){
-      const source=document.createElement('source');
-      source.src=candidate.src;
-      source.type=candidate.type;
-      element.appendChild(source);
+    // Two elements on the same file: one playing, one waiting to take the loop
+    // over. They share the browser's cache, so the second costs a decode and
+    // not a download.
+    const build=()=>{
+      const el=new Audio();
+      el.preload='auto';
+      // Native looping is off — the whole point is to control the seam. It is
+      // switched back on below for a track too short to overlap.
+      el.loop=false;
+      // Offered as <source> children rather than a single src so the browser
+      // picks the first format it can actually decode.
+      for(const candidate of trackSources(track)){
+        const source=document.createElement('source');
+        source.src=candidate.src;
+        source.type=candidate.type;
+        el.appendChild(source);
+      }
+      el.volume=0;
+      return el;
+    };
+    const element=build();
+    const spare=build();
+
+    entry={element,track,failed:false,level:0,fade:null,
+           elements:[element,spare],active:0,loopGain:[1,0],loopTimer:null};
+
+    for(const el of entry.elements){
+      el.addEventListener('error',()=>{
+        entry.failed=true;
+        console.warn('[red-static] music track failed to load',track.file);
+        // Losing the authored track mid-session must not leave the run silent.
+        if(this.currentTrack===entry)this.startSynthMusic(this.synthKey||'blacksite');
+      });
+      // A stall is the browser waiting on more of the file. Left alone it
+      // recovers by itself; restarting or seeking here would turn a gap into a
+      // jump backwards, so the only thing to do is not make it worse.
+      el.addEventListener('pause',()=>{
+        // Anything that pauses the current track without the game asking is an
+        // interruption to recover from, not an instruction. Rate-limited so a
+        // browser that insists on keeping it paused is left alone rather than
+        // fought once per event.
+        if(this.currentTrack!==entry||entry.stopping)return;
+        // The outgoing half of a loop crossfade is paused on purpose, and so
+        // is anything that is not the element currently carrying the track.
+        // Restarting either would stack a second copy of the music.
+        if(entry.crossing||el!==entry.elements[entry.active])return;
+        const now=performance.now();
+        if(now-(entry.resumedAt||0)<600)return;
+        entry.resumedAt=now;
+        el.play().catch(()=>{});
+      });
     }
-
-    entry={element,track,failed:false,level:0,fade:null};
-    element.volume=0;
-
-    element.addEventListener('error',()=>{
-      entry.failed=true;
-      console.warn('[red-static] music track failed to load',track.file);
-      // Losing the authored track mid-session must not leave the run silent.
-      if(this.currentTrack===entry)this.startSynthMusic(this.synthKey||'blacksite');
-    });
-    // A stall is the browser waiting on more of the file. Left alone it
-    // recovers by itself; restarting or seeking here would turn a gap into a
-    // jump backwards, so the only thing to do is not make it worse.
-    element.addEventListener('pause',()=>{
-      // Anything that pauses the current track without the game asking is an
-      // interruption to recover from, not an instruction. Rate-limited so a
-      // browser that insists on keeping it paused is left alone rather than
-      // fought once per event.
-      if(this.currentTrack!==entry||entry.stopping)return;
-      const now=performance.now();
-      if(now-(entry.resumedAt||0)<600)return;
-      entry.resumedAt=now;
-      element.play().catch(()=>{});
-    });
 
     this.trackNodes.set(track.file,entry);
     return entry;
   }
 
-  // Applies a track's fade level and the global music setting to the element.
+  // Applies a track's fade level and the global music setting to both of its
+  // elements. `loopGain` is the seam crossfade and `level` is the track's own
+  // fade, and the two multiply: a track fading out across its own loop point
+  // has to keep both.
   applyTrackVolume(entry){
     if(!entry)return;
-    entry.element.volume=clamp(entry.level*this.musicLevel,0,1);
+    const base=entry.level*this.musicLevel;
+    const list=entry.elements||[entry.element];
+    for(let i=0;i<list.length;i++){
+      list[i].volume=clamp(base*(entry.loopGain?entry.loopGain[i]:1),0,1);
+    }
+  }
+
+  // Watches the playing element approach the end of the file and hands the
+  // loop to the other one, overlapping them for LOOP_FADE seconds.
+  //
+  // Driven by a timer rather than `timeupdate`, which browsers fire about four
+  // times a second — too coarse to start a two-second fade on time.
+  startLoopWatch(entry){
+    this.stopLoopWatch(entry);
+    entry.loopTimer=setInterval(()=>{
+      if(this.currentTrack!==entry||entry.stopping)return;
+      const from=entry.elements[entry.active];
+      const duration=from.duration;
+      // Metadata not in yet, or a stream with no known length. Nothing to
+      // schedule against; the native loop below is the safety net.
+      if(!isFinite(duration)||duration<=0)return;
+      if(duration<LOOP_FADE*2+1){
+        // Too short to overlap without fading across most of the piece. Let
+        // the browser loop it and stop watching.
+        from.loop=true;
+        this.stopLoopWatch(entry);
+        return;
+      }
+      if(entry.crossing||from.paused)return;
+      if(duration-from.currentTime>LOOP_FADE)return;
+
+      entry.crossing=true;
+      const next=1-entry.active;
+      const to=entry.elements[next];
+      to.currentTime=0;
+      entry.loopGain[next]=0;
+      this.applyTrackVolume(entry);
+      to.play()?.catch?.(()=>{
+        // The incoming element was refused. Fall back to the plain loop rather
+        // than letting the piece run off the end into silence.
+        entry.crossing=false;
+        from.loop=true;
+        this.stopLoopWatch(entry);
+      });
+
+      const started=performance.now();
+      const span=LOOP_FADE*1000;
+      const step=setInterval(()=>{
+        const t=Math.min(1,(performance.now()-started)/span);
+        // Equal-power, so the overlap holds a constant loudness instead of
+        // dipping through the middle the way a linear pair does.
+        entry.loopGain[next]=Math.sin(t*Math.PI/2);
+        entry.loopGain[entry.active]=Math.cos(t*Math.PI/2);
+        this.applyTrackVolume(entry);
+        if(t>=1){
+          clearInterval(step);
+          const old=entry.elements[entry.active];
+          old.pause();
+          old.currentTime=0;
+          entry.loopGain[entry.active]=0;
+          entry.active=next;
+          entry.element=to;
+          entry.loopGain[next]=1;
+          entry.crossing=false;
+          this.applyTrackVolume(entry);
+        }
+      },40);
+    },200);
+  }
+
+  stopLoopWatch(entry){
+    if(entry?.loopTimer){clearInterval(entry.loopTimer);entry.loopTimer=null}
   }
 
   // Crossfades on a timer rather than an AudioParam ramp: the element is not
@@ -433,17 +531,27 @@ export class AudioEngine{
         if(this.currentTrack&&!resuming){
           const previous=this.currentTrack;
           previous.stopping=true;
+          this.stopLoopWatch(previous);
           this.fadeTrack(previous,0);
           setTimeout(()=>{
-            if(this.currentTrack!==previous)previous.element.pause();
+            if(this.currentTrack!==previous)for(const el of previous.elements)el.pause();
             previous.stopping=false;
           },MUSIC_FADE*1000);
         }
         this.currentTrack=entry;
         entry.stopping=false;
-        if(!resuming)entry.element.currentTime=0;
+        if(!resuming){
+          // A fresh start rewinds both halves and puts the loop back on the
+          // first one, so a track resumed later does not come back mid-seam.
+          entry.crossing=false;
+          entry.active=0;
+          entry.element=entry.elements[0];
+          entry.loopGain[0]=1;entry.loopGain[1]=0;
+          for(const el of entry.elements){el.pause();el.currentTime=0}
+        }
         this.applyTrackVolume(entry);
         const played=entry.element.play();
+        this.startLoopWatch(entry);
         this.fadeTrack(entry,1,resuming?.25:MUSIC_FADE);
         // Autoplay can still be refused before the unlock gesture lands.
         played?.catch?.(err=>{
@@ -466,9 +574,12 @@ export class AudioEngine{
     // Flagged so the element's own pause handler reads this as the game
     // stopping the music rather than as an interruption to recover from.
     entry.stopping=true;
+    // The loop hand-off must not fire during the fade out, or the piece the
+    // game just stopped starts a fresh copy of itself on the other element.
+    this.stopLoopWatch(entry);
     this.fadeTrack(entry,0,.5);
     setTimeout(()=>{
-      if(this.currentTrack!==entry)entry.element.pause();
+      if(this.currentTrack!==entry)for(const el of entry.elements)el.pause();
       entry.stopping=false;
     },520);
   }

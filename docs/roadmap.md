@@ -284,3 +284,84 @@ Remaining:
    before the next step — so replays and daily contracts are unaffected.
    `tools/smooth.mjs` measures it, and reports STALLED rather than a flawless
    zero if the operative it is measuring never actually moved.
+18. ~~Make the performance readout work under the renderer it exists for.~~ Done.
+   `src/render/gl/deferred.js` never touched the profiler: the Canvas 2D path
+   closes each frame with `profiler.mark('render'); profiler.end()`, the GL path
+   did not, so the frame never closed and no sample was ever recorded. Measured
+   on the same contract with the same input — Canvas 2D 90 samples, p50 1.9ms,
+   p95 5.7; deferred WebGL2 **0 samples, every percentile zero**. The panel
+   still drew and the fps line still ticked over, because that is computed
+   separately, so it looked like it was working. That is the worst way for an
+   instrument to fail, and it was failing on the only renderer an iPhone will
+   ever select.
+   The frame is now closed under GL, and the per-pass costs the renderer already
+   measured are handed to the profiler rather than timed twice.
+   Two things had to be added before the numbers meant anything:
+   * **SCREEN — the interval between presented frames.** GL commands are queued
+     and return immediately, so the CPU frame cost cannot see the GPU at all.
+     Measured under the software rasteriser: CPU p50 **1.6ms** against a screen
+     p50 of **183ms**. With only the CPU number the readout would have claimed
+     600 fps while the game ran at five. The panel now leads with SCREEN, and
+     with `outside`, the difference between the two — the one honest way to talk
+     about GPU cost from JavaScript, since both halves are measured rather than
+     inferred.
+   * **A tail that is not truncated.** The first version discarded any interval
+     over 250ms as "the tab was backgrounded", which on a slow renderer threw
+     away every frame worse than the cap and reported 250ms as the worst case —
+     a profiler built on percentiles quietly cutting off its own. The tab case
+     is now handled where the fact is actually known, in the frame loop's
+     visibility handler.
+   `?gpusync=1` forces a `gl.finish()` so the frame's true cost can be read on a
+   device with no console attached. It is reported next to the interval it
+   should match, because it does not always match: measured here at 0.93ms
+   against a 183ms frame, which says the work is happening somewhere `finish`
+   cannot see. SCREEN is the authority; that line is a hint.
+   In portrait the panel now stands clear of the touch controls, which are DOM
+   elements over the canvas — portrait being the orientation the readout exists
+   for.
+19. ~~The extraction window that nobody could see.~~ Fixed, and it was three
+   faults stacked on one moment. Reproduced on a real twenty-minute timeline
+   rather than reasoned about:
+   * `director.phaseLabel()` tested for a boss **before** extraction, so on any
+     contract whose signature was still standing when the clock ran out — the
+     normal case on a long one — the HUD went on reading COMMAND SIGNATURE
+     ACTIVE for the whole sixty-second window and never once said the door was
+     open. Extraction now outranks the signature and reads EXTRACT NOW //
+     SIGNATURE ACTIVE when both are true.
+   * A twenty-minute contract schedules a boss at 42% and its climax at 74%.
+     `spawnBoss` refuses while one is already in the sector and the director
+     swallowed the refusal, so on the measured timeline — first boss spawned at
+     t=504s, still alive at t=888s — the contract's final boss silently never
+     happened. Refused events are held and retried the moment the sector is
+     clear: verified, second signature at t=951s, `bossesSpawned` 2 rather
+     than 1.
+   * The window announced itself once, for four seconds, into a boss fight. It
+     now calls again at 30, 15 and 5 seconds while the operative is still away
+     from the beacon, and the beacon's own edge arrow is the largest marker on
+     screen and pulses.
+20. ~~Make the heads-up display readable on the device it is played on.~~
+   * Off-screen arrows were authored against a desktop window and were specks
+     on a phone. They now scale off the short edge of the viewport — so a small
+     screen gets proportionally more arrow, not less — carry a dark backing and
+     a hairline edge so they survive a bright floor, and the extraction beacon
+     outsizes everything else and pulses.
+   * Radio traffic was 11px, and **10px on a phone**. Dialogue that cannot be
+     read during a firefight may as well not have been written; it is 15px with
+     a shadow, and the type goes up on a small screen rather than down.
+   * The signature's health bar was the one element in the top HUD positioned
+     absolutely at a fixed offset instead of being a real grid item, and it was
+     the one that collided — printing over the contract name, the clock, the
+     extraction countdown and the radio traffic. It is now a row of the stack in
+     both shapes, which is what the rest of that region already promised.
+   * Announcements stacked four deep at a fixed size over the same furniture and
+     ran off both edges of a phone. They sit clear of the HUD, fit themselves to
+     the width, cap at three, and a repeated line refreshes instead of printing
+     a column of itself.
+21. ~~Stop the music restarting abruptly on long contracts.~~ Tracks played on
+   `element.loop`, which jumps from the last sample to the first with nothing in
+   between. A piece is a few minutes long and a contract can run thirty, so that
+   seam was heard ten times or more in a run. Each track now holds two elements
+   on the same file and hands the loop from one to the other over a 2.4s
+   equal-power crossfade — the one thing a single media element cannot do for
+   itself. A track too short to overlap keeps the native loop, and so does one
+   whose length the browser will not report.

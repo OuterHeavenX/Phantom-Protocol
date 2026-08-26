@@ -40,6 +40,19 @@ import {buildDressing,LIGHT,hexToRgb} from './dressing.js';
 import {presetForSettings} from './presets.js';
 import {probeWebGL2} from './support.js';
 import {Renderer} from '../renderer.js';
+import {profiler} from '../../core/profiler.js';
+
+// ?gpusync=1 makes every frame wait for the GPU before it is timed, so
+// `timings.gpu` becomes the real cost of the frame rather than the cost of
+// queueing it. It destroys pipelining and is a diagnostic, not a mode to play
+// in — but it is the only way to answer "is the GPU the ceiling?" on a device
+// with no console attached, which is the whole point of the readout.
+const GPU_SYNC=(()=>{
+  try{
+    const value=new URLSearchParams(location.search).get('gpusync');
+    return value!==null&&value!=='0'&&value.toLowerCase()!=='false';
+  }catch{return false}
+})();
 
 const MAX_PARTICLES=20000;
 const MAX_DYNAMIC_LIGHTS=192;
@@ -79,7 +92,11 @@ export class DeferredRenderer{
     // monitor's. It destroys pipelining, so it is a diagnostic and not a mode
     // to play in.
     this.timings={gbuffer:0,lights:0,particles:0,bloom:0,composite:0,upload:0,sprites:0,gpu:0};
-    this.syncTiming=false;
+    // `?gpusync=1` turns the stall on in a normal contract. Without it the
+    // per-pass numbers are submission costs and the readout says so; with it
+    // they are what the GPU actually did, at the price of the pipelining. This
+    // is how a real device answers "is it the GPU?" with no console attached.
+    this.syncTiming=GPU_SYNC;
 
     this.buildLayers();
     this.initGL();
@@ -138,6 +155,9 @@ export class DeferredRenderer{
     // The production renderer, used for its sprite passes only. It draws onto
     // the offscreen layer and never presents to a screen.
     this.sprites=new Renderer(this.spriteCanvas,this.spriteCtx,this.engine);
+    // The performance readout lives on the 2D renderer and is drawn from here
+    // too, so it needs to know which renderer's numbers it is showing.
+    this.sprites.host=this;
     this.sprites.quality=this._quality;
 
     // Screen-space UI, stacked over the GL canvas as a real DOM element rather
@@ -598,7 +618,10 @@ export class DeferredRenderer{
   // ---- frame --------------------------------------------------------------
 
   render(){
-    if(this.failed)return;
+    // A failed renderer draws nothing, but Engine.update already opened the
+    // frame. Close it, or the profiler holds that frame open and loses the
+    // next one's sample to it.
+    if(this.failed){profiler.end();return}
     const now=performance.now();
     const dt=Math.min(.1,(now-this.lastFrame)/1000);
     this.lastFrame=now;
@@ -608,7 +631,7 @@ export class DeferredRenderer{
       this.frameTimes.reduce((a,b)=>a+b,0)/this.frameTimes.length));
     // The UI layer is drawn whatever happens: a lost context must not also
     // take the minimap and the pause prompt with it.
-    if(this.contextLost){this.drawUiLayer(dt);return}
+    if(this.contextLost){this.drawUiLayer(dt);profiler.mark('render');profiler.end();return}
 
     const gl=this.gl;
     const q=this.q;
@@ -776,6 +799,24 @@ export class DeferredRenderer{
 
     // 8. Screen-space UI, on its own canvas over the top.
     this.drawUiLayer(dt);
+
+    // The passes were already timed above to drive the visual test's overlay;
+    // this hands the same numbers to the profiler so the in-game readout can
+    // show where a slow frame went. They are CPU submission costs unless
+    // `syncTiming` is on — see the note on `timings`.
+    const t=this.timings;
+    profiler.phase('gbuffer',t.gbuffer);
+    profiler.phase('lights',t.lights);
+    profiler.phase('bloom',t.bloom);
+    profiler.phase('sprites',t.sprites+t.upload);
+    profiler.phase('composite',t.composite);
+    if(this.syncTiming)profiler.phase('gpu',t.gpu);
+    // Closes the render section and the frame, exactly as the Canvas 2D path
+    // does. Without this pair the profiler recorded no frames at all under GL,
+    // and the readout — written to be read off a phone, from the renderer the
+    // numbers are most needed from — showed zeros.
+    profiler.mark('render');
+    profiler.end();
   }
 
   // Everything in world space that the deferred path does not draw itself.

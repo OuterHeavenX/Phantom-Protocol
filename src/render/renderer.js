@@ -48,6 +48,9 @@ export class Renderer{
     this.engine=engine;
     this.settings=engine.settings;
     this.quality=this.settings.particles||'high';
+    // Set by the deferred renderer when it drives this one as its sprite pass.
+    // Null means this renderer is the one on screen.
+    this.host=null;
 
     // Offscreen buffer for the additive lighting pass.
     this.lightCanvas=document.createElement('canvas');
@@ -1734,10 +1737,19 @@ export class Renderer{
     const engine=this.engine;
     if(this.settings.showThreatIndicators===false)return;
     const camera=engine.camera;
-    const margin=42;
+    // Grows with the arrows: a bigger marker projected onto the same ellipse
+    // would hang off the edge of the screen.
+    const margin=Math.round(42*Math.max(1,Math.min(width,height)/560));
     const centerX=width/2,centerY=height/2;
 
-    const mark=(worldX,worldY,color,size=8)=>{
+    // Arrow scale. The old sizes were authored against a desktop window and
+    // read as specks on a phone held at arm's length, which is where this game
+    // is actually played. They are scaled off the short edge of the viewport so
+    // a small screen gets proportionally *more* arrow rather than less, and
+    // floored so they never shrink below what a thumb-sized target needs.
+    const unit=Math.max(1.35,Math.min(width,height)/430);
+
+    const mark=(worldX,worldY,color,size=8,options={})=>{
       const screen=camera.worldToScreen(worldX,worldY);
       if(screen.x>margin&&screen.x<width-margin&&screen.y>margin&&screen.y<height-margin)return;
       const angle=Math.atan2(screen.y-centerY,screen.x-centerX);
@@ -1750,47 +1762,70 @@ export class Renderer{
       );
       const x=centerX+Math.cos(angle)*scale;
       const y=centerY+Math.sin(angle)*scale;
+      // A marker that must not be missed breathes, so it separates itself from
+      // the static ones without needing to be bigger still.
+      const pulse=options.pulse?.82+Math.sin(engine.elapsed*6)*.18:1;
+      const s=size*unit*pulse;
       ctx.save();
       ctx.translate(x,y);
       ctx.rotate(angle);
-      ctx.fillStyle=color;
-      ctx.globalAlpha=.85;
+      // A dark backing so the arrow survives a bright floor or a bloom bloom-out
+      // underneath it. Without this the yellow beacon arrow disappeared
+      // completely over molten ground.
+      ctx.globalAlpha=.55;
+      ctx.fillStyle='rgba(2,8,11,.9)';
       ctx.beginPath();
-      ctx.moveTo(size,0);ctx.lineTo(-size*.7,-size*.7);ctx.lineTo(-size*.7,size*.7);
+      ctx.moveTo(s*1.24,0);
+      ctx.lineTo(-s*.92,-s*.92);
+      ctx.lineTo(-s*.92,s*.92);
       ctx.closePath();ctx.fill();
+      ctx.globalAlpha=1;
+      ctx.fillStyle=color;
+      ctx.beginPath();
+      ctx.moveTo(s,0);ctx.lineTo(-s*.7,-s*.7);ctx.lineTo(-s*.7,s*.7);
+      ctx.closePath();ctx.fill();
+      // A hairline edge in the same colour, which is what makes it read as a
+      // deliberate marker rather than a stray particle.
+      ctx.globalAlpha=.9;
+      ctx.strokeStyle='rgba(255,255,255,.55)';
+      ctx.lineWidth=Math.max(1,s*.09);
+      ctx.stroke();
       ctx.restore();
     };
 
-    if(engine.boss)mark(engine.boss.x,engine.boss.y,engine.boss.def.color,12);
+    if(engine.boss)mark(engine.boss.x,engine.boss.y,engine.boss.def.color,13);
+    // The way out, and the largest thing on the edge of the screen by some
+    // margin. A missed extraction window ends a twenty-minute contract, so
+    // this one pulses and outsizes everything else including the signature.
     if(engine.extraction&&engine.extractionPoint){
-      mark(engine.extractionPoint.x,engine.extractionPoint.y,'#f5d27a',12);
+      mark(engine.extractionPoint.x,engine.extractionPoint.y,'#ffd45e',18,{pulse:true});
     }
     // Objective markers take priority: they are what the operation is for.
     for(const cache of engine.mission?.caches||[]){
-      if(!cache.recovered)mark(cache.x,cache.y,'#8fd8ff',10);
+      if(!cache.recovered)mark(cache.x,cache.y,'#8fd8ff',12);
     }
     if(engine.mission?.asset&&!engine.mission.asset.downed&&!engine.mission.asset.aboard){
-      mark(engine.mission.asset.x,engine.mission.asset.y,'#ffd166',11);
+      mark(engine.mission.asset.x,engine.mission.asset.y,'#ffd166',13);
     }
     // A scanned vault stays flagged off-screen until it has been opened, and
     // so does the console holding it shut — that one is the objective, not the
     // chamber, until it goes down.
     for(const vault of engine.world.vaults){
       if(!vault.discovered||vault.breached)continue;
-      mark(vault.x,vault.y,'#f5d27a',9);
+      mark(vault.x,vault.y,'#f5d27a',11);
       if(vault.terminal&&!vault.terminal.broken){
-        mark(vault.terminal.x,vault.terminal.y,'#c895ff',9);
+        mark(vault.terminal.x,vault.terminal.y,'#c895ff',11);
       }
     }
     let eliteCount=0;
     for(const enemy of engine.enemies){
       if(enemy.dead||!enemy.elite||eliteCount>=6)continue;
-      mark(enemy.x,enemy.y,enemy.color,8);
+      mark(enemy.x,enemy.y,enemy.color,9);
       eliteCount++;
     }
     // Incoming strikes near the player but off-screen.
     for(const strike of engine.strikes){
-      if(strike.hostile)mark(strike.x,strike.y,'#ff5b5b',7);
+      if(strike.hostile)mark(strike.x,strike.y,'#ff5b5b',9,{pulse:true});
     }
   }
 
@@ -1906,18 +1941,38 @@ export class Renderer{
     if(!engine.announcements.length)return;
     ctx.save();
     ctx.textAlign='center';
-    let y=height*.24;
+    // In portrait the top third of the screen is mission header, codec traffic
+    // and the objective list, and announcements were landing on all three at
+    // once. They sit below that furniture instead — still well above the
+    // operative, and over floor rather than over other text.
+    // Clear of the top HUD in both shapes: the mission panel, the signature's
+    // health and the radio traffic stack down the middle, and a banner drawn
+    // at a quarter height landed on the codec in landscape and on all three in
+    // portrait.
+    const portrait=height>width;
+    let y=portrait?height*.44:height*.33;
+    const step=portrait?30:30;
     for(const announcement of engine.announcements){
       const fade=clamp(announcement.life/Math.min(.6,announcement.maxLife),0,1);
       const rise=(1-clamp(announcement.life/announcement.maxLife,0,1))*10;
       ctx.globalAlpha=fade;
-      ctx.font='bold 20px ui-monospace,SFMono-Regular,monospace';
+      // Fitted to the screen rather than fixed. 'EXTRACTION WINDOW OPEN //
+      // REACH THE BEACON' at a fixed 20px ran off both edges of a phone, which
+      // is the one message that most needed reading.
+      let size=portrait?19:20;
+      ctx.font=`bold ${size}px ui-monospace,SFMono-Regular,monospace`;
+      const room=width-24;
+      const measured=ctx.measureText(announcement.text).width;
+      if(measured>room){
+        size=Math.max(11,Math.floor(size*room/measured));
+        ctx.font=`bold ${size}px ui-monospace,SFMono-Regular,monospace`;
+      }
       ctx.lineWidth=4;
-      ctx.strokeStyle='rgba(0,0,0,.65)';
+      ctx.strokeStyle='rgba(0,0,0,.75)';
       ctx.strokeText(announcement.text,width/2,y-rise);
       ctx.fillStyle=announcement.color;
       ctx.fillText(announcement.text,width/2,y-rise);
-      y+=30;
+      y+=step;
     }
     ctx.restore();
   }
@@ -1935,10 +1990,54 @@ export class Renderer{
     ctx.font='10px ui-monospace,monospace';
     ctx.textAlign='left';
 
+    // Which renderer's numbers these are. Under GL the per-pass costs below are
+    // what the CPU spent handing work to the driver, not what the GPU spent
+    // doing it, and a reader who does not know that will conclude the frame is
+    // free when the display says otherwise. `?gpusync=1` makes them real.
+    const host=this.host;
+    const gl=!!host;
+    const synced=gl&&host.syncTiming;
+    const unaccounted=p.presentSamples?Math.max(0,p.presentMs.p50-p.frameMs.p50):0;
+
     const lines=[
-      [`${p.frameMs.p50||'--'}ms p50   ${p.frameMs.p95||'--'} p95   ${p.frameMs.p99||'--'} p99`,'#8ce6dc'],
-      [`worst ${p.frameMs.max||'--'}ms  (${p.fps.p50||0} fps typical, ${p.fps.worst||0} worst)`,'#8ce6dc'],
-      [`sim ${p.phasesMs.sim??'--'}ms   render ${p.phasesMs.render??'--'}ms`,'#8ce6dc'],
+      // Presented frames first: this is the number the player is complaining
+      // about, and the only one a queued GL frame cannot flatter.
+      [p.presentSamples
+        ? `SCREEN  ${p.presentMs.p50}ms p50   ${p.presentMs.p95} p95   ${p.presentMs.p99} p99`
+        : 'SCREEN  -- waiting for frames','#ffffff'],
+      [p.presentSamples
+        ? `        worst ${p.presentMs.max}ms  (${p.presentFps.p50} fps typical, ${p.presentFps.worst} worst)`
+        : '','#ffffff'],
+      [`cpu     ${p.frameMs.p50||'--'}ms p50   ${p.frameMs.p95||'--'} p95   ${p.frameMs.p99||'--'} p99`,'#8ce6dc'],
+      [`        sim ${p.phasesMs.sim??'--'}ms   render ${p.phasesMs.render??'--'}ms`,'#8ce6dc'],
+      // The gap between the two, which is the most useful number on the panel
+      // and the only honest way to talk about GPU cost from JavaScript. Nothing
+      // in this process can time what happens after the commands are handed
+      // over — the GPU, the compositor, the wait for vsync — but the interval
+      // between frames minus what the CPU spent is exactly that, by
+      // subtraction, and both halves are measured rather than inferred.
+      ...(unaccounted>1?[[
+        `outside  ${unaccounted.toFixed(1)}ms per frame past the CPU — gpu, compositor or vsync`,
+        unaccounted>8?'#ffd479':'rgba(140,230,220,.75)']]:[]),
+      // The renderer and its caveat sit high in the box on purpose. The rows
+      // below can be covered by the touch controls on a phone, and this is the
+      // line that stops a 2ms CPU frame being read as a fast game.
+      ...(gl?[
+        [`submit  gbuf ${p.phasesMs.gbuffer??'--'} light ${p.phasesMs.lights??'--'} bloom ${p.phasesMs.bloom??'--'} spr ${p.phasesMs.sprites??'--'} comp ${p.phasesMs.composite??'--'}`,
+         '#c8b4ff'],
+        // `gl.finish()` is supposed to make `gpu` the true cost of the frame.
+        // It is reported next to the interval it should match rather than on
+        // its own, because it does not always: under a rasteriser that hands
+        // the work to another process, finish returns once the commands are
+        // handed over and the number comes back a hundred times too small.
+        // Measured here at 0.98ms against a 167ms frame. SCREEN is the
+        // authority; this is a hint, and a hint that disagrees is telling you
+        // the work is happening somewhere finish cannot see.
+        [synced
+          ? `deferred WebGL2 · gl.finish() says ${p.phasesMs.gpu??'--'}ms vs ${p.presentMs.p50||'--'}ms on screen`
+          : 'deferred WebGL2 · pass times are CPU submit · ?gpusync=1',
+         synced?'#ffd479':'rgba(200,180,255,.75)']
+      ]:[]),
       // The clamp line is the point of the whole overlay. Anything above zero
       // means the simulation is discarding time and the contract is running
       // slower than its own clock.
@@ -1952,12 +2051,20 @@ export class Renderer{
       [`quality ${this.settings.particles||'high'}${this.settings.performanceMode?' · perf mode':''}${p.heapMb?`   heap ${p.heapMb}MB`:''}`,'rgba(140,230,220,.75)']
     ];
 
-    const boxH=lines.length*13+12;
+
+    const shown=lines.filter(([text])=>text);
+    const boxH=shown.length*13+12;
+    // In portrait the bottom of the screen belongs to the stick and the action
+    // buttons, and they are DOM elements over the canvas — a readout anchored
+    // to the bottom edge is read through them. Portrait is the orientation this
+    // overlay exists for, so it stands clear of them there.
+    const lift=height>width?128:10;
+    const top=height-boxH-lift;
     ctx.fillStyle='rgba(2,10,14,.72)';
-    ctx.fillRect(8,height-boxH-10,332,boxH);
-    lines.forEach(([line,color],i)=>{
+    ctx.fillRect(8,top,390,boxH);
+    shown.forEach(([line,color],i)=>{
       ctx.fillStyle=color;
-      ctx.fillText(line,16,height-boxH+4+i*13);
+      ctx.fillText(line,16,top+14+i*13);
     });
     ctx.restore();
   }

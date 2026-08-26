@@ -35,6 +35,15 @@ export class Profiler{
     this.counters={};             // name -> integer
     this.t0=0;
     this.lastMark=0;
+    // The interval between presented frames, on its own ring. This is not a
+    // sub-section of the CPU frame and must not share its clock: under a GPU
+    // renderer the CPU frame can finish in a millisecond while the display
+    // still only manages thirty a second, because GL commands are queued and
+    // return immediately. What the player feels is this number.
+    this.presents=new Float32Array(CAPACITY);
+    this.presentCount=0;
+    this.presentHead=0;
+    this.skipPresent=true;      // the first tick has no interval to report
     this.peakParticles=0;
     this.peakEnemies=0;
   }
@@ -48,8 +57,43 @@ export class Profiler{
   reset(){
     this.open=false;
     this.count=0;this.head=0;
+    this.presentCount=0;this.presentHead=0;this.skipPresent=true;
     this.phases={};this.counters={};
     this.peakParticles=0;this.peakEnemies=0;
+  }
+
+  // One presented frame, measured from the frame loop rather than from inside
+  // it.
+  //
+  // The only samples thrown away are the ones that describe something other
+  // than a slow frame: a tab returning from the background, which arrives as a
+  // single gap of seconds. `skipPresent` is set by the frame loop when that
+  // happens, so the judgement is made where the fact is known.
+  //
+  // Nothing else is discarded, and the ceiling is deliberately far out at two
+  // seconds. An earlier version dropped anything over 250ms, which on a
+  // renderer running at five frames a second silently threw away every frame
+  // worse than the cap and reported 250ms as the worst case — a profiler whose
+  // whole reason to exist is percentiles, quietly truncating its own tail.
+  present(ms){
+    if(!this.enabled)return;
+    if(this.skipPresent){this.skipPresent=false;return}
+    if(!(ms>0)||ms>2000)return;
+    this.presents[this.presentHead]=ms;
+    this.presentHead=(this.presentHead+1)%CAPACITY;
+    if(this.presentCount<CAPACITY)this.presentCount++;
+  }
+
+  // A duration the caller measured itself. The deferred renderer already times
+  // each of its passes to drive the visual test's overlay, and timing them a
+  // second time here would be both redundant and slightly different.
+  phase(name,ms){
+    // Only inside an open frame. A paused or level-up frame renders without
+    // the simulation having opened one, and a section recorded then is timed
+    // from a stale mark and lands in a slot no frame will ever close.
+    if(!this.enabled||!this.open)return;
+    const ring=this.phases[name]||(this.phases[name]=new Float32Array(CAPACITY));
+    ring[this.head]=ms;
   }
 
   begin(){
@@ -60,7 +104,7 @@ export class Profiler{
 
   // Close the section that started at the previous mark.
   mark(name){
-    if(!this.enabled)return;
+    if(!this.enabled||!this.open)return;
     const now=performance.now();
     const ring=this.phases[name]||(this.phases[name]=new Float32Array(CAPACITY));
     ring[this.head]=now-this.lastMark;
@@ -93,9 +137,9 @@ export class Profiler{
   // Percentiles over the live window. Sorting 240 floats a few times a second
   // is cheap next to the frame it is describing, and only happens when the
   // readout is actually being drawn.
-  percentiles(ring=this.frames){
-    if(!this.count)return{p50:0,p95:0,p99:0,max:0};
-    const slice=Array.prototype.slice.call(ring,0,this.count).sort((a,b)=>a-b);
+  percentiles(ring=this.frames,count=this.count){
+    if(!count)return{p50:0,p95:0,p99:0,max:0};
+    const slice=Array.prototype.slice.call(ring,0,count).sort((a,b)=>a-b);
     const at=q=>slice[Math.min(slice.length-1,Math.floor(slice.length*q))];
     return{p50:at(.5),p95:at(.95),p99:at(.99),max:slice[slice.length-1]};
   }
@@ -112,6 +156,7 @@ export class Profiler{
   // phone, or asserted in a test without going through the overlay.
   snapshot(){
     const p=this.percentiles();
+    const present=this.percentiles(this.presents,this.presentCount);
     const phases={};
     for(const name of Object.keys(this.phases))phases[name]=+this.phaseAverage(name).toFixed(2);
     const mem=performance.memory?.usedJSHeapSize;
@@ -119,6 +164,13 @@ export class Profiler{
       samples:this.count,
       frameMs:{p50:+p.p50.toFixed(2),p95:+p.p95.toFixed(2),p99:+p.p99.toFixed(2),max:+p.max.toFixed(2)},
       fps:{p50:p.p50?Math.round(1000/p.p50):0,worst:p.max?Math.round(1000/p.max):0},
+      // What reached the screen, as opposed to what the CPU spent. Slow p99
+      // here with a fast `frameMs` is the signature of a GPU-bound frame.
+      presentSamples:this.presentCount,
+      presentMs:{p50:+present.p50.toFixed(2),p95:+present.p95.toFixed(2),
+                 p99:+present.p99.toFixed(2),max:+present.max.toFixed(2)},
+      presentFps:{p50:present.p50?Math.round(1000/present.p50):0,
+                  worst:present.max?Math.round(1000/present.max):0},
       phasesMs:phases,
       counters:{...this.counters},
       peak:{particles:this.peakParticles,enemies:this.peakEnemies},
