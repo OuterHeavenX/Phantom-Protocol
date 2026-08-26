@@ -386,3 +386,28 @@ Remaining:
    Note for tuning, not fixed here: `boss@42%` and `nemesis@44%` still collide
    by design. The mechanism no longer loses the walker, but the two encounters
    arrive back to back rather than on their own beats.
+23. ~~Test the part of the game nobody was testing.~~ `tools/contract.mjs`.
+   Two run-breaking bugs in two rounds of playtesting, both past the fifteen
+   minute mark, both invisible to every tool in `tools/` — because everything
+   there tests a nine-hundred-tick slice, fifteen seconds of a contract that
+   runs twenty minutes. Both were found by a person playing.
+   It drives whole contracts at full length and asserts what a contract
+   promises: nothing scheduled goes missing without the director having a
+   record of holding it; the clock running out opens a window that has
+   somewhere to go and a phase line that says so, including with a signature
+   alive; the walker arrives when the record says it is due; and the contract
+   can actually be won. Three scenarios — `passive` (kills nothing, so the
+   extraction case), `lethal` (clears signatures, so the schedule runs to the
+   end) and `extract` (leaves, so the contract is winnable). About a minute per
+   scenario.
+   Two things were wrong with it before it was worth anything, and both are the
+   reason it is documented rather than just added:
+   * It measured outcome by asking `fireEvent` whether the event had run. The
+     bug it exists to catch is a director reporting success while dropping a
+     refused spawn, so it reported three clean contracts over code with the
+     fault reintroduced. Outcome is measured at the spawn now.
+   * It read the held-event queue once, at the window, and the director empties
+     that queue inside the same step that opens the window — so the evidence
+     was already gone. The queue is sampled every step instead.
+   Trusted only after being shown to fail: both bugs put back deliberately, all
+   eight symptoms caught, exit code 1.

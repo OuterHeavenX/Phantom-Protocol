@@ -33,7 +33,37 @@ node tools/ground-orientation.mjs
 
 node tools/smooth.mjs                      # frame pacing at 60/72/90/120/144 Hz
 node tools/smooth.mjs 120 1800             # one rate, longer sample
+
+node tools/contract.mjs                    # whole 20-minute contracts, all scenarios
+node tools/contract.mjs foundry 30         # one theatre at thirty minutes
+node tools/contract.mjs blacksite 20 lethal
 ```
+
+**Run `contract.mjs` on any change to the director, the mission or the run
+lifecycle.** Everything else here tests a nine-hundred-tick slice — fifteen
+seconds of a contract that runs twenty minutes — and two run-breaking bugs in
+two rounds of playtesting lived entirely past that horizon. A signature still
+standing when the clock ran out meant the phase line never said the extraction
+window had opened, and the window closed on the run; and a scheduled spawn
+refused because a signature was already present was thrown away rather than
+held, so a twenty-minute contract silently lost its own final boss and lost the
+walker every single time. Both were found by a person playing, not by anything
+in this directory.
+
+It runs three scenarios per contract. `passive` kills nothing, so every
+signature is still alive when the clock runs out — the extraction case.
+`lethal` clears signatures in about twenty seconds so the schedule runs to the
+end — the lost-event case. `extract` does that and then leaves, which asks
+whether the contract can be won at all. A twenty-minute contract is 72,000
+fixed steps and takes about a minute per scenario; that cost is the reason
+nothing was testing this, and not a reason to keep not testing it.
+
+Outcome is measured **at the spawn, not at the director**. The first version
+asked `fireEvent` whether the event had run, and the shape of the bug being
+tested for is a director that reports success while dropping a refused spawn —
+so it passed three clean contracts over code with the fault put back in. It was
+only trusted once it had been shown to fail: both bugs were reintroduced
+deliberately and it caught all eight symptoms.
 
 `smooth.mjs` drives the real engine at a chosen refresh rate and measures how
 evenly the picture actually travels — the second difference of on-screen
