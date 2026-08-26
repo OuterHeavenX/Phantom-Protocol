@@ -50,6 +50,7 @@
   <main id="top">
     <section class="hero" aria-labelledby="hero-title" data-hero>
       <div class="hero__environment" aria-hidden="true">
+        <img class="hero__art" src="./assets/observation-room.webp" alt="" fetchpriority="high" />
         <div class="facility-light facility-light--left"></div>
         <div class="facility-light facility-light--right"></div>
         <div class="window-frame" data-depth="0.86">
@@ -118,14 +119,20 @@
     <section class="placeholder-section" id="media">
       <div class="section-label">02 // SURVEILLANCE ARCHIVE</div>
       <h2>FIELD FOOTAGE<br />RECOVERED.</h2>
-      <div class="archive-frame">
+      <div class="archive-frame" data-archive>
+        <img class="archive-frame__image" data-archive-image src="./assets/footage-blacksite-zero.webp" alt="Recovered tactical footage from a wet corridor inside Blacksite Zero" loading="lazy" />
         <div class="archive-frame__scan"></div>
         <div class="archive-frame__meta">
-          <span>RECOVERED // BZ-043</span>
-          <span>BLACKSITE ZERO</span>
-          <span>OPERATIVE // UNKNOWN</span>
+          <span data-archive-id>RECOVERED // BZ-043</span>
+          <span data-archive-location>BLACKSITE ZERO</span>
+          <span data-archive-status>OPERATIVE // UNKNOWN</span>
         </div>
-        <div class="archive-frame__message">FOOTAGE SLOT // AWAITING CAPTURE</div>
+        <button class="archive-frame__play" type="button" data-archive-play aria-pressed="false">PLAY RECOVERED SIGNAL</button>
+        <div class="archive-frame__time"><span data-archive-time>00:00:00</span><span>SOURCE DAMAGED</span></div>
+      </div>
+      <div class="archive-selector" aria-label="Recovered footage files">
+        <button class="archive-file is-active" type="button" data-archive-file data-src="./assets/footage-blacksite-zero.webp" data-id="RECOVERED // BZ-043" data-location="BLACKSITE ZERO" data-status="OPERATIVE // UNKNOWN" data-alt="Recovered tactical footage from a wet corridor inside Blacksite Zero"><span>01</span><strong>CORRIDOR 04</strong><small>03:17 // SIGNAL LOSS</small></button>
+        <button class="archive-file" type="button" data-archive-file data-src="./assets/footage-red-desert.webp" data-id="RECOVERED // RD-019" data-location="RED DESERT" data-status="THEATRE // UNVERIFIED" data-alt="Aerial reconnaissance footage of a relay compound in the Red Desert"><span>02</span><strong>RELAY COMPOUND</strong><small>01:42 // ANOMALY</small></button>
       </div>
     </section>
 
@@ -145,7 +152,7 @@
         <div class="weapon-schematic__body"></div>
         <div class="weapon-schematic__stock"></div>
       </div>
-      <p class="section-intro">The production armory sequence will let scroll position physically evolve weapon silhouettes from issue configuration to final evolution.</p>
+      <p class="section-intro">Issued hardware does not stay issued. Every evolution trades control for output until the weapon stops resembling the thing you carried in.</p>
     </section>
 
     <section class="placeholder-section" id="intelligence">

@@ -13,6 +13,7 @@ const signalStrength = document.querySelector('[data-signal-strength]');
 const menuButton = document.querySelector('[data-menu-button]');
 const mobileMenu = document.querySelector('[data-mobile-menu]');
 const abortButton = document.querySelector('[data-abort]');
+const archive = document.querySelector('[data-archive]');
 
 function signalHit() {
   if (!flash || reduceMotion) return;
@@ -156,6 +157,55 @@ function setupSectionInterference() {
   observer.observe(intel);
 }
 
+function setupArchive() {
+  if (!archive) return;
+  const image = archive.querySelector('[data-archive-image]');
+  const id = archive.querySelector('[data-archive-id]');
+  const location = archive.querySelector('[data-archive-location]');
+  const status = archive.querySelector('[data-archive-status]');
+  const play = archive.querySelector('[data-archive-play]');
+  const time = archive.querySelector('[data-archive-time]');
+  let timer;
+  let frames = 0;
+
+  const stop = () => {
+    window.clearInterval(timer);
+    archive.classList.remove('is-playing');
+    play?.setAttribute('aria-pressed', 'false');
+    if (play) play.textContent = 'PLAY RECOVERED SIGNAL';
+  };
+
+  document.querySelectorAll('[data-archive-file]').forEach((button) => {
+    button.addEventListener('click', () => {
+      stop();
+      document.querySelectorAll('[data-archive-file]').forEach((item) => item.classList.remove('is-active'));
+      button.classList.add('is-active');
+      if (image) { image.src = button.dataset.src; image.alt = button.dataset.alt; }
+      if (id) id.textContent = button.dataset.id;
+      if (location) location.textContent = button.dataset.location;
+      if (status) status.textContent = button.dataset.status;
+      if (time) time.textContent = '00:00:00';
+      signalHit();
+    });
+  });
+
+  play?.addEventListener('click', () => {
+    if (archive.classList.contains('is-playing')) { stop(); return; }
+    frames = 0;
+    archive.classList.add('is-playing');
+    play.setAttribute('aria-pressed', 'true');
+    play.textContent = 'PAUSE SIGNAL';
+    timer = window.setInterval(() => {
+      frames += 1;
+      const seconds = String(Math.floor(frames / 10)).padStart(2, '0');
+      const hundredths = String((frames % 10) * 10).padStart(2, '0');
+      if (time) time.textContent = `00:${seconds}:${hundredths}`;
+      if (frames % 29 === 0) signalHit();
+      if (frames >= 100) stop();
+    }, 100);
+  });
+}
+
 runBoot();
 updateHeader();
 setupHeroTracking();
@@ -163,4 +213,5 @@ setupSignalStrength();
 setupMobileMenu();
 setupAbort();
 setupSectionInterference();
+setupArchive();
 window.addEventListener('scroll', updateHeader, { passive: true });
