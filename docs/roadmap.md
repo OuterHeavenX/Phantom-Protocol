@@ -284,3 +284,38 @@ Remaining:
    before the next step — so replays and daily contracts are unaffected.
    `tools/smooth.mjs` measures it, and reports STALLED rather than a flawless
    zero if the operative it is measuring never actually moved.
+18. ~~Make the performance readout work under the renderer it exists for.~~ Done.
+   `src/render/gl/deferred.js` never touched the profiler: the Canvas 2D path
+   closes each frame with `profiler.mark('render'); profiler.end()`, the GL path
+   did not, so the frame never closed and no sample was ever recorded. Measured
+   on the same contract with the same input — Canvas 2D 90 samples, p50 1.9ms,
+   p95 5.7; deferred WebGL2 **0 samples, every percentile zero**. The panel
+   still drew and the fps line still ticked over, because that is computed
+   separately, so it looked like it was working. That is the worst way for an
+   instrument to fail, and it was failing on the only renderer an iPhone will
+   ever select.
+   The frame is now closed under GL, and the per-pass costs the renderer already
+   measured are handed to the profiler rather than timed twice.
+   Two things had to be added before the numbers meant anything:
+   * **SCREEN — the interval between presented frames.** GL commands are queued
+     and return immediately, so the CPU frame cost cannot see the GPU at all.
+     Measured under the software rasteriser: CPU p50 **1.6ms** against a screen
+     p50 of **183ms**. With only the CPU number the readout would have claimed
+     600 fps while the game ran at five. The panel now leads with SCREEN, and
+     with `outside`, the difference between the two — the one honest way to talk
+     about GPU cost from JavaScript, since both halves are measured rather than
+     inferred.
+   * **A tail that is not truncated.** The first version discarded any interval
+     over 250ms as "the tab was backgrounded", which on a slow renderer threw
+     away every frame worse than the cap and reported 250ms as the worst case —
+     a profiler built on percentiles quietly cutting off its own. The tab case
+     is now handled where the fact is actually known, in the frame loop's
+     visibility handler.
+   `?gpusync=1` forces a `gl.finish()` so the frame's true cost can be read on a
+   device with no console attached. It is reported next to the interval it
+   should match, because it does not always match: measured here at 0.93ms
+   against a 183ms frame, which says the work is happening somewhere `finish`
+   cannot see. SCREEN is the authority; that line is a hint.
+   In portrait the panel now stands clear of the touch controls, which are DOM
+   elements over the canvas — portrait being the orientation the readout exists
+   for.

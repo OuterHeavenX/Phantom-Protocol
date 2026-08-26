@@ -327,6 +327,12 @@ function tick(now){
   // back. It also drove the simulation accumulator negative and stalled the
   // fixed step until it recovered.
   const dt=clamp((now-session.last)/1000,0,.1);
+  // The interval between presented frames, recorded before it is clamped. This
+  // is the only timing in the game that a GPU renderer cannot flatter: GL
+  // commands are queued and return immediately, so a frame can cost the CPU a
+  // millisecond and still reach the screen thirty times a second. What the
+  // player feels is how far apart these arrive.
+  profiler.present(now-session.last);
   session.last=now;
 
   input.poll();
@@ -557,6 +563,10 @@ document.addEventListener('visibilitychange',()=>{
   if(document.hidden&&session&&!session.engine.ended&&!session.pause.open){
     session.pause.show();
   }
+  // requestAnimationFrame stops while the tab is hidden, so the first frame
+  // back is separated from the last one by however long the player was away.
+  // That is not a slow frame and must not be recorded as the worst one.
+  if(!document.hidden)profiler.skipPresent=true;
 });
 
 // Surface fatal errors instead of leaving a black screen.

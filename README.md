@@ -205,6 +205,20 @@ is a world-space constant rather than a reading off the camera. `?collisiondebug
 draws every gameplay shape from live simulation data under either renderer. See
 [`docs/collision-integrity.md`](docs/collision-integrity.md).
 
+**Performance, on the device that matters.** Turn on *Performance readout* in
+settings and the game reports what it is actually doing, in a panel meant to be
+read off a phone with no console attached. It leads with **SCREEN** — the
+interval between presented frames — because that is the only timing a GPU
+renderer cannot flatter: WebGL commands are queued and return immediately, so
+the CPU can finish a frame in under two milliseconds while the display manages
+five a second. `outside` is the difference between the two, which is GPU,
+compositor and vsync by subtraction. **STEP CLAMPS** above zero means the
+simulation is discarding time and the contract is running slower than its own
+clock, which is the difference between "slow" and "wrong". `?gpusync=1` forces a
+`gl.finish()` for a direct reading of the frame's cost, reported next to the
+interval it should match — it does not always agree, and when it disagrees the
+work is happening somewhere `finish` cannot see.
+
 **Audio.** Sound effects are fully synthesized at runtime from oscillators and shaped
 noise (`src/core/audio.js`) — a complete sound library with no samples.
 

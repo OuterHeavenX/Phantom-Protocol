@@ -48,6 +48,9 @@ export class Renderer{
     this.engine=engine;
     this.settings=engine.settings;
     this.quality=this.settings.particles||'high';
+    // Set by the deferred renderer when it drives this one as its sprite pass.
+    // Null means this renderer is the one on screen.
+    this.host=null;
 
     // Offscreen buffer for the additive lighting pass.
     this.lightCanvas=document.createElement('canvas');
@@ -1935,10 +1938,54 @@ export class Renderer{
     ctx.font='10px ui-monospace,monospace';
     ctx.textAlign='left';
 
+    // Which renderer's numbers these are. Under GL the per-pass costs below are
+    // what the CPU spent handing work to the driver, not what the GPU spent
+    // doing it, and a reader who does not know that will conclude the frame is
+    // free when the display says otherwise. `?gpusync=1` makes them real.
+    const host=this.host;
+    const gl=!!host;
+    const synced=gl&&host.syncTiming;
+    const unaccounted=p.presentSamples?Math.max(0,p.presentMs.p50-p.frameMs.p50):0;
+
     const lines=[
-      [`${p.frameMs.p50||'--'}ms p50   ${p.frameMs.p95||'--'} p95   ${p.frameMs.p99||'--'} p99`,'#8ce6dc'],
-      [`worst ${p.frameMs.max||'--'}ms  (${p.fps.p50||0} fps typical, ${p.fps.worst||0} worst)`,'#8ce6dc'],
-      [`sim ${p.phasesMs.sim??'--'}ms   render ${p.phasesMs.render??'--'}ms`,'#8ce6dc'],
+      // Presented frames first: this is the number the player is complaining
+      // about, and the only one a queued GL frame cannot flatter.
+      [p.presentSamples
+        ? `SCREEN  ${p.presentMs.p50}ms p50   ${p.presentMs.p95} p95   ${p.presentMs.p99} p99`
+        : 'SCREEN  -- waiting for frames','#ffffff'],
+      [p.presentSamples
+        ? `        worst ${p.presentMs.max}ms  (${p.presentFps.p50} fps typical, ${p.presentFps.worst} worst)`
+        : '','#ffffff'],
+      [`cpu     ${p.frameMs.p50||'--'}ms p50   ${p.frameMs.p95||'--'} p95   ${p.frameMs.p99||'--'} p99`,'#8ce6dc'],
+      [`        sim ${p.phasesMs.sim??'--'}ms   render ${p.phasesMs.render??'--'}ms`,'#8ce6dc'],
+      // The gap between the two, which is the most useful number on the panel
+      // and the only honest way to talk about GPU cost from JavaScript. Nothing
+      // in this process can time what happens after the commands are handed
+      // over — the GPU, the compositor, the wait for vsync — but the interval
+      // between frames minus what the CPU spent is exactly that, by
+      // subtraction, and both halves are measured rather than inferred.
+      ...(unaccounted>1?[[
+        `outside  ${unaccounted.toFixed(1)}ms per frame past the CPU — gpu, compositor or vsync`,
+        unaccounted>8?'#ffd479':'rgba(140,230,220,.75)']]:[]),
+      // The renderer and its caveat sit high in the box on purpose. The rows
+      // below can be covered by the touch controls on a phone, and this is the
+      // line that stops a 2ms CPU frame being read as a fast game.
+      ...(gl?[
+        [`submit  gbuf ${p.phasesMs.gbuffer??'--'} light ${p.phasesMs.lights??'--'} bloom ${p.phasesMs.bloom??'--'} spr ${p.phasesMs.sprites??'--'} comp ${p.phasesMs.composite??'--'}`,
+         '#c8b4ff'],
+        // `gl.finish()` is supposed to make `gpu` the true cost of the frame.
+        // It is reported next to the interval it should match rather than on
+        // its own, because it does not always: under a rasteriser that hands
+        // the work to another process, finish returns once the commands are
+        // handed over and the number comes back a hundred times too small.
+        // Measured here at 0.98ms against a 167ms frame. SCREEN is the
+        // authority; this is a hint, and a hint that disagrees is telling you
+        // the work is happening somewhere finish cannot see.
+        [synced
+          ? `deferred WebGL2 · gl.finish() says ${p.phasesMs.gpu??'--'}ms vs ${p.presentMs.p50||'--'}ms on screen`
+          : 'deferred WebGL2 · pass times are CPU submit · ?gpusync=1',
+         synced?'#ffd479':'rgba(200,180,255,.75)']
+      ]:[]),
       // The clamp line is the point of the whole overlay. Anything above zero
       // means the simulation is discarding time and the contract is running
       // slower than its own clock.
@@ -1952,12 +1999,20 @@ export class Renderer{
       [`quality ${this.settings.particles||'high'}${this.settings.performanceMode?' · perf mode':''}${p.heapMb?`   heap ${p.heapMb}MB`:''}`,'rgba(140,230,220,.75)']
     ];
 
-    const boxH=lines.length*13+12;
+
+    const shown=lines.filter(([text])=>text);
+    const boxH=shown.length*13+12;
+    // In portrait the bottom of the screen belongs to the stick and the action
+    // buttons, and they are DOM elements over the canvas — a readout anchored
+    // to the bottom edge is read through them. Portrait is the orientation this
+    // overlay exists for, so it stands clear of them there.
+    const lift=height>width?128:10;
+    const top=height-boxH-lift;
     ctx.fillStyle='rgba(2,10,14,.72)';
-    ctx.fillRect(8,height-boxH-10,332,boxH);
-    lines.forEach(([line,color],i)=>{
+    ctx.fillRect(8,top,390,boxH);
+    shown.forEach(([line,color],i)=>{
       ctx.fillStyle=color;
-      ctx.fillText(line,16,height-boxH+4+i*13);
+      ctx.fillText(line,16,top+14+i*13);
     });
     ctx.restore();
   }
