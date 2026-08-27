@@ -88,5 +88,20 @@ The control matters. A renderer comparison that has not first been shown to
 agree with itself cannot distinguish a renderer bug from a harness that is
 comparing two runs which had already drifted apart before the first tick.
 
+`rotor-duck.mjs` asserts that a gunship overhead pushes the score out of the
+way, and that it does so as a continuous side-chain rather than as an event.
+The distinction is the whole point: the weapons duck the music through the
+`DUCKING` table, which pulls, holds and releases — the right shape for a sound
+ninety milliseconds long and the wrong one for a rotor that is audible for the
+length of a flyover. It measures `rotorDuck` directly rather than the combined
+`musicDuckLevel`, because the contract is live while the harness runs and real
+gunfire moves the event duck the whole time; reading the combined level
+measured the firefight and blamed the rotor.
+
+Every assertion in it was shown to fail before it was trusted, by putting each
+defect back one at a time: no duck, an instant release, ducks that multiply
+instead of taking the deeper of the two, a teardown that leaves the score held
+down, and an eased attack instead of an immediate one.
+
 `parity.mjs` expects the game at `http://127.0.0.1:8931` and Playwright's
 Chromium; edit the two constants at the top if either differs.

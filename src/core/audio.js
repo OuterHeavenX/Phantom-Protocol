@@ -102,6 +102,26 @@ const DUCKING={
   weapon:[.22,.12],mechStep:[.24,.2],shoot:[.2,.1],shootHeavy:[.28,.16],laser:[.22,.14],scramble:[.2,.14],
   explode:[.42,.3],boss:[.5,.9],hurt:[.3,.24],victory:[.55,1],defeat:[.55,1]
 };
+
+// How far a gunship overhead pushes the score down, at its closest.
+//
+// The table above cannot express this. Every entry in it is an event: a pull
+// of some depth, a hold of some length, and then a release, which is the right
+// shape for something ninety milliseconds long. A rotor is audible for the
+// whole flyover — often half a minute — so driving it through `duckMusic` on
+// every frame would just pin the score down for the duration and leave
+// `relaxDuck` fighting the retrigger the entire time.
+//
+// So the rotor gets the other kind of duck: a continuous one, held at a depth
+// that follows how close the helicopter is. It takes less than a rifle does at
+// full depth, because it takes it for a thousand times longer.
+const ROTOR_DUCK=.35;
+// Seconds for the score to come back once the gunship starts leaving. The pull
+// down is immediate and the lift is eased, which is the same asymmetry the
+// event duck has and is there for the same reason — room has to exist before
+// the sound needs it, and a gunship passing behind a ridgeline should not make
+// the music surge.
+const ROTOR_DUCK_RELEASE=1.6;
 // Seconds of overlap when a track loops back on itself. An authored piece is a
 // few minutes long and a contract can run thirty, so the seam is heard ten
 // times or more in one run — `element.loop` jumps from the last sample to the
@@ -575,7 +595,15 @@ export class AudioEngine{
   // synthesized bed answers to, so one slider and one mute move both.
   get musicLevel(){
     const base=this.settings.muted?0:clamp(this.settings.master*this.settings.music,0,1);
-    return base*(this.duck??1);
+    return base*this.musicDuckLevel;
+  }
+
+  // The score answers to two ducks at once: the event duck that gunfire pulls
+  // and lets go of, and the continuous one the rotor holds for as long as a
+  // gunship is overhead. It takes whichever is deeper rather than multiplying
+  // them, so a firefight underneath a helicopter does not stack into silence.
+  get musicDuckLevel(){
+    return Math.min(this.duck??1,this.rotorDuck??1);
   }
 
   // ---- Rotor -------------------------------------------------------------
@@ -645,6 +673,9 @@ export class AudioEngine{
   setRotor(level){
     if(!this.ready||!this.ctx)return;
     const target=clamp(level,0,1);
+    // Before the branches, so the score is let back up on the same frames the
+    // rotor is fading out — including the ones that return early below.
+    this.updateRotorDuck(target);
     if(target<=0){
       if(!this.rotor)return;
       this.rotor.out.gain.setTargetAtTime(0,this.ctx.currentTime,.25);
@@ -668,10 +699,49 @@ export class AudioEngine{
     this.rotor.lfo.frequency.setTargetAtTime(11+target*5,this.ctx.currentTime,.4);
   }
 
+  // The rotor's side-chain on the music. Called from `setRotor`, so it tracks
+  // the same distance the rotor's own gain does and cannot drift out of step
+  // with what is actually audible.
+  //
+  // Timed off the wall clock rather than a passed-in delta: this is driven from
+  // the render loop, whose frame length is not the simulation's fixed step, and
+  // a release measured in seconds should mean seconds however fast the game is
+  // drawing. The clamp keeps a backgrounded tab, which stops delivering frames
+  // entirely, from returning to a five-second gap and snapping the score back
+  // in one jump.
+  updateRotorDuck(level){
+    const now=performance.now();
+    const elapsed=this.rotorDuckAt?Math.min((now-this.rotorDuckAt)/1000,.25):0;
+    this.rotorDuckAt=now;
+
+    const current=this.rotorDuck??1;
+    const target=1-clamp(level,0,1)*ROTOR_DUCK;
+    let next=target<current
+      ? target
+      : Math.min(target,current+ROTOR_DUCK_RELEASE*elapsed);
+    // Settle exactly, or the last fraction of the lift is spent below full
+    // volume forever and the score never quite comes back.
+    if(next>.998)next=1;
+
+    this.rotorDuck=next;
+    // Only when it moved enough to hear. This runs every frame, and each call
+    // schedules automation on the music gain and writes every <audio> element's
+    // volume; doing that for a change of a thousandth is work with no audible
+    // result.
+    if(Math.abs(next-current)>.002)this.applyDuck();
+  }
+
   stopRotor(){
     if(!this.rotor)return;
     const r=this.rotor;
     this.rotor=null;
+    // Released here and not only in `updateRotorDuck`, because the engine can
+    // tear the rotor down directly at the end of a contract. Nothing would call
+    // `setRotor` again afterwards, so the score would stay held down under a
+    // helicopter that no longer exists.
+    this.rotorDuck=1;
+    this.rotorDuckAt=0;
+    this.applyDuck();
     try{
       r.out.gain.setTargetAtTime(0,this.ctx.currentTime,.2);
       const stopAt=this.ctx.currentTime+1.2;
@@ -711,7 +781,7 @@ export class AudioEngine{
   }
 
   applyDuck(){
-    const level=this.duck??1;
+    const level=this.musicDuckLevel;
     if(this.musicDuck&&this.ctx){
       this.musicDuck.gain.setTargetAtTime(level,this.ctx.currentTime,.03);
     }
