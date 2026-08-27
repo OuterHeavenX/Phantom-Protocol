@@ -4,6 +4,7 @@ import {PASSIVES,MAX_PASSIVE_LEVEL} from '../../data/passives.js';
 import {MAPS,DURATIONS,DIFFICULTIES,DIFFICULTIES_BY_ID} from '../../data/maps.js';
 import {ENEMIES,ELITES} from '../../data/enemies.js';
 import {BOSSES_BY_ID} from '../../data/bosses.js';
+import {presetForSettings} from '../render/gl/presets.js';
 import {
   DEV_TREE,DOCTRINE_BRANCH,devNodeCost,devRequirementsMet,devBonuses,accountLevel,
   ACHIEVEMENTS,ACHIEVEMENT_CATEGORIES,MILESTONES,INTEL_FILES
@@ -1773,6 +1774,7 @@ export class Screens{
           ${select('renderer','Renderer',settings.renderer||'auto',
             [['auto','AUTOMATIC'],['gl','DEFERRED (WEBGL2)'],['2d','CANVAS 2D']])}
           <p class="muted small" id="rendererNote">${rendererNote(settings.renderer||'auto')}</p>
+          <p class="muted small" id="rendererLive">${rendererLive(settings)}</p>
           ${select('particles','Effect density',settings.particles,[['low','LOW'],['medium','MEDIUM'],['high','HIGH']])}
           ${slider('screenShake','Screen shake',settings.screenShake,0,1.5,.1)}
           ${toggle('damageNumbers','Damage numbers',settings.damageNumbers)}
@@ -1879,6 +1881,8 @@ export class Screens{
       // innerHTML rather than textContent: the note is already escaped, and the
       // initial render puts it in through the same path.
       if(note)note.innerHTML=rendererNote(settings.renderer);
+      const live=document.getElementById('rendererLive');
+      if(live)live.innerHTML=rendererLive(settings);
     });
 
     document.getElementById('exportBtn')?.addEventListener('click',()=>{
@@ -2075,6 +2079,45 @@ export class Screens{
 // What the renderer choice will actually do on this machine, said plainly.
 // AUTOMATIC is the only setting whose outcome the player cannot predict, so it
 // is the only one that reports what it found.
+// What is actually running, as opposed to what was asked for.
+//
+// The note above this one describes the *request* and what the hardware can
+// support. Neither answers the question a player actually has when something
+// looks wrong, which is "what am I looking at right now, and what has been
+// turned off?" A settings screen that advertises features the active renderer
+// is not drawing is worse than one that says nothing.
+function rendererLive(settings){
+  const session=window.__pp;
+  const preset=presetForSettings(settings);
+  const tier=settings.performanceMode?'LOW'
+    :(settings.particles==='low'?'LOW':settings.particles==='medium'?'MEDIUM':'HIGH');
+  const off=RENDER_FEATURES.filter(([key])=>preset[key]===false).map(([,label])=>label);
+
+  if(!session||!session.renderer){
+    return `Quality ${escape(tier)}. Nothing deployed — the active renderer is `+
+           `decided when a contract starts.`;
+  }
+  const active=session.renderer.constructor.name==='DeferredRenderer'
+    ?'Deferred WebGL2':'Canvas 2D';
+  const info=session.renderer.describe?.();
+  const hardware=info?.hardware?` on ${escape(info.hardware)}`:'';
+  const soft=info?.software?' <b>(software rasteriser)</b>':'';
+  const disabled=off.length
+    ?` Not drawn at this quality: ${escape(off.join(', '))}.`
+    :' Every feature at this quality is being drawn.';
+  return `Running now: <b>${active}</b>${hardware}${soft}. Quality ${escape(tier)}.${disabled}`;
+}
+
+// Feature switches the presets can turn off, with the words a player would use.
+const RENDER_FEATURES=[
+  ['lighting','dynamic lighting'],['shadows','contact shadows'],
+  ['sceneLights','scene lights'],['combatLights','combat lights'],
+  ['bloom','bloom'],['particles','GPU particles'],
+  ['engineParticles','2D particles'],['atmosphere','steam and dust'],
+  ['materialDetail','material detail'],['decals','decals'],
+  ['grain','film grain'],['scanline','scanlines'],['vignette','vignette']
+];
+
 function rendererNote(choice){
   const cap=probeWebGL2();
   // The driver string and the failure reason come from the browser, not from

@@ -1,5 +1,94 @@
 import {clamp,TAU} from '../core/math.js';
 
+// ---------------------------------------------------------------------------
+// Impact and muzzle tables
+//
+// Kept as data at the top of the file rather than buried in the methods,
+// because these are art decisions and the point of them is that somebody can
+// look at all of them side by side and see that concrete does not spark and
+// snow does not ricochet.
+// ---------------------------------------------------------------------------
+
+// How hard each weapon family leaves a mark. A suppressed pistol barely marks
+// the wall; a heavy weapon takes a piece out of it.
+const IMPACT_PUNCH={
+  suppressed:.5,pistol:.7,smg:.75,tech:.7,beam:.85,
+  rifle:1,marksman:1.35,corrupted:1.2,
+  shotgun:1.5,sniper:1.7,lmg:1.15,heavy:2
+};
+
+const SURFACE_IMPACTS={
+  // Powdered, not shiny. Falls rather than flies.
+  concrete:{debris:{count:6,spread:1.5,speed:120,life:.42,size:2.2,gravity:220,
+                    color:['#9aa2a4','#7d8688','#b3b8b6'],kind:'square'},
+            ring:{to:14,life:.16,color:'rgba(180,180,175,.35)'},flash:'#cfd4d2'},
+  // The one surface that genuinely sparks, and it throws almost no dust.
+  metal:{debris:{count:3,spread:1.2,speed:170,life:.22,size:1.6,
+                 color:['#c9d4d8','#8fa2a8'],kind:'square'},
+         sparks:{count:7,speed:250,color:['#fff3c4','#ffd268','#ff9a3c']},
+         flash:'#ffe8b0'},
+  // Muffled. A puff that hangs, no hard edges, no sparks at all.
+  snow:{debris:{count:9,spread:2,speed:80,life:.7,size:3,gravity:70,drag:.94,
+                color:['#ffffff','#e8f4ff','#cfe4f2'],kind:'circle'},
+        ring:{to:18,life:.3,color:'rgba(230,244,255,.4)'}},
+  // Shatters rather than powders.
+  ice:{debris:{count:7,spread:1.8,speed:200,life:.5,size:2.4,gravity:260,
+               color:['#dff3ff','#a9d8ec','#ffffff'],kind:'square'},
+       sparks:{count:3,speed:180,color:['#eafaff']},flash:'#dff3ff'},
+  water:{debris:{count:10,spread:1.9,speed:140,life:.45,size:2.6,gravity:340,
+                 color:['#bfe6ef','#8fd0dd','#e7f7fa'],kind:'circle'},
+         ring:{to:22,life:.34,color:'rgba(160,225,240,.45)'}},
+  sand:{debris:{count:8,spread:2.1,speed:100,life:.6,size:2.8,gravity:150,drag:.93,
+                color:['#c9a877','#a8895c','#e0c79a'],kind:'circle'},
+        ring:{to:20,life:.26,color:'rgba(200,170,120,.35)'}},
+  glass:{debris:{count:8,spread:2.2,speed:240,life:.5,size:1.8,gravity:300,
+                 color:['#dff6ff','#ffffff','#a9d8ec'],kind:'square'},
+         sparks:{count:4,speed:200,color:['#ffffff']},flash:'#eafaff'},
+  // Contaminated ground: wet, dark, and it does not spark either.
+  mire:{debris:{count:7,spread:1.9,speed:95,life:.55,size:2.6,gravity:260,
+                                color:['#5d6b47','#47563a','#7a8a5e'],
+                kind:'circle'},
+        ring:{to:16,life:.28,color:'rgba(120,150,90,.3)'}},
+  // Ablative plate coming off a machine.
+  armour:{debris:{count:5,spread:1.4,speed:190,life:.3,size:1.8,
+                  color:['#b9c4c8','#8a969a'],kind:'square'},
+          sparks:{count:6,speed:230,color:['#fff3c4','#ffc46a']},flash:'#ffe8b0'}
+};
+
+// Muzzle flash per family. `count:0` is a suppressor doing its job.
+const MUZZLES={
+  suppressed:{count:2,spread:.5,speed:110,life:.06,size:1.5,ring:0,smoke:2,scale:.6,
+              color:['#cfd6c8','#9fb0a4']},
+  pistol:{count:4,spread:.7,speed:210,life:.09,size:2.2,ring:22,smoke:0,
+          color:['#fff3c4','#ffd268','#ffa63c']},
+  smg:{count:4,spread:.9,speed:200,life:.08,size:2,ring:20,smoke:0,
+       color:['#fff3c4','#ffd268']},
+  rifle:{count:5,spread:.62,speed:250,life:.1,size:2.6,ring:26,smoke:0,
+         color:['#fff3c4','#ffd268','#ffa63c']},
+  // Wide and brief.
+  shotgun:{count:9,spread:1.15,speed:280,life:.11,size:3.2,ring:34,smoke:3,scale:1.15,
+           color:['#fff6d8','#ffcf72','#ff9a3c']},
+  // Long narrow spike, visible pressure ring, real smoke.
+  marksman:{count:5,spread:.3,speed:360,life:.12,size:2.8,ring:32,smoke:2,scale:1.1,
+            color:['#ffffff','#ffe6a2','#ffb04c']},
+  sniper:{count:6,spread:.22,speed:430,life:.14,size:3,ring:40,smoke:3,scale:1.25,
+          color:['#ffffff','#ffe6a2','#ffa63c']},
+  lmg:{count:6,spread:.7,speed:260,life:.1,size:2.8,ring:28,smoke:1,
+       color:['#fff3c4','#ffd268','#ffa63c']},
+  heavy:{count:8,spread:.85,speed:300,life:.15,size:4,ring:46,smoke:4,scale:1.3,
+         color:['#fff6d8','#ffbe5c','#ff8a3c']},
+  // Energy: a bloom, not a blast, and no smoke because nothing burned.
+  beam:{count:4,spread:.5,speed:180,life:.12,size:2.4,ring:30,smoke:0,
+        ringColor:'#8fd8ff',color:['#dff6ff','#8fd8ff','#4fa8d8']},
+  tech:{count:3,spread:.8,speed:150,life:.1,size:2,ring:18,smoke:0,
+        ringColor:'#76e7d4',color:['#d8fff6','#76e7d4']},
+  corrupted:{count:5,spread:1,speed:230,life:.13,size:2.6,ring:28,smoke:1,
+             ringColor:'#ff5b5b',color:['#ffd8d8','#ff6b6b','#c895ff']}
+};
+
+// Families that eject brass. Energy and tech weapons do not.
+const CASING_VOICES=new Set(['pistol','smg','rifle','marksman','sniper','lmg','shotgun','suppressed']);
+
 // Visual effects: particles, floating damage numbers, transient overlays.
 // Everything is pooled — long runs can produce tens of thousands of particles
 // and allocating a fresh object for each one is what makes browser games stutter.
@@ -118,12 +207,81 @@ export class Fx{
     }
   }
 
-  muzzle(x,y,angle,scale=1){
-    this.burst(x,y,4*scale,{
-      angle,spread:.7,speed:220*scale,life:.11,size:2.6*scale,
-      color:['#fff3c4','#ffd268','#ffa63c'],glow:true,drag:.86
+  // The flash, shaped by what fired it.
+  //
+  // A suppressor exists to hide this, so it barely shows. A shotgun throws a
+  // wide short cone. An anti-materiel rifle produces a long narrow spike and a
+  // visible pressure ring. They were all the same cone before.
+  muzzle(x,y,angle,scale=1,voice='rifle'){
+    const m=MUZZLES[voice]||MUZZLES.rifle;
+    const s=scale*(m.scale??1);
+    if(m.count>0){
+      this.burst(x,y,m.count*s,{
+        angle,spread:m.spread,speed:m.speed*s,life:m.life,size:m.size*s,
+        color:m.color,glow:true,drag:.86
+      });
+    }
+    if(m.ring>0)this.ring(x,y,10*s,m.ring*s,.1,m.ringColor||'#ffe08a',3);
+    // Smoke lingers where the flash was, on the weapons big enough to make it.
+    if(m.smoke>0){
+      this.burst(x+Math.cos(angle)*8,y+Math.sin(angle)*8,m.smoke,{
+        angle,spread:1.1,speed:34,life:.55,size:5*s,
+        color:'rgba(150,150,150,.28)',drag:.93,kind:'circle'
+      });
+    }
+  }
+
+  // Brass, for the families that eject it. Thrown to the side of the weapon
+  // rather than along the shot, with gravity so it lands rather than drifting.
+  casing(x,y,angle,voice='rifle'){
+    if(!CASING_VOICES.has(voice))return;
+    const side=angle+Math.PI*.55;
+    this.burst(x,y,1,{
+      angle:side,spread:.5,speed:120,life:.7,size:1.6,
+      color:'#d8b070',drag:.9,gravity:420,kind:'square'
     });
-    this.ring(x,y,10*scale,26*scale,.1,'#ffe08a',3);
+  }
+
+  // What a round does to what it hit.
+  //
+  // Every impact in the game used to be the same five-spark burst regardless
+  // of whether it landed on concrete, ice, water or a person, and regardless of
+  // whether it came from a suppressed pistol or an anti-materiel rifle. The
+  // surface decides the debris; the weapon family decides how much of it and
+  // how hard it leaves.
+  //
+  // Recipes are deliberately few and strongly differentiated. At this camera
+  // distance a subtle difference is no difference — what has to read is
+  // *concrete versus metal versus snow*, not the grade of the concrete.
+  surfaceImpact(x,y,angle,{surface='concrete',voice='rifle',intensity=1}={}){
+    const punch=IMPACT_PUNCH[voice]??1;
+    const n=intensity*punch;
+    const back=angle+Math.PI;
+    const recipe=SURFACE_IMPACTS[surface]||SURFACE_IMPACTS.concrete;
+
+    // Debris thrown back along the incoming line.
+    if(recipe.debris){
+      const d=recipe.debris;
+      this.burst(x,y,Math.round(d.count*n),{
+        angle:back,spread:d.spread,speed:d.speed*n,life:d.life,
+        size:d.size*Math.min(2,n),color:d.color,
+        drag:d.drag??.9,gravity:d.gravity||0,glow:!!d.glow,kind:d.kind
+      });
+    }
+    // Sparks are a metal response, not a universal one. Snow does not spark.
+    if(recipe.sparks&&punch>.4){
+      this.burst(x,y,Math.round(recipe.sparks.count*n),{
+        angle:back,spread:2.2,speed:recipe.sparks.speed*n,life:.26,
+        size:1.4,color:recipe.sparks.color,drag:.86,glow:true
+      });
+    }
+    if(recipe.ring){
+      this.ring(x,y,2,recipe.ring.to*n,recipe.ring.life,recipe.ring.color,2);
+    }
+    // A heavy round leaves a mark; a pistol does not.
+    if(recipe.flash&&punch>=1.3){
+      this.ring(x,y,1,10*n,.09,recipe.flash,3,true);
+    }
   }
 
   impact(x,y,angle,color='#d5f0ef',intensity=1){

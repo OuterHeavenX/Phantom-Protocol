@@ -1,5 +1,22 @@
 import {clamp,damp,lerp,TAU} from './math.js';
 
+// Camera response layers.
+//
+// `cap` is how much of the shake budget one source may ever hold; `decay` is
+// how fast it lets go, relative to the camera's own decay rate. Recoil is
+// capped low and released fast because it fires constantly; an explosion is
+// allowed to dominate briefly and rings out slowly.
+const SHAKE_LAYERS={
+  recoil:{cap:.22,decay:2.6},
+  impact:{cap:.5,decay:1},
+  explosion:{cap:.85,decay:.7},
+  boss:{cap:.6,decay:.8},
+  environment:{cap:.3,decay:.45},
+  signal:{cap:.4,decay:.6}
+};
+// The whole camera, however many sources are shouting at once.
+const SHAKE_TOTAL_CAP=.9;
+
 // Caps on how much world may be visible along each axis. Using the larger of
 // the two required zooms keeps a tall portrait phone from showing an absurd
 // vertical corridor, while a wide desktop still gets a full tactical picture.
@@ -21,6 +38,8 @@ export class Camera{
     this.rotation=0;
     this.enabled=true;
     this.trauma=0;
+    // Independent shake sources, summed each frame. See `addShake`.
+    this.shakeLayers={};
     this.time=0;
   }
 
@@ -55,8 +74,26 @@ export class Camera{
 
   // `amount` is trauma in 0..1; shake magnitude scales with its square so
   // small hits stay subtle while big ones land hard.
-  addShake(amount){
-    this.trauma=clamp(this.trauma+amount,0,1);
+  //
+  // `layer` names what caused it. Every source used to add into one number,
+  // which meant a firefight and an explosion and a walker's footfalls all
+  // competed for the same channel: whichever arrived last set the tone, and a
+  // sustained source could sit the camera at maximum trauma indefinitely. Each
+  // layer now decays at its own rate and carries its own ceiling, and they sum
+  // — so a recoil buzz under an explosion reads as both, and neither can take
+  // the whole budget on its own.
+  addShake(amount,layer='impact'){
+    const spec=SHAKE_LAYERS[layer]||SHAKE_LAYERS.impact;
+    const current=this.shakeLayers[layer]||0;
+    this.shakeLayers[layer]=clamp(current+amount,0,spec.cap);
+    // Kept in step so anything still reading `trauma` sees the whole picture.
+    this.trauma=clamp(this.totalTrauma(),0,1);
+  }
+
+  totalTrauma(){
+    let total=0;
+    for(const name in this.shakeLayers)total+=this.shakeLayers[name];
+    return total;
   }
 
   punchZoom(amount){
@@ -72,11 +109,24 @@ export class Camera{
     // because this is the value that blows up.
     dt=Math.max(0,dt)||0;
     this.time+=dt;
-    this.trauma=Math.max(0,this.trauma-this.shakeDecay*dt*.55);
+    // Each layer relaxes on its own clock. Recoil disappears almost at once;
+    // an explosion rings on; environmental vibration is a slow bed under both.
+    for(const name in this.shakeLayers){
+      const spec=SHAKE_LAYERS[name]||SHAKE_LAYERS.impact;
+      const next=this.shakeLayers[name]-this.shakeDecay*spec.decay*dt*.55;
+      if(next<=0.0001)delete this.shakeLayers[name];
+      else this.shakeLayers[name]=next;
+    }
+    // Summed, then capped once. Without the ceiling a boss fight in a hazard
+    // field could stack four sources into something unplayable.
+    this.trauma=clamp(this.totalTrauma(),0,SHAKE_TOTAL_CAP);
     const t=this.trauma*this.trauma*intensity;
+    // Two frequencies per axis rather than one, so a sustained shake does not
+    // read as a clean sine — a camera oscillating on a single note looks like
+    // an effect, not like a room reacting.
     const f=this.time*34;
-    this.shakeX=Math.sin(f*1.13)*t*26;
-    this.shakeY=Math.cos(f*0.97)*t*22;
+    this.shakeX=(Math.sin(f*1.13)+Math.sin(f*2.7)*.35)*t*20;
+    this.shakeY=(Math.cos(f*0.97)+Math.cos(f*2.3)*.35)*t*17;
     this.rotation=Math.sin(f*.71)*t*.012;
     this.targetZoom=damp(this.targetZoom,1,4.5,dt);
     this.zoom=damp(this.zoom,this.targetZoom*this.baseZoom,7,dt);

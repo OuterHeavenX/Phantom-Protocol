@@ -23,7 +23,7 @@ import {ABILITIES,TRAITS,distanceToSegment} from './abilities.js';
 import {ENEMIES_BY_ID,STATUS_EFFECTS} from '../../data/enemies.js';
 import {BOSSES_BY_ID,MINIBOSSES} from '../../data/bosses.js';
 import {baseStats} from '../../data/passives.js';
-import {WEAPONS_BY_ID} from '../../data/weapons.js';
+import {WEAPONS_BY_ID,weaponVoice} from '../../data/weapons.js';
 import {devBonuses} from '../../data/meta.js';
 import {masteryBonuses} from '../../data/operatives.js';
 
@@ -37,6 +37,15 @@ export const EXTRACTION_RADIUS=95;
 // Seconds remaining at which the extraction window calls out again.
 const EXTRACTION_CALLS=[30,15,5];
 export const EXTRACTION_HOLD=2.5;
+// How much the camera is pushed by firing, per weapon family. Deliberately
+// small numbers: this arrives many times a second, and anything that reads as
+// dramatic on one shot is unbearable over a magazine.
+const RECOIL={
+  suppressed:.008,pistol:.014,smg:.012,tech:.006,beam:.008,
+  rifle:.02,marksman:.038,corrupted:.026,lmg:.024,
+  shotgun:.05,sniper:.06,heavy:.075
+};
+
 // Movement bonus while the extraction window is open. Withdrawing across a
 // saturated sector on foot was reliably the deadliest part of a contract;
 // this makes the run for the beacon a sprint the operative can actually win.
@@ -816,7 +825,7 @@ export class Engine{
       player.invulnerable=2.4;
       this.fx.flash('#76e7d4',.5);
       this.fx.ring(player.x,player.y,20,320,.7,'#76e7d4',5);
-      this.camera.addShake(.45);
+      this.camera.addShake(.45,'explosion');
       this.audio.play('unlock',{volume:1});
       this.announce('EMERGENCY PROTOCOL ENGAGED','#76e7d4');
       // Clear immediate threats so the revive is not instantly wasted.
@@ -831,6 +840,15 @@ export class Engine{
   // this game is panned — there is no stereo image to place a sound in from
   // overhead — but distance alone is most of what sells a heavy machine, and
   // without it a walker two sectors away stamps as loudly as one on top of you.
+  // A round striking the sector. The theatre says what it is built from, so a
+  // wall in the Arctic Relay throws snow and one in the Cinder Foundry throws
+  // sparks, from the same call site.
+  impactSurface(x,y,angle,weapon,intensity=1){
+    const surface=this.map.surface?.wall||'concrete';
+    this.fx.surfaceImpact(x,y,angle,
+      {surface,voice:weaponVoice(weapon?.def),intensity});
+  }
+
   audibleAt(x,y,range=900){
     const distance=dist(this.player.x,this.player.y,x,y);
     if(distance>=range)return 0;
@@ -848,7 +866,7 @@ export class Engine{
     this.audio.play('mechStep',{volume,weight:(boss.radius||34)/34});
     // The ground answers a footfall it can feel.
     if(volume>.45){
-      this.camera.addShake(clamp(volume*.16,0,.14));
+      this.camera.addShake(clamp(volume*.16,0,.14),'environment');
       this.fx.ring(boss.x,boss.y,boss.radius*.5,boss.radius*1.1,.26,
         boss.def.accent||'#ffb35c',1.5);
     }
@@ -916,7 +934,7 @@ export class Engine{
     player.invulnerable=Math.max(player.invulnerable,.36);
     this.telemetry.damageTaken+=final;
 
-    this.camera.addShake(clamp(final/player.maxHp*1.6,.08,.5));
+    this.camera.addShake(clamp(final/player.maxHp*1.6,.08,.5),'impact');
     this.fx.flash('#ff4a4a',clamp(final/player.maxHp*1.2,.1,.5));
     this.fx.blood(player.x,player.y,'#ff6b6b',1);
     this.audio.play('hurt',{volume:clamp(final/30,.4,1)});
@@ -1494,7 +1512,16 @@ export class Engine{
       this.fx.text(target.x,target.y-target.radius-6,Math.round(applied),
         crit?'#ffd166':'#eaf6f4',{damage:true,crit,size:crit?15:11});
     }
-    this.fx.impact(target.x,target.y,options.angle??0,crit?'#ffd166':'#d5f0ef',crit?1.6:1);
+    // A machine spalls plate; anything else takes the generic hit spark and its
+    // own blood, which `killEnemy` and the status system already handle.
+    if(target.machine){
+      this.fx.surfaceImpact(target.x,target.y,options.angle??0,
+        {surface:'armour',voice:weaponVoice(options.weapon?.def),
+         intensity:crit?1.5:.9});
+    }else{
+      this.fx.impact(target.x,target.y,options.angle??0,
+        crit?'#ffd166':'#d5f0ef',crit?1.6:1);
+    }
     this.audio.play(crit?'crit':'hit',{volume:crit?.7:.4});
     if(crit)this.fx.freeze(.02);
 
@@ -1848,7 +1875,7 @@ export class Engine{
   spawnExplosion(spec){
     const radius=spec.radius*this.explosionSizeMult;
     this.fx.explosion(spec.x,spec.y,radius,spec.color||'#ffb35c');
-    this.camera.addShake(clamp(radius/700,.08,.4));
+    this.camera.addShake(clamp(radius/700,.08,.4),'explosion');
     this.audio.play('explode',{volume:clamp(radius/180,.4,1)});
     this.world.addDecal(spec.x,spec.y,radius*.6,'#1a1210',.32,'scorch');
 
@@ -1888,9 +1915,19 @@ export class Engine{
     this.fx.ring(x,y,radius*.3,radius*2.4,.28,color,2);
     this.fx.burst(x,y,10,{speed:180,life:.3,color,drag:.9});
   }
-  muzzleFlash(angle,scale){
+  muzzleFlash(angle,scale,weapon){
     const player=this.player;
-    this.fx.muzzle(player.x+Math.cos(angle)*18,player.y+Math.sin(angle)*18,angle,scale);
+    const voice=weaponVoice(weapon?.def);
+    const x=player.x+Math.cos(angle)*18;
+    const y=player.y+Math.sin(angle)*18;
+    this.fx.muzzle(x,y,angle,scale,voice);
+    this.fx.casing(x,y,angle,voice);
+    // Recoil. Its own camera layer, capped low and released fast, because it
+    // fires continuously — the point is that a heavy weapon is felt without a
+    // sustained burst pinning the camera at maximum. Scaled by family, so a
+    // suppressed pistol barely registers and a shoulder-fired heavy does.
+    const kick=RECOIL[voice];
+    if(kick)this.camera.addShake(kick*scale,'recoil');
   }
 
   interceptProjectilesNear(x,y,radius){
@@ -2036,8 +2073,8 @@ export class Engine{
 
       if(this.world.raycastObstacle(p.px,p.py,p.x,p.y,true)&&!p.piercing){
         p.dead=true;
-        this.fx.impact(this.world.lastHitX,this.world.lastHitY,
-          Math.atan2(p.vy,p.vx),p.color,.7);
+        this.impactSurface(this.world.lastHitX,this.world.lastHitY,
+          Math.atan2(p.vy,p.vx),p.weapon,.7);
         continue;
       }
 

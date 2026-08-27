@@ -281,9 +281,81 @@ simulation's own random stream.
 **Not validated:** how any of it sounds. See §4 — this container has no audio
 device. The mix is **device-pending**.
 
-### Phases C–J
+### Phases F + H + J (graphics) — **implemented, validated**
 
-Not started. Scaffolding does not exist for them and none of them are claimed.
+`tools/visual-identity.mjs` asserts difference rather than beauty — the failure
+it guards against is the one it was written for, thirty weapons and ten
+theatres all producing the same five-spark burst.
+
+```
+muzzle shapes           8 distinct across 12 families
+suppressed quietest     true   (2 particles vs 14 for a heavy)
+impact responses        7 distinct across 9 surfaces
+                        concrete 6 · metal 10 · snow 9 · ice 10 · water 10
+                        sand 8 · glass 12 · mire 7 · armour 11
+impact scales by weapon suppressed 3 < rifle 6 < heavy 12
+theatres with surface   10 of 10, 6 distinct ground materials
+brass                   ballistic 1, energy 0
+camera recoil cap       0.22 held under a 1.0 request
+camera layers sum       1.07 from two sources, capped to 0.9 on screen
+recoil decays faster    true
+```
+
+**Phase 7 — ballistics and impact.** Impacts dispatch on what was hit and what
+fired. Concrete powders and does not spark; metal sparks and throws almost no
+dust; snow puffs and hangs; ice shatters; water throws droplets and a ring;
+glass is the most violent and armour spalls. Weapon families scale it, so a
+suppressed pistol marks a wall and a heavy weapon takes a piece out of it.
+Muzzle flashes are shaped per family — a suppressor barely shows, a shotgun
+throws a wide short cone, an anti-materiel rifle a long narrow spike with smoke
+— and ballistic families eject brass while energy ones do not.
+
+**Phase 8 — camera response.** One trauma channel became six independent
+layers (recoil, impact, explosion, boss, environment, signal), each with its own
+cap and decay rate, summed and then capped once at 0.9. Previously every source
+added into one number, so a sustained source could sit the camera at maximum
+indefinitely and whichever arrived last set the tone. Weapon recoil is new and
+is why the layering was needed: it arrives many times a second, so it is capped
+low and released fast. The shake also runs on two frequencies per axis now — a
+camera oscillating on a single sine reads as an effect rather than as a room
+reacting.
+
+**Phase 15 / 1 — truthful settings.** The settings screen described the
+*request* and the hardware; it never said what was actually running. It now
+reports the active renderer, the hardware behind it, whether that is a software
+rasteriser, the quality tier, and **which features the active preset is not
+drawing**. A settings screen that advertises features the renderer is not
+drawing is worse than one that says nothing.
+
+Baseline held across all of it:
+
+```
+check.sh   eslint clean · construction order 0 findings / 38 classes
+parity     blacksite OK · arctic OK · foundry OK   (2d:2d control)
+align      5/6 located, worst offset 8.4px -> ALIGNED
+clip       10 theatres, tunnelled 0, sunk-in-geometry 0
+weapon-audio  0 unresolved, 0 identical rounds
+```
+
+### Phases C, D, E, G — not started
+
+Enemy audio identity, environment-aware reverb, theatre ambience profiles and
+per-theatre material/lighting refinement. No scaffolding exists and none is
+claimed.
+
+Phase G is partly pre-existing rather than absent: `src/render/gl/dressing.js`
+already carries ten explicit per-theatre profiles with their own lights,
+materials and emitters. What is missing is a *lighting* profile per theatre
+distinct from the dressing, which is the part the brief asks for.
+
+### Phase I — accessibility, audited not extended
+
+Already present before this pass: `screenShake` (including 0), `reducedFlashing`,
+`colorblind`, `damageNumbers`, `showThreatIndicators`, independent master/music/
+sfx sliders, `uiScale`, `touchSize`, `leftHanded`. The brief additionally asks
+for subtitles for radio content, visual equivalents for critical audio cues and
+a high-contrast projectile option. **Those three do not exist** and are not
+claimed.
 
 ---
 

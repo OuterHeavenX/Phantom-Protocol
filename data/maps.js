@@ -12,6 +12,8 @@ export const MAPS=[
     // is painted so far; everything else in this theatre still draws
     // procedurally, and does so again if the tile fails to load.
     art:'black site',
+    // What a round hits here. Drives impact debris, not lighting.
+    surface:{ground:'concrete',wall:'metal'},
     palette:{
       floor:'#0c1f26',floorAlt:'#0e2630',grid:'rgba(118,231,212,.055)',
       wall:'#1a3138',wallEdge:'#4e7d84',accent:'#76e7d4',hazard:'#ffb35c',
@@ -27,6 +29,8 @@ export const MAPS=[
     id:'arctic',name:'ARCTIC RELAY',condition:'Cryogenic communications base',
     desc:'Open ice fields with sparse structures. Long sightlines favour marksmen on both sides.',
     music:'arctic',
+    // What a round hits here. Drives impact debris, not lighting.
+    surface:{ground:'snow',wall:'metal'},
     palette:{
       floor:'#132b38',floorAlt:'#17323f',grid:'rgba(180,225,255,.06)',
       wall:'#22414f',wallEdge:'#7fb4c6',accent:'#8fd8ff',hazard:'#c8f0ff',
@@ -42,6 +46,8 @@ export const MAPS=[
     id:'sunken',name:'SUNKEN DISTRICT',condition:'Flooded coastal exclusion zone',
     desc:'Waterlogged streets. Shallow water slows movement and conducts electrical damage.',
     music:'sunken',
+    // What a round hits here. Drives impact debris, not lighting.
+    surface:{ground:'water',wall:'concrete'},
     palette:{
       floor:'#0a2b2d',floorAlt:'#0d3437',grid:'rgba(118,231,212,.05)',
       wall:'#14383a',wallEdge:'#4f8f8a',accent:'#6fe0c8',hazard:'#ffe08a',
@@ -57,6 +63,8 @@ export const MAPS=[
     id:'foundry',name:'CINDER FOUNDRY',condition:'Active munitions manufacturing plant',
     desc:'Working industrial floor. Molten channels and moving machinery hurt everything equally.',
     music:'foundry',
+    // What a round hits here. Drives impact debris, not lighting.
+    surface:{ground:'metal',wall:'metal'},
     palette:{
       floor:'#241716',floorAlt:'#2c1c19',grid:'rgba(255,150,90,.06)',
       wall:'#3a231f',wallEdge:'#a86a4a',accent:'#ff9a5c',hazard:'#ff5b30',
@@ -73,6 +81,8 @@ export const MAPS=[
     id:'orbital',name:'MERIDIAN PLATFORM',condition:'Decommissioned orbital transfer station',
     desc:'Low-gravity modular decks. Vacuum breaches vent anything standing in the wrong section.',
     music:'orbital',
+    // What a round hits here. Drives impact debris, not lighting.
+    surface:{ground:'metal',wall:'glass'},
     palette:{
       floor:'#12141f',floorAlt:'#171a28',grid:'rgba(200,180,255,.06)',
       wall:'#232538',wallEdge:'#8f8ec6',accent:'#c895ff',hazard:'#ff5b7a',
@@ -91,6 +101,8 @@ export const MAPS=[
     music:'sunken',
     weather:{type:'rain',density:1,wind:-.34,color:'rgba(176,214,232,.5)',
              flashes:true,ambient:'rgba(28,44,62,.36)'},
+    // What a round hits here. Drives impact debris, not lighting.
+    surface:{ground:'concrete',wall:'metal'},
     palette:{
       floor:'#141d26',floorAlt:'#18232e',grid:'rgba(150,190,220,.05)',
       wall:'#233140',wallEdge:'#6d93ad',accent:'#8fb8dd',hazard:'#ffcf6a',
@@ -108,6 +120,8 @@ export const MAPS=[
     music:'arctic',
     weather:{type:'snow',density:1.1,wind:.22,color:'rgba(232,246,255,.72)',
              ambient:'rgba(150,180,205,.13)'},
+    // What a round hits here. Drives impact debris, not lighting.
+    surface:{ground:'snow',wall:'ice'},
     palette:{
       floor:'#1b2733',floorAlt:'#20303e',grid:'rgba(200,230,255,.05)',
       wall:'#2b3d4c',wallEdge:'#9dc4d8',accent:'#bfe3f5',hazard:'#ffe08a',
@@ -125,6 +139,8 @@ export const MAPS=[
     music:'sunken',
     weather:{type:'fog',density:.85,wind:.08,color:'rgba(126,150,124,.3)',
              ambient:'rgba(26,40,28,.26)',fireflies:true},
+    // What a round hits here. Drives impact debris, not lighting.
+    surface:{ground:'mire',wall:'concrete'},
     palette:{
       floor:'#16211a',floorAlt:'#1a2820',grid:'rgba(150,200,150,.04)',
       wall:'#243528',wallEdge:'#6f9068',accent:'#9ad86f',hazard:'#d8e05a',
@@ -142,6 +158,8 @@ export const MAPS=[
     music:'foundry',
     weather:{type:'dust',density:.7,wind:.12,color:'rgba(214,190,150,.3)',
              ambient:'rgba(38,32,24,.3)',shafts:true},
+    // What a round hits here. Drives impact debris, not lighting.
+    surface:{ground:'concrete',wall:'metal'},
     palette:{
       floor:'#22221f',floorAlt:'#282824',grid:'rgba(230,200,150,.05)',
       wall:'#343029',wallEdge:'#9d8a6a',accent:'#e0c078',hazard:'#ff8a4c',
@@ -159,6 +177,8 @@ export const MAPS=[
     music:'orbital',
     weather:{type:'ember',density:.5,wind:0,color:'rgba(255,140,120,.4)',
              ambient:'rgba(30,10,14,.34)'},
+    // What a round hits here. Drives impact debris, not lighting.
+    surface:{ground:'sand',wall:'concrete'},
     palette:{
       floor:'#1a1418',floorAlt:'#20181d',grid:'rgba(255,140,140,.06)',
       wall:'#2e2028',wallEdge:'#b06a7a',accent:'#ff8d9a',hazard:'#ff5b5b',

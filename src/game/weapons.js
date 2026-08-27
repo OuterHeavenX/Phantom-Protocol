@@ -229,7 +229,7 @@ const BEHAVIORS={
         weapon,color:tracer(weapon,engine,'#ffe08a'),trail:true
       });
     }
-    engine.muzzleFlash(baseAngle,count>2?1.3:1);
+    engine.muzzleFlash(baseAngle,count>2?1.3:1,weapon);
     engine.audio.play('weapon',{voice:weaponVoice(weapon.def),volume:.9});
     return true;
   },
@@ -254,7 +254,7 @@ const BEHAVIORS={
           life:(weapon.stat('range',stats)||500)/speed,
           weapon,color:tracer(weapon,engine,'#ffd98a'),trail:true
         });
-        engine.muzzleFlash(angle,.8);
+        engine.muzzleFlash(angle,.8,weapon);
         // A burst is one weapon speaking, so every round in it is the same
         // voice — quieter after the first, which is how a burst actually
         // arrives rather than as three identical shots.
@@ -287,7 +287,7 @@ const BEHAVIORS={
         weapon,color:tracer(weapon,engine,'#ffc978')
       });
     }
-    engine.muzzleFlash(baseAngle,1.7);
+    engine.muzzleFlash(baseAngle,1.7,weapon);
     engine.camera.addShake(.09);
     engine.audio.play('weapon',{voice:weaponVoice(weapon.def),volume:1});
     return true;
@@ -315,7 +315,7 @@ const BEHAVIORS={
         weapon,color:tracer(weapon,engine,'#e8f6ff'),heavy:true,trail:true
       });
     }
-    engine.muzzleFlash(angle,2.1);
+    engine.muzzleFlash(angle,2.1,weapon);
     engine.camera.addShake(.14);
     engine.audio.play('weapon',{voice:weaponVoice(weapon.def),volume:1.1});
     return true;
@@ -341,7 +341,7 @@ const BEHAVIORS={
         weapon,color:tracer(weapon,engine,'#9be8ff'),beam:true,trail:true
       });
     }
-    engine.muzzleFlash(angle,1.6);
+    engine.muzzleFlash(angle,1.6,weapon);
     engine.audio.play('weapon',{voice:weaponVoice(weapon.def),volume:.95});
     return true;
   },
