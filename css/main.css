@@ -208,7 +208,25 @@ p{margin:0}
 @keyframes new-pulse{0%,100%{opacity:1}50%{opacity:.45}}
 .nav-item.has-new{border-left-color:var(--gold)}
 
-.brand-foot{opacity:.6}
+.brand-foot{
+  opacity:.78;
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+}
+.brand-foot .support-development{
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:8px 12px;
+  color:var(--gold);
+  border-color:rgba(255,210,107,.42);
+  text-decoration:none;
+  white-space:nowrap;
+}
+.brand-foot .support-development:hover,
+.brand-foot .support-development:focus-visible{
+  color:#fff3c9;
+  border-color:var(--gold);
+  background:rgba(74,50,8,.44);
+  box-shadow:0 0 22px rgba(255,210,107,.12);
+}
 
 .intel-panel{
   position:relative;z-index:1;
