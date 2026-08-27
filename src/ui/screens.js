@@ -5,6 +5,8 @@ import {MAPS,DURATIONS,DIFFICULTIES,DIFFICULTIES_BY_ID} from '../../data/maps.js
 import {ENEMIES,ELITES} from '../../data/enemies.js';
 import {BOSSES_BY_ID} from '../../data/bosses.js';
 import {presetForSettings} from '../render/gl/presets.js';
+import {sectionState,refreshAvailability,newBySection,acknowledgeSection,
+        isDeclassified} from '../save/unlocks.js';
 import {
   DEV_TREE,DOCTRINE_BRANCH,devNodeCost,devRequirementsMet,devBonuses,accountLevel,
   ACHIEVEMENTS,ACHIEVEMENT_CATEGORIES,MILESTONES,INTEL_FILES
@@ -165,6 +167,11 @@ export class Screens{
     const nextMilestone=MILESTONES.find(m=>!save.milestones[m.id]);
     const nextProgress=nextMilestone?milestoneProgress(save,nextMilestone):null;
 
+    // Anything that could have changed while the operator was in the field is
+    // reconciled on the way back in, so the badges below describe now.
+    if(refreshAvailability(save))this.persist();
+    const flags=newBySection(save);
+
     const nav=[
       ['CAMPAIGN','Story operations and recovered documents','campaign'],
       ['CONTRACTS','Rotating daily and weekly assignments','contracts'],
@@ -188,11 +195,23 @@ export class Screens{
             <p class="tagline">Enter manufactured conflict zones. Survive the response. Recover intelligence. Determine who is writing the war.</p>
           </div>
           <nav class="nav">
-            ${nav.map(([label,hint,route],i)=>`
-              <button class="nav-item" data-route="${route}" data-index="${i}">
-                <span class="nav-label">${label}</span>
+            ${nav.map(([label,hint,route],i)=>{
+              const {granted,need}=sectionState(save,route);
+              // A classified section still occupies its place in the list. The
+              // operator is meant to see that the division has more rooms than
+              // they have been cleared for, and what clears each one.
+              if(!granted)return `
+              <button class="nav-item classified" data-locked="${route}" data-index="${i}"
+                      aria-disabled="true">
+                <span class="nav-label">CLASSIFIED</span>
+                <span class="nav-hint">${escape(need)}</span>
+              </button>`;
+              return `
+              <button class="nav-item${flags[route]?' has-new':''}" data-route="${route}" data-index="${i}">
+                <span class="nav-label">${label}${flags[route]?'<em class="new-flag">NEW</em>':''}</span>
                 <span class="nav-hint">${hint}</span>
-              </button>`).join('')}
+              </button>`;
+            }).join('')}
           </nav>
           <div class="brand-foot">
             <span class="eyebrow">BUILD v0.3.0 // FIELD REBUILD</span>
@@ -259,6 +278,20 @@ export class Screens{
         this.route(button.dataset.route);
       });
     });
+    // A classified section says what it wants rather than doing nothing, which
+    // is the difference between a locked door and a broken button.
+    root().querySelectorAll('[data-locked]').forEach(button=>{
+      button.addEventListener('click',()=>{
+        this.audio?.play('deny');
+        const {need}=sectionState(this.save,button.dataset.locked);
+        const hint=button.querySelector('.nav-hint');
+        if(!hint)return;
+        hint.classList.remove('flash');
+        void hint.offsetWidth;
+        hint.classList.add('flash');
+        hint.textContent=need;
+      });
+    });
   }
 
   route(name){
@@ -271,6 +304,14 @@ export class Screens{
       directives:()=>this.directives(),intel:()=>this.intel(),
       stats:()=>this.stats(),settings:()=>this.settings()
     };
+    // The gate is enforced here as well as in the markup. The buttons are the
+    // polite version; this is the one that holds when a route is reached any
+    // other way — a keyboard shortcut, a stale screen, a restored session.
+    const {granted}=sectionState(this.save,name);
+    if(!granted){this.audio?.play('deny');return this.menu()}
+    // Opening a section is the acknowledgement. Anything that was new in it is
+    // not new any more.
+    if(acknowledgeSection(this.save,name))this.persist();
     (routes[name]||(()=>this.menu()))();
   }
 
@@ -1358,6 +1399,9 @@ export class Screens{
 
   development(){
     const save=this.save;
+    // Points may have arrived since this screen was last drawn, and a purchase
+    // can put the next node in reach. Reconciled before anything is rendered.
+    if(refreshAvailability(save)|acknowledgeSection(save,'development'))this.persist();
     const ranks=save.dev||{};
     const bonuses=devBonuses(ranks);
     const tiers=[1,2,3,4,5];
@@ -1390,6 +1434,25 @@ export class Screens{
               const available=devRequirementsMet(node,ranks,devRating);
               const cost=devNodeCost(node,rank);
               const affordable=save.profile.jp>=cost;
+              // Until the operator can actually pay for it, a node is
+              // classified rather than greyed: the cost is on the card and
+              // nothing else is. Showing fifty upgrades that cannot be bought
+              // is not a progression system, it is a price list. Once it has
+              // been affordable once it stays readable for good — spending the
+              // points must not hide what was just revealed.
+              if(!isDeclassified(save,node.id)){
+                return `<button class="dev-node classified branch-${node.branch}"
+                          data-node-locked="${node.id}" disabled aria-disabled="true">
+                  <span class="node-branch">${branches[node.branch]}</span>
+                  <h4>CLASSIFIED</h4>
+                  <div class="pips">${Array.from({length:node.max},()=>
+                    '<i></i>').join('')}</div>
+                  <p class="muted">Clearance withheld. Accrue the job points and
+                     this file opens.</p>
+                  <div class="node-effect">—</div>
+                  <span class="node-cost">${cost} JP TO DECLASSIFY</span>
+                </button>`;
+              }
               const state=maxed?'maxed':!available?'blocked':affordable?'ready':'poor';
               return `<button class="dev-node ${state} branch-${node.branch}"
                         data-node="${node.id}" ${maxed||!available?'disabled':''}>

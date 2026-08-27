@@ -365,3 +365,69 @@ claimed.
 - Whether enemy cues survive without headphones
 - Frame time under maximum enemy density on an iPhone
 - Thermal behaviour across a full 20-minute contract
+
+
+---
+
+## 7. Command-centre progression
+
+Not part of the audiovisual brief; requested separately and built on this branch.
+
+The game opened with every door unlocked: eleven navigation items, a deployment
+screen, a gunsmith with nothing to fit, and a development tree showing fifty
+upgrades none of which could be afforded. **Classified** replaces greyed-out
+throughout — a greyed button says "you failed", a classified one says "not yet
+cleared", which is the tone this game is in.
+
+### The ladder
+
+| Section | Opens on |
+|---|---|
+| Campaign, Operatives, Armory, Development, Directives, Intelligence, Record, Settings | always |
+| **Deploy** | the first campaign operation closed |
+| **Contracts** | two operations completed |
+| **Gunsmith** | one weapon attachment recovered |
+
+Deploy's gate was specified. The other two are proposals: rotating assignments
+need somewhere to rotate against, and a workshop with nothing to fit is a room
+of empty benches. Both are one line each in `SECTIONS` if you want them moved.
+
+Development nodes are classified until the operator can actually afford them,
+then stay readable **permanently** — hiding a node again the moment its points
+are spent would read as a bug however it were explained.
+
+NEW badges appear on a section when something inside it has become available and
+the operator has not opened it since. A fresh save is primed as already-seen, so
+it opens clean rather than wearing eight badges.
+
+### Validated
+
+`tools/progression.mjs`, 14 assertions:
+
+```
+fresh            8 granted · 3 classified · 0 NEW
+                 dev tree 25 classified / 0 readable at 0 JP
+400 JP           dev tree 22 classified / 3 readable
+spent back to 0  3 still readable  (declassification is permanent)
+after campaign   9 granted · DEPLOY flagged NEW
+after two ops   10 granted · CONTRACTS opens
+after attachment 11 granted · GUNSMITH opens
+```
+
+### Two bugs this exposed, both in the test tooling
+
+1. **`loadSave` never primed a first run.** It returns `defaultSave()` directly
+   when nothing is stored, bypassing `normalizeSave` — so the priming that stops
+   a new save wearing a badge on every section never ran. Fixed at the source.
+
+2. **Every harness seeded the wrong storage key.** The live key is
+   `red-static-save`; `phantom-protocol-save` is a legacy name that is read as a
+   fallback and never written. Seeding the legacy key works exactly once — until
+   the game writes the real key, after which every seed is silently ignored and
+   the harness tests a default save while reporting success. This had been latent
+   for the whole project and only surfaced because the command centre started
+   writing on render. All nine harnesses now use the live key and carry a comment
+   saying why.
+
+   The same investigation found three harnesses seeding no `version`, which sent
+   their save through `migrate` and discarded the seed.

@@ -1,10 +1,15 @@
+// Storage key: `red-static-save` is the live one. `phantom-protocol-save` is a
+// legacy name the game reads as a fallback and never writes — seeding that one
+// works exactly once, until the game writes the real key, after which every
+// seed is silently ignored and the harness tests a default save without saying
+// so.
 import {chromium} from '/opt/node22/lib/node_modules/playwright/index.mjs';
 const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome',args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--autoplay-policy=no-user-gesture-required']});
 const p=await b.newPage({viewport:{width:900,height:600}});
 const errs=[];p.on('pageerror',e=>errs.push(String(e&&e.stack||e).split('\n')[0]));
 await p.goto('http://127.0.0.1:8931/index.html',{waitUntil:'load'});
 await p.waitForTimeout(400);
-await p.evaluate(()=>{localStorage.setItem('phantom-protocol-save',JSON.stringify({version:3,maps:{blacksite:{unlocked:true}},settings:{renderer:'2d',showMinimap:false,audioMix:2}}));});
+await p.evaluate(()=>{localStorage.setItem('red-static-save',JSON.stringify({version:3,campaign:{op1:{completed:true}},statistics:{missions:2},maps:{blacksite:{unlocked:true}},settings:{renderer:'2d',showMinimap:false,audioMix:2}}));});
 await p.reload({waitUntil:'load'});await p.waitForTimeout(700);
 await p.evaluate(()=>document.querySelector('[data-splash="start"]')?.click());await p.waitForTimeout(300);
 await p.evaluate(()=>{[...document.querySelectorAll('button,a')].find(e=>/DEPLOY/i.test(e.textContent))?.click()});await p.waitForTimeout(250);

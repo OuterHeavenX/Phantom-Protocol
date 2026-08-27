@@ -15,6 +15,11 @@
 // dominates and the centroid lands dead centre, which reads as a failure when
 // nothing is wrong — so the verdict is taken from the per-quadrant counts of
 // strongly-changed pixels, not from a centroid alone.
+// Storage key: `red-static-save` is the live one. `phantom-protocol-save` is a
+// legacy name the game reads as a fallback and never writes — seeding that one
+// works exactly once, until the game writes the real key, after which every
+// seed is silently ignored and the harness tests a default save without saying
+// so.
 import {chromium} from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import {readPng} from './png.mjs';
 const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -23,9 +28,16 @@ const p=await b.newPage({viewport:{width:800,height:600}});
 p.on('pageerror',e=>console.log('PAGEERROR',String(e).slice(0,200)));
 await p.goto('http://127.0.0.1:8931/index.html',{waitUntil:'load'});
 await p.waitForTimeout(400);
-await p.evaluate(()=>{const raw=JSON.parse(localStorage.getItem('phantom-protocol-save')||'{}');
+await p.evaluate(()=>{const raw=JSON.parse(localStorage.getItem('red-static-save')||'{}');
+  // Without a version the save goes through `migrate`, which rebuilds it from
+  // the v1/v2 layout and drops anything seeded here.
+  raw.version=3;
+  // DEPLOY is gated behind campaign progress now, and this harness reaches a
+  // sector through it. Seeded as an operator who has been through the opening.
+  raw.campaign={...(raw.campaign||{}),op1:{completed:true}};
+  raw.statistics={...(raw.statistics||{}),missions:2};
   raw.settings={...(raw.settings||{}),renderer:'gl',showMinimap:false};
-  localStorage.setItem('phantom-protocol-save',JSON.stringify(raw))});
+  localStorage.setItem('red-static-save',JSON.stringify(raw))});
 await p.reload({waitUntil:'load'});await p.waitForTimeout(700);
 await p.evaluate(()=>document.querySelector('[data-splash="start"]')?.click());
 await p.waitForTimeout(300);

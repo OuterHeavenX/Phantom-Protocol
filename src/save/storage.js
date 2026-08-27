@@ -2,6 +2,7 @@ import {OPERATIVES} from '../../data/operatives.js';
 import {WEAPONS,weaponUnlockLevel} from '../../data/weapons.js';
 import {MAPS,DIFFICULTIES} from '../../data/maps.js';
 import {defaultNemesisRecord} from '../../data/nemesis.js';
+import {primeAvailability,refreshAvailability} from './unlocks.js';
 
 const KEY='red-static-save';
 // Keys this game has written under before, newest first. They are read once so
@@ -243,6 +244,16 @@ export function normalizeSave(raw){
   const merged=mergeRecord(base,source);
   merged.version=SAVE_VERSION;
 
+  // Progression bookkeeping. A save written before the command centre had a
+  // ladder has no record of what it has been shown, and would otherwise open
+  // wearing a badge on every section it already had. Everything currently
+  // available is marked as seen; only what arrives afterwards is new.
+  if(!merged.seen){
+    primeAvailability(merged);
+  }else{
+    refreshAvailability(merged);
+  }
+
   // A save written before the audio rebalance keeps its old levels, and the
   // save version does not change when a default does — so this is checked on
   // every load rather than in `migrate`, which a save already on the current
@@ -293,7 +304,14 @@ export function loadSave(){
       if(stored)break;
       stored=localStorage.getItem(legacy);
     }
-    if(!stored)return defaultSave();
+    // A first run never goes through `normalizeSave`, so it has to be primed
+    // here as well. Without this the command centre opened wearing a NEW badge
+    // on every section the operator had never navigated away from.
+    if(!stored){
+      const fresh=defaultSave();
+      primeAvailability(fresh);
+      return fresh;
+    }
     return normalizeSave(JSON.parse(stored));
   }catch(err){
     console.warn('[red-static] save load failed, starting fresh',err);

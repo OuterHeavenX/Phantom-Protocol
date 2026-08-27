@@ -173,8 +173,40 @@ p{margin:0}
   background:rgba(16,44,53,.75);
   transform:translateX(4px);
 }
-.nav-label{font-size:13px;letter-spacing:.16em}
+.nav-label{font-size:13px;letter-spacing:.16em;display:flex;align-items:center;gap:8px}
 .nav-hint{font-size:10px;color:var(--muted);letter-spacing:.04em}
+
+/* A section the operator has not been cleared for. It keeps its place in the
+   list and its shape — the point is that the division is visibly larger than
+   the part of it you have access to. It reads as withheld, not as broken. */
+.nav-item.classified{
+  cursor:not-allowed;
+  border-left-color:rgba(120,140,150,.35);
+  background:
+    repeating-linear-gradient(135deg,
+      rgba(255,255,255,.012) 0 6px,transparent 6px 12px),
+    rgba(6,17,24,.35);
+}
+.nav-item.classified:hover{transform:none;background:rgba(10,24,32,.5)}
+.nav-item.classified .nav-label{color:rgba(160,180,188,.55);letter-spacing:.24em}
+.nav-item.classified .nav-hint{color:rgba(150,175,185,.6)}
+.nav-item.classified .nav-hint.flash{animation:hint-flash .5s ease}
+@keyframes hint-flash{
+  0%{color:var(--gold);transform:translateX(0)}
+  25%{transform:translateX(3px)}
+  75%{transform:translateX(-2px)}
+  100%{color:rgba(150,175,185,.6);transform:none}
+}
+
+/* Something arrived while the operator was away. Deliberately small — this is a
+   notification, not an advertisement. */
+.new-flag{
+  font-style:normal;font-size:8px;letter-spacing:.18em;
+  padding:1px 5px;border:1px solid var(--gold);color:var(--gold);
+  animation:new-pulse 2.4s ease-in-out infinite;
+}
+@keyframes new-pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.nav-item.has-new{border-left-color:var(--gold)}
 
 .brand-foot{opacity:.6}
 
@@ -459,6 +491,23 @@ p{margin:0}
 .dev-node h4{font-size:13px}
 .dev-node p{font-size:10px;line-height:1.5}
 .dev-node.ready:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.35)}
+
+/* An upgrade the operator cannot pay for yet. The cost is the only thing on
+   the card, because the cost is the only actionable part of it. */
+.dev-node.classified{
+  cursor:not-allowed;
+  border-top-color:rgba(120,140,150,.3);
+  border-color:rgba(120,140,150,.18);
+  background:
+    repeating-linear-gradient(135deg,
+      rgba(255,255,255,.014) 0 7px,transparent 7px 14px),
+    rgba(4,12,18,.6);
+}
+.dev-node.classified .node-branch{color:rgba(140,160,170,.45)}
+.dev-node.classified h4{color:rgba(160,180,188,.5);letter-spacing:.22em;font-size:11px}
+.dev-node.classified p{color:rgba(140,165,175,.42)}
+.dev-node.classified .pips i{opacity:.18}
+.dev-node.classified .node-cost{color:var(--gold);opacity:.75}
 .dev-node.blocked{opacity:.4;cursor:not-allowed}
 .dev-node.poor{opacity:.72;cursor:not-allowed}
 .dev-node.maxed{border-color:var(--gold);opacity:.9}
