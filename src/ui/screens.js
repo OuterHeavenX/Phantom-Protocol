@@ -215,6 +215,11 @@ export class Screens{
           </nav>
           <div class="brand-foot">
             <span class="eyebrow">BUILD v0.3.0 // FIELD REBUILD</span>
+            <a class="btn ghost support-development"
+               href="https://buymeacoffee.com/redstaticgame"
+               target="_blank"
+               rel="noopener noreferrer"
+               aria-label="Support RED STATIC development on Buy Me a Coffee">☕ SUPPORT DEVELOPMENT</a>
           </div>
         </section>
 
