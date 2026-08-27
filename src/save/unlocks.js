@@ -206,3 +206,22 @@ export function primeAvailability(save){
     if(save.weapons?.[w.id]?.unlocked)seen.weapons[w.id]='seen';
   }
 }
+
+// What a load has to do to a save before the command centre reads it, and
+// whether that changed anything worth writing.
+//
+// The answer matters more than it looks. This work used to happen inside
+// `normalizeSave`, which returns only the save — so the change was made and
+// the signal thrown away. The command centre then ran its own refresh, found
+// the work already done, correctly reported "nothing changed", and never
+// wrote. `seen` and `declassified` were therefore recomputed from the current
+// balance on every single load and never reached disk: spending points
+// re-hid the nodes they bought, and a section that opened while the operator
+// was in the field opened silently.
+export function reconcileOnLoad(save){
+  // A save with no record of what it has been shown is being seen by this
+  // ladder for the first time. Everything it already has counts as seen; only
+  // what arrives afterwards is new.
+  if(!save.seen){primeAvailability(save);return true}
+  return refreshAvailability(save);
+}

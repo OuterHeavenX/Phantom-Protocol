@@ -30,12 +30,22 @@ const nav=async()=>p.evaluate(()=>{
   }
   return out;
 });
+// A seed must carry the current save version. Without one `migrate` treats it
+// as v1 and rebuilds it from `defaultSave()`, copying across only a whitelist
+// of fields — `profile.jp` is on that list, `campaign`, `statistics` and
+// `weapons` are not. A versionless harness therefore appears to test the
+// ladder while actually asserting against a default save for every gate except
+// the JP one, and it passes only for as long as a real v3 save happens to be
+// left in localStorage by an earlier run. The version is read from the game so
+// it cannot drift from SAVE_VERSION.
 const setSave=async mutate=>{
-  await p.evaluate(m=>{
+  await p.evaluate(async m=>{
+    const {SAVE_VERSION}=await import('/src/save/storage.js');
     const raw=JSON.parse(localStorage.getItem('red-static-save')||'null');
     const s=raw||{};
     // eslint-disable-next-line no-new-func
     new Function('s',m)(s);
+    s.version=SAVE_VERSION;
     localStorage.setItem('red-static-save',JSON.stringify(s));
   },mutate);
   await p.reload({waitUntil:'load'});
