@@ -463,3 +463,38 @@ Remaining:
    over the play area. Twenty-five seconds is now the ceiling on one continuous
    transmission; whatever has not been said by then is dropped rather than held
    over, and a burst is followed by six seconds of enforced quiet.
+27. ~~Give the machines a voice, and legs to make it with.~~
+   * **Rotor.** A helicopter is a continuous sound, not an event, so it could
+     not be one of the one-shots: it is a voice started when the first gunship
+     arrives and stopped when the last one leaves. Filtered noise for the blade
+     wash, amplitude-modulated at blade-passing rate for the chop — which is the
+     part the ear identifies as a helicopter — with a turbine underneath. The
+     chop speeds up as the nearest gunship closes. Torn down after the fade
+     rather than left running: a gain ramp is a promise about a value, not about
+     the oscillators behind it.
+   * **Footfalls.** `mechStep` is a hydraulic release, the mass landing, and a
+     servo whine as the limb unloads, scaled by the walker's own radius so the
+     siege platform thumps and a lighter chassis ticks — one sound rather than
+     four. Close enough and the ground answers with a shake and a ring.
+   * **Legs on everything.** The four signatures were hovering hulls: a siege
+     platform, an array, a slab and a monolith. They now walk. Manticore and
+     Carrion on four, Aegis and the Arbiter on two, each with its own cadence
+     and stance. The rule the Nemesis established holds: read from above, a
+     walker only reads as a walker if its feet clear the hull, because there is
+     no vertical axis to sell the arc of a stride — so the feet ride rails
+     outboard of the body and swing far enough to be seen alternating.
+   * **The gait moved into the simulation.** It was being advanced *in the
+     renderer*, on a hardcoded sixteen milliseconds per call — so the walk ran
+     at whatever frame rate the device managed, and the draw pass was writing
+     simulation state, which is the one thing this project says it must never
+     do. It is on the fixed step now, which is also what makes a foot planting
+     an event the rest of the game can hear.
+   One bug worth recording: the shared leg routine was lifted from the Nemesis,
+   which draws its legs inside its own renderer *after* the hull has been turned
+   to face — so it rotates by `travel - angle`. Called from `drawBoss`, where the
+   context has only been translated, that same line pointed every other
+   signature's legs off by its facing.
+   Note on verification: `audibleAt` and the rotor's decisions are checked, but
+   a headless container has no audio device and its context barely renders, so
+   what the mix actually sounds like is not something this environment can
+   answer.

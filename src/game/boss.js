@@ -57,6 +57,7 @@ export class Boss{
     this.updatePhase(engine);
     this.updateShield(dt);
     this.move(dt,engine);
+    this.updateGait(dt,engine);
 
     // Windup: telegraph is visible, then the pattern releases.
     if(this.windup>0){
@@ -110,6 +111,31 @@ export class Boss{
     engine.camera.addShake(.5);
     engine.audio.play('boss',{volume:.8});
     this.globalCooldown=1.4;
+  }
+
+  // The walk cycle, and the footfalls that come out of it.
+  //
+  // This used to live in the renderer, which advanced `stridePhase` on a
+  // hardcoded sixteen milliseconds per call — so the gait ran at whatever
+  // frame rate the device managed, and the draw pass was writing simulation
+  // state, which is the one thing it is not allowed to do. Here it is on the
+  // fixed step like everything else, and a foot planting is an event the rest
+  // of the game can hear.
+  updateGait(dt,engine){
+    const gait=this.def.gait;
+    if(!gait)return;
+    const speed=Math.hypot(this.vx,this.vy);
+    // A machine this size never fully stops moving its legs; it idles.
+    const cadence=(.55+Math.min(1,speed/(gait.topSpeed||120))*2.4)*(gait.cadence||1);
+    const limp=this.strideLimp?.5:1;
+    const before=this.stridePhase||0;
+    this.stridePhase=before+cadence*limp*dt;
+    // One foot down per half cycle for a biped. A quadruped lands diagonal
+    // pairs, so it is the same count of impacts and half the weight in each.
+    const step=Math.PI;
+    if(Math.floor(this.stridePhase/step)>Math.floor(before/step)){
+      engine.mechFootfall?.(this);
+    }
   }
 
   updateShield(dt){

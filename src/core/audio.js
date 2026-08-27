@@ -23,7 +23,7 @@ const MUSIC_FADE=1.1;
 // two multiply — a deep duck on top of a quieter score left the music at about
 // a seventh of what it was, which is not "mixed under the weapons", it is off.
 const DUCKING={
-  shoot:[.2,.1],shootHeavy:[.28,.16],laser:[.22,.14],scramble:[.2,.14],
+  mechStep:[.24,.2],shoot:[.2,.1],shootHeavy:[.28,.16],laser:[.22,.14],scramble:[.2,.14],
   explode:[.42,.3],boss:[.5,.9],hurt:[.3,.24],victory:[.55,1],defeat:[.55,1]
 };
 // Seconds of overlap when a track loops back on itself. An authored piece is a
@@ -233,6 +233,23 @@ export class AudioEngine{
         this.noise({duration:.09,gain:.3*volume,freq:2600,endFreq:600,filter:'bandpass',q:1.1});
         this.tone({freq:340,endFreq:110,type:'square',duration:.075,gain:.15*volume});
         break;
+      // A machine the size of a room putting a foot down. Two halves: the
+      // hydraulic release on the way down, and the mass landing. `weight`
+      // scales both the pitch and the body, so a light walker ticks and a
+      // siege platform thumps, from one sound rather than four.
+      case 'mechStep':{
+        const weight=clamp(options.weight??1,.4,2);
+        const bass=48/weight;
+        this.tone({freq:bass*2.4,endFreq:bass,type:'sine',
+          duration:.16*weight,gain:.34*volume});
+        this.noise({duration:.11*weight,gain:.2*volume,
+          freq:900/weight,endFreq:130,filter:'lowpass'});
+        // Servo whine as the limb unloads, which is what makes it read as a
+        // machine rather than a rock falling over.
+        this.tone({freq:1500/weight,endFreq:2300/weight,type:'sawtooth',
+          duration:.09,gain:.035*volume,delay:.02});
+        break;
+      }
       case 'shootHeavy':
         if(!this.canPlay('shootHeavy',.06))return;
         this.noise({duration:.2,gain:.4*volume,freq:1500,endFreq:180,filter:'lowpass'});
@@ -374,6 +391,104 @@ export class AudioEngine{
   get musicLevel(){
     const base=this.settings.muted?0:clamp(this.settings.master*this.settings.music,0,1);
     return base*(this.duck??1);
+  }
+
+  // ---- Rotor -------------------------------------------------------------
+  //
+  // A helicopter is a continuous sound, not an event, so it cannot be one of
+  // the one-shots above: it is a voice that is started when the first gunship
+  // arrives and stopped when the last one leaves.
+  //
+  // Filtered noise for the wash, amplitude-modulated by an oscillator for the
+  // blade chop, plus a low tone for the turbine underneath. The chop rate is
+  // what the ear identifies as a helicopter — everything else is texture.
+  startRotor(){
+    if(!this.ready||!this.ctx||this.rotor)return;
+    const ctx=this.ctx;
+    const out=ctx.createGain();
+    out.gain.value=0;
+    out.connect(this.sfxBus);
+
+    // Blade wash.
+    const src=ctx.createBufferSource();
+    src.buffer=this.noiseBuffer;
+    src.loop=true;
+    const band=ctx.createBiquadFilter();
+    band.type='bandpass';
+    band.frequency.value=440;
+    band.Q.value=.8;
+
+    // The chop. A sine at blade-passing rate, offset so it never fully closes
+    // — a rotor thumps, it does not stutter.
+    const chopDepth=ctx.createGain();
+    chopDepth.gain.value=.62;
+    const chopFloor=ctx.createGain();
+    chopFloor.gain.value=.38;
+    const lfo=ctx.createOscillator();
+    lfo.type='sine';
+    lfo.frequency.value=13;
+    const lfoGain=ctx.createGain();
+    lfoGain.gain.value=1;
+    lfo.connect(lfoGain);
+    lfoGain.connect(chopDepth.gain);
+
+    src.connect(band);
+    band.connect(chopDepth);
+    band.connect(chopFloor);
+    chopDepth.connect(out);
+    chopFloor.connect(out);
+
+    // Turbine.
+    const turbine=ctx.createOscillator();
+    turbine.type='sawtooth';
+    turbine.frequency.value=96;
+    const turbineFilter=ctx.createBiquadFilter();
+    turbineFilter.type='lowpass';
+    turbineFilter.frequency.value=340;
+    const turbineGain=ctx.createGain();
+    turbineGain.gain.value=.1;
+    turbine.connect(turbineFilter);
+    turbineFilter.connect(turbineGain);
+    turbineGain.connect(out);
+
+    src.start();lfo.start();turbine.start();
+    this.rotor={out,src,lfo,turbine,level:0};
+  }
+
+  // `level` is 0 when nothing is airborne and rises as the nearest gunship
+  // closes, so the rotor announces itself before the shooting starts.
+  setRotor(level){
+    if(!this.ready||!this.ctx)return;
+    const target=clamp(level,0,1);
+    if(target<=0){
+      if(!this.rotor)return;
+      this.rotor.out.gain.setTargetAtTime(0,this.ctx.currentTime,.25);
+      // Torn down rather than left fading, once nothing has been airborne for
+      // long enough that the fade is certainly finished. A gain ramp is a
+      // promise about a value, not about the oscillators behind it — those go
+      // on running until something stops them.
+      this.rotorSilentSince=this.rotorSilentSince||performance.now();
+      if(performance.now()-this.rotorSilentSince>1500)this.stopRotor();
+      return;
+    }
+    this.rotorSilentSince=0;
+    if(!this.rotor)this.startRotor();
+    if(!this.rotor)return;
+    this.rotor.out.gain.setTargetAtTime(target*.5,this.ctx.currentTime,.18);
+    // Blades speed up a little as it bears down, which reads as approach even
+    // when the level is holding steady.
+    this.rotor.lfo.frequency.setTargetAtTime(11+target*5,this.ctx.currentTime,.4);
+  }
+
+  stopRotor(){
+    if(!this.rotor)return;
+    const r=this.rotor;
+    this.rotor=null;
+    try{
+      r.out.gain.setTargetAtTime(0,this.ctx.currentTime,.2);
+      const stopAt=this.ctx.currentTime+1.2;
+      r.src.stop(stopAt);r.lfo.stop(stopAt);r.turbine.stop(stopAt);
+    }catch{/* already stopped */}
   }
 
   // ---- Ducking -----------------------------------------------------------

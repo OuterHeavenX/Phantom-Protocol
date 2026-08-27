@@ -6,6 +6,9 @@
 export const BOSSES=[
   {
     id:'manticore',name:'MANTICORE SIEGE PLATFORM',render:'manticore',
+    // A siege platform walks on four; it is too broad to balance on two, and
+    // the slower cadence is what makes it read as the heaviest thing here.
+    gait:{legs:4,span:1.4,cadence:1.05,topSpeed:90,volume:1.15},
     title:'Autonomous siege chassis // six-barrel rotary array',
     hp:2600,radius:52,speed:52,armor:14,xp:400,credits:520,jp:32,
     color:'#ff665f',accent:'#ffb35c',
@@ -41,6 +44,9 @@ export const BOSSES=[
   },
   {
     id:'carrion',name:'CARRION ARRAY',render:'carrion',
+    // Four thin limbs under a spinning array — it skitters rather than
+    // strides, so the cadence is the quickest of the four.
+    gait:{legs:4,span:1.5,cadence:2,topSpeed:150,volume:.8},
     title:'Orbital relay node // distributed fire control',
     hp:3400,radius:56,speed:74,armor:10,xp:520,credits:660,jp:38,
     color:'#c895ff',accent:'#8fd8ff',
@@ -76,6 +82,8 @@ export const BOSSES=[
   },
   {
     id:'aegis',name:'AEGIS BREAKER',render:'aegis',
+    // A breaker charges, so it stands on two heavy legs and lands hard.
+    gait:{legs:2,span:1.3,cadence:1.45,topSpeed:170,volume:1.25},
     title:'Counter-operative platform // adaptive shielding',
     hp:4600,radius:60,speed:96,armor:18,xp:680,credits:840,jp:46,
     color:'#ffb35c',accent:'#ff665f',
@@ -111,6 +119,8 @@ export const BOSSES=[
   },
   {
     id:'arbiter',name:'THE ARBITER',render:'arbiter',
+    // The Arbiter is the tallest and the most deliberate of them.
+    gait:{legs:2,span:1.25,cadence:1.3,topSpeed:180,volume:1.1},
     title:'Unregistered // origin classified',
     hp:7200,radius:64,speed:120,armor:22,xp:1200,credits:1500,jp:80,
     color:'#e0e6ea',accent:'#ff5b7a',

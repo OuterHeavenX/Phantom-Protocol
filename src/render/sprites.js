@@ -822,6 +822,10 @@ export function drawBoss(ctx,boss,time){
 
   const flash=boss.hitFlash>0;
   const body=flash?'#ffffff':'#2a1418';
+  // Legs first, so the hull sits on top of them and the limbs read as coming
+  // out from underneath rather than being stuck to the front. The Nemesis
+  // draws its own, which are part of its chassis rather than bolted under it.
+  if(boss.def.gait&&boss.def.render!=='nemesis')drawMechLegs(ctx,boss,flash);
   const renderer=BOSS_RENDERERS[boss.def.render]||BOSS_RENDERERS.manticore;
   renderer(ctx,boss,time,body);
 
@@ -836,6 +840,83 @@ export function drawBoss(ctx,boss,time){
     ctx.beginPath();ctx.arc(boss.x,boss.y,boss.radius+16,0,TAU);ctx.stroke();
     ctx.restore();
   }
+}
+
+// Legs for a signature that has them, which is now all of them.
+//
+// The rule the Nemesis established: read from above, a walker only reads as a
+// walker if its feet clear the hull. Legs tucked under a chassis just look like
+// a tank, because from overhead there is no vertical axis to sell the arc of a
+// stride. So the feet ride rails outboard of the body and swing fore and aft
+// far enough that the eye can see them alternate.
+//
+// Two legs counter-swing. Four go in diagonal pairs, which is what a walking
+// quadruped actually does and what stops it looking like it is hopping.
+function drawMechLegs(ctx,boss,flash){
+  const gait=boss.def.gait;
+  const r=boss.radius;
+  const span=(gait.span||1)*r;
+  const stride=boss.stridePhase||0;
+  const accent=boss.def.accent||'#ffb35c';
+  const shell=flash?'#ffffff':'#333b41';
+  const plate=flash?'#ffffff':'#454e55';
+  const dark=flash?'#dddddd':'#1d2429';
+  const quad=gait.legs===4;
+
+  ctx.save();
+  // Aligned to travel, not to facing: a machine walks where it is going even
+  // while its guns track somewhere else.
+  //
+  // Rotated absolutely, because this is drawn from `drawBoss` where the context
+  // has only been translated. The Nemesis subtracts `boss.angle` here instead —
+  // its legs are drawn inside its own renderer, after the hull has already been
+  // turned to face. Copying that line into this one pointed every other
+  // signature's legs off by its facing.
+  const speed=Math.hypot(boss.vx,boss.vy);
+  ctx.rotate(speed>6?Math.atan2(boss.vy,boss.vx):boss.angle);
+
+  // [lateral rail, fore/aft offset, phase] per limb.
+  const limbs=quad
+    ?[[-1,r*.42,0],[1,r*.42,Math.PI],[-1,-r*.42,Math.PI],[1,-r*.42,0]]
+    :[[-1,0,Math.PI],[1,0,0]];
+
+  for(const [side,base,phase] of limbs){
+    const swing=Math.sin(stride+phase);
+    const planted=swing<0;
+    const reach=base+swing*r*(quad?.34:.52);
+    const rail=side*span;
+    const width=quad?r*.16:r*.26;
+
+    // Thigh: a tapered plate from the hip out to the rail.
+    ctx.fillStyle=planted?plate:shell;
+    ctx.strokeStyle=accent;
+    ctx.lineWidth=1.6;
+    ctx.beginPath();
+    ctx.moveTo(base-r*.16,side*r*.26);
+    ctx.lineTo(base+r*.16,side*r*.26);
+    ctx.lineTo(reach+width,rail);
+    ctx.lineTo(reach-width,rail);
+    ctx.closePath();ctx.fill();ctx.stroke();
+
+    // Foot, square to the rail and clearly outboard of the hull. The planted
+    // one is lit, which is what makes the alternation legible at a distance.
+    ctx.save();
+    ctx.translate(reach,rail);
+    ctx.fillStyle=planted?plate:dark;
+    ctx.strokeStyle=planted?'#ffd9a8':accent;
+    ctx.lineWidth=2;
+    const fw=quad?r*.3:r*.5,fh=quad?r*.2:r*.32;
+    ctx.beginPath();roundedRect(ctx,-fw/2,-fh/2,fw,fh,3);ctx.fill();ctx.stroke();
+    ctx.fillStyle=dark;
+    ctx.fillRect(-fw*.36,-fh*.28,fw*.24,fh*.56);
+    ctx.fillRect(fw*.12,-fh*.28,fw*.24,fh*.56);
+    if(planted){
+      ctx.fillStyle=withAlpha(boss.def.color||'#e0533f',.7);
+      ctx.fillRect(fw*.4,-fh*.14,fw*.08,fh*.28);
+    }
+    ctx.restore();
+  }
+  ctx.restore();
 }
 
 const BOSS_RENDERERS={
@@ -856,10 +937,11 @@ const BOSS_RENDERERS={
     const plate=flash?'#ffffff':'#454e55';
     const dark=flash?'#dddddd':'#1d2429';
 
-    const moving=Math.min(1,Math.hypot(boss.vx,boss.vy)/40);
-    const limp=boss.strideLimp?.5:1;
-    boss.stridePhase=(boss.stridePhase||0)+(.7+moving*3)*.016*limp;
-    const stride=boss.stridePhase;
+    // Advanced by the simulation on the fixed step. This used to be done here,
+    // on a hardcoded sixteen milliseconds, which made the gait run at whatever
+    // frame rate the device managed and had the draw pass writing simulation
+    // state.
+    const stride=boss.stridePhase||0;
 
     // ---- Legs: outboard of the hull, aligned to travel ----
     // Each foot travels fore and aft along its own rail. Letting them swing

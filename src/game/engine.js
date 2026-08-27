@@ -548,6 +548,7 @@ export class Engine{
     this.camera.follow(this.player,this.aimLead,realDt);
     this.camera.update(realDt,this.settings.screenShake??1);
     this.audio.setIntensity(clamp(this.enemies.length/70+(this.boss?.4:0),0,1));
+    this.updateRotor();
   }
 
   step(dt,input){
@@ -824,6 +825,44 @@ export class Engine{
     }
     player.alive=false;
     this.finish(false,'OPERATIVE SIGNAL LOST');
+  }
+
+  // How loud something is from where the operative is standing. Nothing in
+  // this game is panned — there is no stereo image to place a sound in from
+  // overhead — but distance alone is most of what sells a heavy machine, and
+  // without it a walker two sectors away stamps as loudly as one on top of you.
+  audibleAt(x,y,range=900){
+    const distance=dist(this.player.x,this.player.y,x,y);
+    if(distance>=range)return 0;
+    // Falls off with the square root rather than linearly, so a thing stays
+    // present across the middle of its range instead of only near the edge.
+    return Math.sqrt(1-distance/range);
+  }
+
+  // A boss putting a foot down. Weight comes off its own size, so the siege
+  // platform lands harder than the walker without either being given a number
+  // of its own to keep in step with its radius.
+  mechFootfall(boss){
+    const volume=this.audibleAt(boss.x,boss.y,1100)*(boss.def.gait?.volume??1);
+    if(volume<=.02)return;
+    this.audio.play('mechStep',{volume,weight:(boss.radius||34)/34});
+    // The ground answers a footfall it can feel.
+    if(volume>.45){
+      this.camera.addShake(clamp(volume*.16,0,.14));
+      this.fx.ring(boss.x,boss.y,boss.radius*.5,boss.radius*1.1,.26,
+        boss.def.accent||'#ffb35c',1.5);
+    }
+  }
+
+  // The rotor is a continuous voice, not an event, so it is driven every frame
+  // from whatever is actually airborne rather than started and forgotten.
+  updateRotor(){
+    let level=0;
+    for(const enemy of this.enemies){
+      if(enemy.dead||!enemy.flying)continue;
+      level=Math.max(level,this.audibleAt(enemy.x,enemy.y,1400));
+    }
+    this.audio.setRotor?.(level);
   }
 
   damagePlayer(amount,options={}){
@@ -3006,6 +3045,9 @@ export class Engine{
     this.endReason=reason;
     this.maxCombo=Math.max(this.maxCombo,this.combo);
     this.audio.stopMusic();
+    // A rotor is a running voice, and nothing else stops it — left alone it
+    // would carry on over the results screen.
+    this.audio.stopRotor?.();
     // Nothing more comes over the channel once the contract closes, so a
     // callout cannot arrive over the results screen.
     this.codec.clear();
