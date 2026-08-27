@@ -243,8 +243,47 @@ Anything depending on these is marked **device-pending**.
 
 ## 5. Validation
 
-Recorded per phase as it lands. See the delivery report in the pull request or
-session notes for the full run.
+### Phases A + B — **implemented, validated**
+
+`tools/weapon-audio.mjs` asserts the architecture against the running game:
+
+```
+forms                30     every weapon and evolution
+families             10     pistol/suppressed/rifle/smg/shotgun/marksman/
+                            sniper/lmg/heavy/beam/tech/corrupted (12 defined,
+                            10 in use)
+unresolved            0     no weapon falls through to a default
+channels              7     playerWeapon enemyWeapon impact enemy ambience ui alert
+weapon -> playerWeapon     true
+hurt   -> alert            true
+layersPerShot         5     mech, crack, body, pressure, tail
+identicalRounds       0     of 8 consecutive rifle shots
+duckedPlayerWeapon  0.6     an alert takes 40% and releases on a ramp
+```
+
+Distribution across families: tech 5, heavy 5, corrupted 5, beam 4, sniper 2,
+shotgun 2, marksman 2, suppressed 2, rifle 2, smg 1. Evolutions inherit their
+base weapon's family, which is why the counts are not all one.
+
+Baseline held after the change:
+
+```
+tools/check.sh     eslint clean · construction order 0 findings / 38 classes
+tools/parity.mjs   blacksite PARITY OK · foundry PARITY OK   (2d:2d control)
+tools/align.mjs    5/6 located, worst offset 8.9px -> ALIGNED
+tools/clip.mjs     10 theatres, tunnelled 0, sunk-in-geometry 0
+```
+
+Parity passing matters specifically here: the weapon rebuild uses `Math.random`
+for round-to-round variation, and parity proves that has not leaked into the
+simulation's own random stream.
+
+**Not validated:** how any of it sounds. See §4 — this container has no audio
+device. The mix is **device-pending**.
+
+### Phases C–J
+
+Not started. Scaffolding does not exist for them and none of them are claimed.
 
 ---
 

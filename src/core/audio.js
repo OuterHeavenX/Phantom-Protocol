@@ -18,12 +18,88 @@ import {trackFor,trackSources,MUSIC_FORMATS} from '../../data/music.js';
 
 // Seconds to crossfade between two pieces of music.
 const MUSIC_FADE=1.1;
+// Mix categories. Order is documentation, not priority — priority is in
+// `CHANNEL_OF` and in what `alert` is exempted from.
+const CHANNELS=['playerWeapon','enemyWeapon','impact','enemy','ambience','ui','alert'];
+
+// Which category each sound belongs to. Anything unlisted lands on `impact`,
+// which is the least surprising default: it is ducked under alerts and does not
+// duck anything itself.
+const CHANNEL_OF={
+  weapon:'playerWeapon',enemyWeapon:'enemyWeapon',
+  shoot:'playerWeapon',shootHeavy:'playerWeapon',laser:'playerWeapon',
+  tech:'playerWeapon',scramble:'playerWeapon',reload:'playerWeapon',
+  hit:'impact',crit:'impact',kill:'impact',explode:'impact',
+  mechStep:'enemy',
+  hurt:'alert',alarm:'alert',boss:'alert',shield:'alert',
+  codec:'ui',select:'ui',type:'ui',confirm:'ui',deny:'ui',
+  pickup:'ui',coin:'ui',heal:'ui',levelup:'ui',unlock:'ui',
+  victory:'ui',defeat:'ui',dash:'playerWeapon'
+};
+
+// An alert briefly pushes these categories down so it can be heard through
+// them. Short and shallow: this is making room, not stopping the fight.
+const ALERT_DUCKS=['playerWeapon','impact','enemy','ambience'];
+
+// ---------------------------------------------------------------------------
+// Weapon voices
+//
+// Thirty weapons used to share six sounds — nine of them played the same `tech`
+// blip, and a submachine gun and an anti-materiel rifle were indistinguishable.
+// A gunshot is not one sound; it is a stack of them arriving in a particular
+// order, and which layers dominate is what tells the ear what fired.
+//
+//   mech      the action cycling — bolt, hammer, servo
+//   crack     the initial transient, the part that carries across a sector
+//   body      the weapon's own resonance, where calibre lives
+//   pressure  low-frequency push, felt more than heard
+//   tail      the room answering, which the environment scales
+//
+// A family is defined by proportion rather than by absolute level, so the mixer
+// can move all of them together without any one losing its character.
+const WEAPON_VOICES={
+  // Compact, sharp, quick to get out of the way.
+  pistol:{crack:[2600,700,.26,.05],body:[340,120,.17,.07],press:[95,60,.12,.08],
+          mech:[1800,.05,.03],tail:.14,spread:.05},
+  // Mechanically loud and acoustically quiet: the action is most of what you
+  // hear. Never a comedy "pew" — the crack is still there, just contained.
+  suppressed:{crack:[1500,520,.1,.035],body:[260,150,.09,.05],press:[80,55,.07,.06],
+              mech:[1300,.11,.05],tail:.05,spread:.04},
+  // Aggressive mid crack with a tight bass push under it.
+  rifle:{crack:[3000,780,.34,.055],body:[420,150,.2,.085],press:[78,48,.2,.11],
+         mech:[1600,.07,.04],tail:.2,spread:.05},
+  // Lighter report, rhythm does the work.
+  smg:{crack:[3200,900,.24,.04],body:[500,210,.13,.05],press:[110,70,.09,.06],
+       mech:[2000,.09,.035],tail:.12,spread:.07},
+  // Violent pressure first, body second, mechanical afterthought.
+  shotgun:{crack:[1500,380,.34,.075],body:[190,70,.34,.16],press:[54,34,.32,.2],
+           mech:[900,.09,.09],tail:.3,spread:.05},
+  // Deliberate. Long tail, deep body, very sharp leading edge.
+  marksman:{crack:[3400,820,.36,.06],body:[300,110,.24,.12],press:[64,40,.24,.15],
+            mech:[1400,.08,.06],tail:.34,spread:.03},
+  sniper:{crack:[4200,900,.42,.065],body:[240,86,.28,.16],press:[50,32,.3,.24],
+          mech:[1200,.08,.07],tail:.5,spread:.02},
+  // Sustained mechanical violence, deliberately held back in level so a long
+  // burst does not become fatiguing.
+  lmg:{crack:[2800,700,.3,.05],body:[360,130,.22,.1],press:[62,40,.24,.14],
+       mech:[1100,.12,.05],tail:.24,spread:.06},
+  heavy:{crack:[1200,300,.36,.09],body:[150,58,.36,.2],press:[44,28,.38,.26],
+         mech:[700,.14,.11],tail:.4,spread:.04},
+  // Not ballistic: no pressure wave, no mechanical action worth hearing.
+  beam:{crack:[2100,620,.2,.09],body:[900,320,.2,.13],press:[150,90,.07,.09],
+        mech:[0,0,0],tail:.16,spread:.06},
+  tech:{crack:[1700,900,.15,.05],body:[760,1400,.14,.1],press:[180,120,.05,.07],
+        mech:[2600,.05,.03],tail:.1,spread:.09},
+  // The signal getting into the weapon. Detuned, wrong, still a gunshot.
+  corrupted:{crack:[2300,410,.28,.07],body:[330,660,.2,.14],press:[70,110,.2,.16],
+             mech:[1500,.08,.05],tail:.26,spread:.14}
+};
 // name -> [how much of the score to take, how long to hold it there]
 // Deliberately shallow. The resting level came down at the same time, and the
 // two multiply — a deep duck on top of a quieter score left the music at about
 // a seventh of what it was, which is not "mixed under the weapons", it is off.
 const DUCKING={
-  mechStep:[.24,.2],shoot:[.2,.1],shootHeavy:[.28,.16],laser:[.22,.14],scramble:[.2,.14],
+  weapon:[.22,.12],mechStep:[.24,.2],shoot:[.2,.1],shootHeavy:[.28,.16],laser:[.22,.14],scramble:[.2,.14],
   explode:[.42,.3],boss:[.5,.9],hurt:[.3,.24],victory:[.55,1],defeat:[.55,1]
 };
 // Seconds of overlap when a track loops back on itself. An authored piece is a
@@ -62,6 +138,25 @@ export class AudioEngine{
 
     this.sfxBus=this.ctx.createGain();
     this.sfxBus.gain.value=this.settings.sfx;
+
+    // Category buses.
+    //
+    // Everything used to arrive on one effects bus, which meant the mix had no
+    // way to prefer one kind of sound over another: a wave of impacts and the
+    // one cue telling the operative a sniper had them were the same to it.
+    // Each category now has its own gain, so priority is something the mixer
+    // can act on rather than something each call site has to guess at.
+    //
+    // `alert` is deliberately outside the ducking below. A critical-health
+    // warning or a boss telegraph must never be attenuated by the thing that
+    // made it urgent — that is the one rule this whole topology exists for.
+    this.channels={};
+    for(const name of CHANNELS){
+      const gain=this.ctx.createGain();
+      gain.gain.value=1;
+      gain.connect(this.sfxBus);
+      this.channels[name]=gain;
+    }
 
     // A limiter stops dense firefights from clipping. It used to sit at -14dB
     // with an 8:1 ratio, which is not gentle: in a real firefight the bus is
@@ -184,7 +279,7 @@ export class AudioEngine{
     env.gain.exponentialRampToValueAtTime(Math.max(.0001,gain),t+attack);
     env.gain.exponentialRampToValueAtTime(.0001,t+duration);
     osc.connect(env);
-    env.connect(bus||this.sfxBus);
+    env.connect(bus||this.currentBus||this.sfxBus);
     osc.start(t);
     osc.stop(t+duration+.02);
     this.track(osc,duration+delay);
@@ -205,7 +300,7 @@ export class AudioEngine{
     env.gain.setValueAtTime(.0001,t);
     env.gain.exponentialRampToValueAtTime(Math.max(.0001,gain),t+.004);
     env.gain.exponentialRampToValueAtTime(.0001,t+duration);
-    src.connect(biquad);biquad.connect(env);env.connect(bus||this.sfxBus);
+    src.connect(biquad);biquad.connect(env);env.connect(bus||this.currentBus||this.sfxBus);
     src.start(t);
     src.stop(t+duration+.02);
     this.track(src,duration+delay);
@@ -214,18 +309,108 @@ export class AudioEngine{
 
   // ---- Sound library -----------------------------------------------------
 
+  // Where a sound should be routed, and the node to hand the helpers.
+  channel(name){
+    if(!this.channels)return null;
+    return this.channels[CHANNEL_OF[name]||'impact']||null;
+  }
+
+  // Pull the noisy categories down for a moment so a cue can be heard through
+  // them. Recovers on its own; nothing has to remember to put it back.
+  duckChannels(names,amount=.45,hold=.18){
+    if(!this.ready||!this.ctx||!this.channels)return;
+    const now=this.ctx.currentTime;
+    for(const name of names){
+      const bus=this.channels[name];
+      if(!bus)continue;
+      bus.gain.cancelScheduledValues(now);
+      // The attack is immediate and the release is a ramp, which is what a duck
+      // is for: room has to be made *before* the cue arrives, not eased into
+      // while it plays. Setting the value rather than scheduling it also makes
+      // the attenuation observable, which a scheduled automation is not.
+      bus.gain.value=1-clamp(amount,0,.9);
+      bus.gain.setTargetAtTime(1,now+hold,.18);
+    }
+  }
+
   play(name,options={}){
     // The context only exists after the unlock gesture resolves, and unlock is
     // async — a click handler firing on that same first gesture would
     // otherwise reach the oscillator helpers with no context at all.
     if(!this.ready||!this.ctx)return;
     const volume=clamp(options.volume??1,0,1.5);
+
     // How far each kind of sound pushes the score out of the way. Weapon fire
     // is repetitive, so it takes a little and holds it; an explosion or a
     // signature arriving takes a lot.
     const duck=DUCKING[name];
     if(duck)this.duckMusic(duck[0],duck[1]);
+    // An alert makes room for itself in the effects mix, not just in the music.
+    if(CHANNEL_OF[name]==='alert')this.duckChannels(ALERT_DUCKS,.4,.22);
+    // Routed once for the whole event rather than at every layer inside it.
+    // `tone` and `noise` pick this up when no bus is passed explicitly, so a
+    // sound made of five layers reaches its category without five arguments,
+    // and a sound added later is routed without anyone remembering to.
+    this.currentBus=this.channel(name);
+    // Every layer of the event is built synchronously inside the switch below,
+    // so the routing only has to survive that. It is cleared straight after so
+    // a helper called from anywhere else cannot inherit the last category used.
+    try{return this.playEvent(name,volume,options)}finally{this.currentBus=null}
+  }
+
+  // One shot, assembled.
+  //
+  // `spread` is how far this family is allowed to wander round to round. It is
+  // deliberately narrow: an automatic weapon that retriggers an identical event
+  // sounds like a loop, and one that wanders too far sounds like a different
+  // gun every round. Both are wrong, and the band between them is small.
+  //
+  // `tail` is scaled by the caller, which is how the same weapon comes out
+  // tight in a corridor and long across open ground.
+  weaponShot(voice,volume,options){
+    const v=WEAPON_VOICES[voice]||WEAPON_VOICES.rifle;
+    const wobble=1+(Math.random()*2-1)*(v.spread||.05);
+    const tail=(v.tail||.15)*(options.tail??1);
+
+    const [ct,ce,cg,cd]=v.crack;
+    this.noise({duration:cd,gain:cg*volume,freq:ct*wobble,endFreq:ce,
+      filter:'bandpass',q:1.1});
+
+    const [bt,be,bg,bd]=v.body;
+    this.tone({freq:bt*wobble,endFreq:be,type:'sawtooth',duration:bd,
+      gain:bg*volume});
+
+    const [pt,pe,pg,pd]=v.press;
+    if(pg>0)this.tone({freq:pt,endFreq:pe,type:'sine',duration:pd,gain:pg*volume});
+
+    // The action. Offset a little so it reads as a separate mechanical event
+    // rather than as part of the report.
+    const [mf,mg,md]=v.mech;
+    if(mg>0){
+      this.noise({duration:md,gain:mg*volume,freq:mf*wobble,endFreq:mf*.5,
+        filter:'bandpass',q:2.4,delay:.012});
+    }
+
+    // The room answering. Filtered well down, because a reflection has lost its
+    // top end by the time it comes back.
+    if(tail>.02){
+      this.noise({duration:tail,gain:cg*volume*.3,freq:700,endFreq:180,
+        filter:'lowpass',delay:.02});
+    }
+  }
+
+  playEvent(name,volume,options){
     switch(name){
+      // Every firearm arrives here. `voice` names the family; the weapon
+      // registry decides which one, so a new weapon is a data change.
+      case 'weapon':{
+        const voice=options.voice||'rifle';
+        // Throttled per family rather than globally, so a pistol and a rifle
+        // firing together do not silence one another.
+        if(!this.canPlay('weapon:'+voice,options.throttle??.028))return;
+        this.weaponShot(voice,volume,options);
+        break;
+      }
       case 'shoot':
         if(!this.canPlay('shoot',.035))return;
         // The operative's own weapon, reported as barely audible on a phone
@@ -407,7 +592,7 @@ export class AudioEngine{
     const ctx=this.ctx;
     const out=ctx.createGain();
     out.gain.value=0;
-    out.connect(this.sfxBus);
+    out.connect(this.channels?.enemy||this.sfxBus);
 
     // Blade wash.
     const src=ctx.createBufferSource();
