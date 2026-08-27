@@ -32,9 +32,18 @@ export function defaultStatistics(){
   };
 }
 
+// Bump when the default balance changes and every existing save should be
+// moved onto it.
+const AUDIO_MIX=2;
+
 export function defaultSettings(){
   return{
-    master:.85,music:.5,sfx:.85,muted:false,
+    // The score sat level with the weapons and, being continuous where a
+    // gunshot is ninety milliseconds long, buried them. Reported off an
+    // iPhone; `audioMix` marks the balance a save has been brought up to, so a
+    // save written before the rebalance is corrected once rather than being
+    // left on the old numbers forever.
+    master:.85,music:.38,sfx:1,muted:false,audioMix:AUDIO_MIX,
     screenShake:1,damageNumbers:true,particles:'high',
     showMinimap:true,showHealthBars:true,showThreatIndicators:true,
     autoAim:true,holdToFire:false,
@@ -233,6 +242,22 @@ export function normalizeSave(raw){
   const source=migrate(raw)||raw||{};
   const merged=mergeRecord(base,source);
   merged.version=SAVE_VERSION;
+
+  // A save written before the audio rebalance keeps its old levels, and the
+  // save version does not change when a default does — so this is checked on
+  // every load rather than in `migrate`, which a save already on the current
+  // version never reaches. Anyone who sets their own levels afterwards is
+  // stamped as current and keeps them.
+  // Read off the stored save and not off `merged`: the defaults carry the
+  // current marker, so after the merge every save claims to be current and the
+  // correction never fired. The question is what the file on disk said.
+  const storedMix=raw&&raw.settings?raw.settings.audioMix:undefined;
+  if(storedMix!==AUDIO_MIX){
+    const fresh=defaultSettings();
+    merged.settings.music=fresh.music;
+    merged.settings.sfx=fresh.sfx;
+    merged.settings.audioMix=AUDIO_MIX;
+  }
 
   // Guarantee a record exists for content added after the save was written.
   for(const op of OPERATIVES){

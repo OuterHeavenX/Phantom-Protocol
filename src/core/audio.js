@@ -18,6 +18,14 @@ import {trackFor,trackSources,MUSIC_FORMATS} from '../../data/music.js';
 
 // Seconds to crossfade between two pieces of music.
 const MUSIC_FADE=1.1;
+// name -> [how much of the score to take, how long to hold it there]
+// Deliberately shallow. The resting level came down at the same time, and the
+// two multiply — a deep duck on top of a quieter score left the music at about
+// a seventh of what it was, which is not "mixed under the weapons", it is off.
+const DUCKING={
+  shoot:[.2,.1],shootHeavy:[.28,.16],laser:[.22,.14],scramble:[.2,.14],
+  explode:[.42,.3],boss:[.5,.9],hurt:[.3,.24],victory:[.55,1],defeat:[.55,1]
+};
 // Seconds of overlap when a track loops back on itself. An authored piece is a
 // few minutes long and a contract can run thirty, so the seam is heard ten
 // times or more in one run — `element.loop` jumps from the last sample to the
@@ -29,7 +37,7 @@ export class AudioEngine{
   constructor(settings={}){
     this.ctx=null;
     this.ready=false;
-    this.settings={master:1,music:.55,sfx:.8,muted:false,...settings};
+    this.settings={master:1,music:.38,sfx:1,muted:false,...settings};
     this.noiseBuffer=null;
     this.musicNodes=[];
     this.musicTimer=null;
@@ -55,19 +63,32 @@ export class AudioEngine{
     this.sfxBus=this.ctx.createGain();
     this.sfxBus.gain.value=this.settings.sfx;
 
-    // A gentle limiter stops dense firefights from clipping.
+    // A limiter stops dense firefights from clipping. It used to sit at -14dB
+    // with an 8:1 ratio, which is not gentle: in a real firefight the bus is
+    // over that threshold continuously, so every shot was squashed by the one
+    // before it and the weapon stopped being audible at exactly the moment it
+    // mattered. Held below clipping without flattening the thing it protects.
     this.limiter=this.ctx.createDynamicsCompressor();
-    this.limiter.threshold.value=-14;
-    this.limiter.knee.value=12;
-    this.limiter.ratio.value=8;
-    this.limiter.attack.value=.003;
-    this.limiter.release.value=.18;
+    this.limiter.threshold.value=-6;
+    this.limiter.knee.value=8;
+    this.limiter.ratio.value=3.5;
+    this.limiter.attack.value=.004;
+    this.limiter.release.value=.16;
     this.sfxBus.connect(this.limiter);
     this.limiter.connect(this.master);
 
     this.musicBus=this.ctx.createGain();
     this.musicBus.gain.value=this.settings.music;
-    this.musicBus.connect(this.master);
+    // Music runs through a duck that the combat sounds pull down. The score and
+    // the weapons were competing for the same space with nothing arbitrating
+    // between them, and the score won because it is continuous while a gunshot
+    // is ninety milliseconds long. Turning the music down everywhere would have
+    // paid for that with a dead sector between fights; this only takes it back
+    // while something is actually shooting.
+    this.musicDuck=this.ctx.createGain();
+    this.musicDuck.gain.value=1;
+    this.musicBus.connect(this.musicDuck);
+    this.musicDuck.connect(this.master);
 
     this.buildNoise();
     this.watchContext();
@@ -199,21 +220,28 @@ export class AudioEngine{
     // otherwise reach the oscillator helpers with no context at all.
     if(!this.ready||!this.ctx)return;
     const volume=clamp(options.volume??1,0,1.5);
+    // How far each kind of sound pushes the score out of the way. Weapon fire
+    // is repetitive, so it takes a little and holds it; an explosion or a
+    // signature arriving takes a lot.
+    const duck=DUCKING[name];
+    if(duck)this.duckMusic(duck[0],duck[1]);
     switch(name){
       case 'shoot':
         if(!this.canPlay('shoot',.035))return;
-        this.noise({duration:.09,gain:.16*volume,freq:2600,endFreq:600,filter:'bandpass',q:1.1});
-        this.tone({freq:340,endFreq:110,type:'square',duration:.07,gain:.07*volume});
+        // The operative's own weapon, reported as barely audible on a phone
+        // over the score — and it was the quietest thing in the mix by a way.
+        this.noise({duration:.09,gain:.3*volume,freq:2600,endFreq:600,filter:'bandpass',q:1.1});
+        this.tone({freq:340,endFreq:110,type:'square',duration:.075,gain:.15*volume});
         break;
       case 'shootHeavy':
         if(!this.canPlay('shootHeavy',.06))return;
-        this.noise({duration:.2,gain:.26*volume,freq:1500,endFreq:180,filter:'lowpass'});
-        this.tone({freq:180,endFreq:52,type:'sawtooth',duration:.18,gain:.16*volume});
+        this.noise({duration:.2,gain:.4*volume,freq:1500,endFreq:180,filter:'lowpass'});
+        this.tone({freq:180,endFreq:52,type:'sawtooth',duration:.18,gain:.26*volume});
         break;
       case 'laser':
         if(!this.canPlay('laser',.05))return;
-        this.tone({freq:1500,endFreq:320,type:'sawtooth',duration:.17,gain:.11*volume});
-        this.tone({freq:2400,endFreq:700,type:'sine',duration:.12,gain:.06*volume});
+        this.tone({freq:1500,endFreq:320,type:'sawtooth',duration:.17,gain:.19*volume});
+        this.tone({freq:2400,endFreq:700,type:'sine',duration:.12,gain:.1*volume});
         break;
       case 'tech':
         if(!this.canPlay('tech',.05))return;
@@ -344,7 +372,47 @@ export class AudioEngine{
   // The level the authored tracks play at: the same two settings the
   // synthesized bed answers to, so one slider and one mute move both.
   get musicLevel(){
-    return this.settings.muted?0:clamp(this.settings.master*this.settings.music,0,1);
+    const base=this.settings.muted?0:clamp(this.settings.master*this.settings.music,0,1);
+    return base*(this.duck??1);
+  }
+
+  // ---- Ducking -----------------------------------------------------------
+  //
+  // Combat pulls the score down for as long as it lasts and lets it back up
+  // afterwards. Reported from an iPhone: the music was too loud and the bullets
+  // could barely be heard, which is one problem and not two — the score is
+  // continuous and a gunshot is ninety milliseconds long, so with nothing
+  // arbitrating between them the score simply wins.
+  //
+  // It has to be done twice, because the music arrives by two different roads.
+  // The authored tracks are <audio> elements that were deliberately kept out of
+  // the AudioContext (an element adopted by a suspended context freezes), so
+  // they are ducked through their own volume; the synthesized bed is in the
+  // graph and is ducked with a gain node.
+  duckMusic(amount=.4,hold=.12){
+    if(!this.ready)return;
+    this.duck=Math.min(this.duck??1,1-clamp(amount,0,.85));
+    this.duckHeldUntil=performance.now()+hold*1000;
+    if(!this.duckTimer)this.duckTimer=setInterval(()=>this.relaxDuck(),40);
+    this.applyDuck();
+  }
+
+  relaxDuck(){
+    // Held flat while the shooting continues, then back up over about a second
+    // — fast enough to hear the score return between engagements, slow enough
+    // that a pause in fire does not make it surge.
+    if(performance.now()<this.duckHeldUntil)return;
+    this.duck=Math.min(1,(this.duck??1)+.06);
+    this.applyDuck();
+    if(this.duck>=1){clearInterval(this.duckTimer);this.duckTimer=null}
+  }
+
+  applyDuck(){
+    const level=this.duck??1;
+    if(this.musicDuck&&this.ctx){
+      this.musicDuck.gain.setTargetAtTime(level,this.ctx.currentTime,.03);
+    }
+    for(const entry of (this.trackNodes||new Map()).values())this.applyTrackVolume(entry);
   }
 
   // One <audio> element per track, kept for the session so a redeployment

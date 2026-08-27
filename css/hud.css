@@ -102,13 +102,33 @@
 /* ---- Field objectives --------------------------------------------------- */
 
 .hud-column{display:flex;flex-direction:column;gap:8px;min-width:0}
-.objectives{max-width:400px;padding:8px 10px}
+.objectives{max-width:400px;padding:6px 9px}
 .objectives-head{
-  display:flex;justify-content:space-between;align-items:center;
-  font-size:8.5px;letter-spacing:.2em;color:var(--muted);margin-bottom:6px;
+  display:flex;align-items:center;gap:8px;
+  font-size:8.5px;letter-spacing:.2em;color:var(--muted);
 }
-.objectives-head b{color:var(--gold);font-size:10px}
-.objective-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.objectives-head b{color:var(--gold);font-size:10px;letter-spacing:.08em;margin-left:auto}
+/* The whole set's progress, so the collapsed header still says how far along
+   the contract is without spending three rows saying it. */
+.objectives-bar{
+  flex:0 0 46px;height:2px;background:rgba(118,231,212,.16);
+  display:block;overflow:hidden;
+}
+.objectives-bar u{display:block;height:100%;background:var(--accent);
+  opacity:.75;width:0;transition:width .3s linear}
+.objectives.all-done .objectives-bar u{background:#8bff9b}
+.objectives.all-done .objectives-head b{color:#8bff9b}
+/* Closed by default; `open` is added for a few seconds whenever a count moves.
+   Height rather than display, so it slides instead of jumping. */
+.objective-list{
+  list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;
+  max-height:0;overflow:hidden;opacity:0;
+  transition:max-height .22s ease,opacity .18s ease,margin-top .22s ease;
+}
+.objectives.open .objective-list{max-height:180px;opacity:1;margin-top:6px}
+@media(prefers-reduced-motion:reduce){
+  .objective-list{transition:none}
+}
 .objective{
   position:relative;display:grid;
   grid-template-columns:12px 1fr auto;align-items:center;gap:6px;

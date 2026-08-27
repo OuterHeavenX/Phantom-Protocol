@@ -411,3 +411,55 @@ Remaining:
      was already gone. The queue is sampled every step instead.
    Trusted only after being shown to fail: both bugs put back deliberately, all
    eight symptoms caught, exit code 1.
+24. ~~The mix, from an actual phone.~~ Reported: the music was too loud and the
+   bullets could barely be heard. That is one problem, not two.
+   The score is continuous and a gunshot is ninety milliseconds long, and there
+   was nothing arbitrating between them — so the score simply won. Worse, the
+   weapons went through a limiter set at -14dB with an 8:1 ratio, which in a
+   real firefight is over threshold continuously: every shot was being squashed
+   by the one before it, at exactly the moment it mattered. The music bypassed
+   the limiter entirely.
+   * The limiter is held below clipping without flattening what it protects
+     (-6dB, 3.5:1).
+   * `shoot` was the quietest thing in the mix by some way and is now roughly
+     twice its old level; the heavy and beam weapons came up with it.
+   * Combat ducks the score for as long as it lasts and lets it back up
+     afterwards. It has to be done twice, because the music arrives by two
+     roads: the authored tracks are `<audio>` elements deliberately kept out of
+     the AudioContext, so they duck through their own volume, while the
+     synthesized bed is in the graph and ducks with a gain node. Verified in
+     isolation: one shot takes it to 0.8 and it is back at 1.0 in about 240ms.
+     Deliberately shallow, because the resting level came down at the same time
+     and the two multiply — a deep duck on a quieter score is not "mixed under
+     the weapons", it is off.
+   The default balance moved with it, and because a save version does not change
+   when a default does, `audioMix` marks the balance a save has been brought up
+   to and the correction runs on every load. It has to read that marker off the
+   stored file rather than the merged result: the defaults carry the current
+   marker, so after the merge every save claimed to be current and the
+   correction never fired.
+25. ~~Give the sector back its screen.~~ Measured on a 430x932 iPhone viewport:
+   the top block was **309px of 932 — a third of the screen** — against 555px of
+   sector. On a phone held sideways it was worse: **45% heads-up display, 38%
+   sector**.
+   * The field-objective checklist held three full rows for the whole contract.
+     It is reference, not moment-to-moment, so it collapses to its header with
+     a live progress bar and opens itself for a few seconds when an objective
+     comes off the board. Opening on *any* change was the wrong trigger and was
+     tried first: a timed objective ticks every second, so the panel reopened
+     continuously and never collapsed at all. The close also has to be checked
+     unconditionally — it was inside the "nothing changed" branch, which a
+     contract carrying a timed objective never reaches.
+   * Every gap and pad in the region was trimmed. What came out is space, not
+     type: the type went up in the last pass and stayed up.
+   * Sideways, the middle column stacks the contract panel, the signature's
+     health and the radio traffic on top of each other, so the codec is held to
+     two lines there with a smaller portrait.
+   Portrait: 33% -> 27% heads-up, 60% -> 66% sector. Landscape: 45% -> 31% and
+   38% -> 52%.
+26. ~~Stop the channel sitting open.~~ No single codec line ever lasted more
+   than six seconds, but three queued back to back with a gap between each ran
+   the panel for twenty-one seconds unbroken — and the panel is large and sits
+   over the play area. Twenty-five seconds is now the ceiling on one continuous
+   transmission; whatever has not been said by then is dropped rather than held
+   over, and a burst is followed by six seconds of enforced quiet.
