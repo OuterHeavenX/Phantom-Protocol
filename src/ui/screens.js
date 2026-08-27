@@ -193,6 +193,10 @@ export class Screens{
             <span class="eyebrow">STRATEGIC CONFLICT DIVISION // ACCESS GRANTED</span>
             <h1>RED<br>STATIC</h1>
             <p class="tagline">Enter manufactured conflict zones. Survive the response. Recover intelligence. Determine who is writing the war.</p>
+            <div class="public-alpha-status" role="status" aria-label="RED STATIC public alpha notice">
+              <strong>PUBLIC ALPHA v0.3.1</strong>
+              <span>Unfinished test build. Features, balance, and saved progress may change.</span>
+            </div>
           </div>
           <nav class="nav">
             ${nav.map(([label,hint,route],i)=>{
@@ -214,12 +218,18 @@ export class Screens{
             }).join('')}
           </nav>
           <div class="brand-foot">
-            <span class="eyebrow">BUILD v0.3.0 // FIELD REBUILD</span>
+            <span class="eyebrow">BUILD v0.3.1 // PUBLIC ALPHA</span>
+            <a class="btn ghost alpha-feedback"
+               href="https://forms.gle/1p1d7s9SJvMZ2Uw48"
+               target="_blank"
+               rel="noopener noreferrer"
+               aria-label="Report a RED STATIC public alpha issue">REPORT ISSUE</a>
             <a class="btn ghost support-development"
                href="https://buymeacoffee.com/redstaticgame"
                target="_blank"
                rel="noopener noreferrer"
                aria-label="Support RED STATIC development on Buy Me a Coffee">☕ SUPPORT DEVELOPMENT</a>
+            <span class="copyright">© 2026 JIMMY FLETE. ALL RIGHTS RESERVED.</span>
           </div>
         </section>
 
