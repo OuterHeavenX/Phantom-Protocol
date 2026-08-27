@@ -33,6 +33,11 @@
 //   node tools/contract.mjs                      # blacksite, 20min, all scenarios
 //   node tools/contract.mjs foundry 30           # one theatre at thirty minutes
 //   node tools/contract.mjs blacksite 20 lethal  # a single scenario
+// Storage key: `red-static-save` is the live one. `phantom-protocol-save` is a
+// legacy name the game reads as a fallback and never writes — seeding that one
+// works exactly once, until the game writes the real key, after which every
+// seed is silently ignored and the harness tests a default save without saying
+// so.
 import {chromium} from '/opt/node22/lib/node_modules/playwright/index.mjs';
 
 const THEATRES=(process.argv[2]||'blacksite').split(',');
@@ -55,15 +60,20 @@ async function run(theatre,scenario){
   await p.goto('http://127.0.0.1:8931/index.html',{waitUntil:'load'});
   await p.waitForTimeout(400);
   await p.evaluate(()=>{
-    const raw=JSON.parse(localStorage.getItem('phantom-protocol-save')||'{}');
-    raw.version=3;raw.maps=raw.maps||{};
+    const raw=JSON.parse(localStorage.getItem('red-static-save')||'{}');
+    raw.version=3;
+    // DEPLOY, CONTRACTS and GUNSMITH are gated behind campaign progress now, and
+    // every harness here reaches a sector through DEPLOY. Seeded as an operator
+    // who has already been through the opening rather than a first run.
+    raw.campaign={...(raw.campaign||{}),op1:{completed:true}};
+    raw.statistics={...(raw.statistics||{}),missions:Math.max(2,raw.statistics?.missions||0)};raw.maps=raw.maps||{};
     for(const id of ['blacksite','arctic','sunken','foundry','orbital','crossfall','hollow','mire','hangar','proving'])
       raw.maps[id]={...(raw.maps[id]||{}),unlocked:true};
     // Enough contracts closed that the walker's record says it is due, which is
     // the only way the nemesis event is scheduled at all.
     raw.statistics={...(raw.statistics||{}),missions:40};
     raw.settings={...(raw.settings||{}),renderer:'2d',showMinimap:false,showFps:false};
-    localStorage.setItem('phantom-protocol-save',JSON.stringify(raw));
+    localStorage.setItem('red-static-save',JSON.stringify(raw));
   });
   await p.reload({waitUntil:'load'});await p.waitForTimeout(700);
   await p.evaluate(()=>document.querySelector('[data-splash="start"]')?.click());

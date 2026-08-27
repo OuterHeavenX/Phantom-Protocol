@@ -108,7 +108,7 @@ export class Boss{
     // Phase transition clears the field of its own shots and announces itself.
     engine.clearEnemyProjectiles(.6);
     engine.onBossPhase?.(this,this.phase);
-    engine.camera.addShake(.5);
+    engine.camera.addShake(.5,'boss');
     engine.audio.play('boss',{volume:.8});
     this.globalCooldown=1.4;
   }
@@ -192,7 +192,7 @@ export class Boss{
       x:this.x,y:this.y,radius:220,damage:(this.chargeDamage||30)*.7*this.damageMult,
       knockback:420,color:this.def.accent,hostile:true
     });
-    engine.camera.addShake(.4);
+    engine.camera.addShake(.4,'boss');
     engine.audio.play('explode',{volume:1});
   }
 
@@ -240,7 +240,7 @@ const PATTERNS={
         });
       }
       engine.audio.play('shootHeavy',{volume:.8});
-      engine.camera.addShake(.12);
+      engine.camera.addShake(.12,'boss');
     }
   },
 
@@ -295,7 +295,7 @@ const PATTERNS={
         });
       }
       engine.audio.play('laser',{volume:1.1});
-      engine.camera.addShake(.2);
+      engine.camera.addShake(.2,'boss');
     }
   },
 
@@ -339,7 +339,7 @@ const PATTERNS={
       boss.chargeDamage=pattern.damage;
       boss.chargeShockwave=!!pattern.shockwave;
       engine.audio.play('dash',{volume:1.1});
-      engine.camera.addShake(.24);
+      engine.camera.addShake(.24,'boss');
     }
   },
 

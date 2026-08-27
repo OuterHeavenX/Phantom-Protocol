@@ -2,6 +2,7 @@ import {OPERATIVES} from '../../data/operatives.js';
 import {WEAPONS,weaponUnlockLevel} from '../../data/weapons.js';
 import {MAPS,DIFFICULTIES} from '../../data/maps.js';
 import {defaultNemesisRecord} from '../../data/nemesis.js';
+import {primeAvailability,reconcileOnLoad} from './unlocks.js';
 
 const KEY='red-static-save';
 // Keys this game has written under before, newest first. They are read once so
@@ -243,6 +244,11 @@ export function normalizeSave(raw){
   const merged=mergeRecord(base,source);
   merged.version=SAVE_VERSION;
 
+  // Progression bookkeeping is deliberately NOT done here. `normalizeSave`
+  // returns only the save, so doing it here made the change and dropped the
+  // one fact the caller needed — whether the save is now worth writing. It
+  // belongs in `loadSave`, which can act on the answer. See `reconcileOnLoad`.
+
   // A save written before the audio rebalance keeps its old levels, and the
   // save version does not change when a default does — so this is checked on
   // every load rather than in `migrate`, which a save already on the current
@@ -293,8 +299,27 @@ export function loadSave(){
       if(stored)break;
       stored=localStorage.getItem(legacy);
     }
-    if(!stored)return defaultSave();
-    return normalizeSave(JSON.parse(stored));
+    // A first run never goes through `normalizeSave`, so it has to be primed
+    // here as well. Without this the command centre opened wearing a NEW badge
+    // on every section the operator had never navigated away from.
+    if(!stored){
+      const fresh=defaultSave();
+      primeAvailability(fresh);
+      // Deliberately not written. A save that has never existed describes an
+      // operator who has done nothing, so there is nothing to lose if they
+      // close the tab, and writing here once put a default file on disk
+      // underneath a caller that was still assembling one.
+      return fresh;
+    }
+    const save=normalizeSave(JSON.parse(stored));
+    // The load itself can change the save: it primes one that has never
+    // recorded what it has been shown, and declassifies nodes the operator can
+    // now afford. If that is not written now nothing else will write it —
+    // every later refresh finds the work already done and reports no change —
+    // so the record would be rebuilt from the current balance on every load
+    // and neither a declassified node nor a NEW badge would survive a restart.
+    if(reconcileOnLoad(save))saveGame(save);
+    return save;
   }catch(err){
     console.warn('[red-static] save load failed, starting fresh',err);
     return defaultSave();
@@ -338,7 +363,13 @@ export function exportSave(save){
 
 export function importSave(code){
   const parsed=JSON.parse(decodeURIComponent(escape(atob(code.trim()))));
-  return normalizeSave(parsed);
+  const save=normalizeSave(parsed);
+  // Same reconciliation a load does. Without it an imported save has no record
+  // of what it has been shown, so the command centre would flag every section
+  // it already had as new. The caller writes the imported save, so the return
+  // value is not needed here.
+  reconcileOnLoad(save);
+  return save;
 }
 
 export function resetSave(){
