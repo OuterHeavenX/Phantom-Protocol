@@ -474,7 +474,10 @@ export class AudioEngine{
     this.rotorSilentSince=0;
     if(!this.rotor)this.startRotor();
     if(!this.rotor)return;
-    this.rotor.out.gain.setTargetAtTime(target*.5,this.ctx.currentTime,.18);
+    // Halved after hearing it on a phone: at .5 the rotor sat on top of the
+    // firefight rather than under it. A helicopter is meant to be felt across
+    // the sector, not to be the loudest thing in it.
+    this.rotor.out.gain.setTargetAtTime(target*.25,this.ctx.currentTime,.18);
     // Blades speed up a little as it bears down, which reads as approach even
     // when the level is holding steady.
     this.rotor.lfo.frequency.setTargetAtTime(11+target*5,this.ctx.currentTime,.4);
