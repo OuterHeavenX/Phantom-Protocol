@@ -1,4 +1,5 @@
 import {clamp,dist,normalize,damp,TAU} from '../core/math.js';
+import {weaponVoice} from '../../data/weapons.js';
 
 // Boss controller. A boss is a phase machine: each phase declares a weighted
 // set of attack patterns with independent cooldowns, and phases swap in at
@@ -239,7 +240,7 @@ const PATTERNS={
           radius:6,color:boss.def.color,life:5,fromBoss:true
         });
       }
-      engine.audio.play('shootHeavy',{volume:.8});
+      engine.audio.play('shootHeavy',{volume:.8,hostile:true});
       engine.camera.addShake(.12,'boss');
     }
   },
@@ -267,7 +268,7 @@ const PATTERNS={
           }
         });
       }
-      engine.audio.play('tech',{volume:.7});
+      engine.audio.play('tech',{volume:.7,hostile:true});
     }
   },
 
@@ -294,7 +295,7 @@ const PATTERNS={
           color:boss.def.color
         });
       }
-      engine.audio.play('laser',{volume:1.1});
+      engine.audio.play('laser',{volume:1.1,hostile:true});
       engine.camera.addShake(.2,'boss');
     }
   },
@@ -319,7 +320,7 @@ const PATTERNS={
           });
         });
       }
-      engine.audio.play('shootHeavy',{volume:.7});
+      engine.audio.play('shootHeavy',{volume:.7,hostile:true});
     }
   },
 
@@ -354,7 +355,7 @@ const PATTERNS={
   droneCurtain:{
     fire(boss,pattern,engine){
       engine.spawnEscortSquad(pattern.unit||'pursuit',pattern.count||8,boss);
-      engine.audio.play('tech',{volume:.8});
+      engine.audio.play('tech',{volume:.8,hostile:true});
     }
   },
 
@@ -372,7 +373,7 @@ const PATTERNS={
         engine.spawnBlinkVfx(boss.x,boss.y,boss.radius,boss.def.color);
         boss.x=x;boss.y=y;
         engine.spawnBlinkVfx(x,y,boss.radius,boss.def.color);
-        engine.audio.play('tech',{volume:.9});
+        engine.audio.play('tech',{volume:.9,hostile:true});
         return;
       }
     }
@@ -409,7 +410,7 @@ const PATTERNS={
         duration:pattern.duration||4,damage:pattern.damage,
         tickInterval:.5,color:boss.def.accent,follow:boss
       });
-      engine.audio.play('scramble',{volume:.9});
+      engine.audio.play('scramble',{volume:.9,hostile:true});
     }
   },
 
@@ -441,7 +442,12 @@ const PATTERNS={
         });
       }
       engine.addFloatingText(boss.x,boss.y-boss.radius-20,weapon.name.toUpperCase(),'#e0e6ea');
-      engine.audio.play('shoot',{volume:1});
+      // THE ARBITER is firing the operative's own weapon back at them, so it
+      // fires with that weapon's voice — shaded as incoming, which is the whole
+      // joke: you recognise the gun and it is pointed the wrong way.
+      engine.audio.play('enemyWeapon',{
+        voice:weaponVoice(weapon),hostile:true,volume:.9
+      });
     }
   }
 };

@@ -20,7 +20,7 @@ import {DEPLOY_KITS,deployKit} from '../../data/deploykits.js';
 import {vaultKind} from '../../data/vaults.js';
 import {captureStep,ReplayRecorder,ReplayPlayer,REPLAY_VERSION,SIM_SETTINGS} from './replay.js';
 import {ABILITIES,TRAITS,distanceToSegment} from './abilities.js';
-import {ENEMIES_BY_ID,STATUS_EFFECTS} from '../../data/enemies.js';
+import {ENEMIES_BY_ID,STATUS_EFFECTS,enemyVoice} from '../../data/enemies.js';
 import {BOSSES_BY_ID,MINIBOSSES} from '../../data/bosses.js';
 import {baseStats} from '../../data/passives.js';
 import {WEAPONS_BY_ID,weaponVoice} from '../../data/weapons.js';
@@ -1368,7 +1368,15 @@ export class Engine{
       life:4,piercing:spec.piercing,source:enemy
     });
     this.fx.muzzle(enemy.x+Math.cos(angle)*enemy.radius,enemy.y+Math.sin(angle)*enemy.radius,angle,.6);
-    this.audio.play('shoot',{volume:.35});
+    // Every hostile in the game used to share one generic blip on the player's
+    // own weapon bus. It carries its own family now, shaded as incoming and
+    // attenuated by how far away it actually is, so a sniper across the sector
+    // and a crawler at your ankles are two different events.
+    this.audio.play('enemyWeapon',{
+      voice:enemyVoice(enemy),
+      hostile:true,
+      volume:.62*this.audibleAt(enemy.x,enemy.y,1100)
+    });
   }
 
   fireMortar(enemy,spec){

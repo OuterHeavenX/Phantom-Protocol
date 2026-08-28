@@ -103,5 +103,24 @@ defect back one at a time: no duck, an instant release, ducks that multiply
 instead of taking the deeper of the two, a teardown that leaves the score held
 down, and an eased attack instead of an immediate one.
 
+`enemy-audio.mjs` asserts that a firefight carries information: that each
+hostile archetype resolves to a weapon family, that hostile fire leaves on the
+`enemyWeapon` bus while the operative's own stays on `playerWeapon` even for the
+sound names both of them use, and that incoming fire is spectrally shaded away
+from outgoing.
+
+Its most important assertion is the dullest one. Everything else exercises
+`busFor` and `weaponShot` directly, which proves the machinery works and proves
+nothing about whether a hostile pulling a trigger ever reaches it — so the
+harness also spawns four real archetypes, fires them through the engine, and
+watches what is actually emitted. Reverting only the call site leaves every
+other assertion green.
+
+Note the margin on the spectral assertions. Every shot is detuned by up to its
+family's `spread`, so "lower than the last one" is a coin flip between two shots
+of the same voice and passes on a build with no shading at all; the thresholds
+are set well outside the wobble and were confirmed to fail on three consecutive
+runs with the shading removed.
+
 `parity.mjs` expects the game at `http://127.0.0.1:8931` and Playwright's
 Chromium; edit the two constants at the top if either differs.

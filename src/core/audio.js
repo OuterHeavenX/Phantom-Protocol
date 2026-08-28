@@ -39,7 +39,7 @@ const CHANNEL_OF={
 
 // An alert briefly pushes these categories down so it can be heard through
 // them. Short and shallow: this is making room, not stopping the fight.
-const ALERT_DUCKS=['playerWeapon','impact','enemy','ambience'];
+const ALERT_DUCKS=['playerWeapon','enemyWeapon','impact','enemy','ambience'];
 
 // ---------------------------------------------------------------------------
 // Weapon voices
@@ -94,13 +94,31 @@ const WEAPON_VOICES={
   corrupted:{crack:[2300,410,.28,.07],body:[330,660,.2,.14],press:[70,110,.2,.16],
              mech:[1500,.08,.05],tail:.26,spread:.14}
 };
+// What makes a shot read as *incoming* rather than outgoing.
+//
+// Deliberately not a second table of twelve families. A rifle is a rifle
+// whoever is holding it, and a parallel set of enemy voices would only
+// guarantee the two drift apart the first time one of them is tuned. What tells
+// the ear somebody else fired is the same thing that tells it in the real
+// world: the shot has crossed some ground to reach you, and ground takes the
+// top off the transient, removes the mechanical detail entirely — you never
+// hear another man's bolt — and hands back more of the room instead.
+//
+// Applied on top of whichever family the hostile carries, so a hostile sniper
+// still sounds like a sniper and still sounds like it is pointed at you.
+const INCOMING={crackGain:.62,crackFreq:.72,mech:0,tail:1.7};
+
 // name -> [how much of the score to take, how long to hold it there]
 // Deliberately shallow. The resting level came down at the same time, and the
 // two multiply — a deep duck on top of a quieter score left the music at about
 // a seventh of what it was, which is not "mixed under the weapons", it is off.
 const DUCKING={
   weapon:[.22,.12],mechStep:[.24,.2],shoot:[.2,.1],shootHeavy:[.28,.16],laser:[.22,.14],scramble:[.2,.14],
-  explode:[.42,.3],boss:[.5,.9],hurt:[.3,.24],victory:[.55,1],defeat:[.55,1]
+  explode:[.42,.3],boss:[.5,.9],hurt:[.3,.24],victory:[.55,1],defeat:[.55,1],
+  // Shallower than the operative's own weapon and held for less time. There is
+  // one of you and there can be thirty of them, so a duck sized for your rifle
+  // would leave the score pinned flat for the length of every firefight.
+  enemyWeapon:[.14,.09]
 };
 
 // How far a gunship overhead pushes the score down, at its closest.
@@ -335,6 +353,19 @@ export class AudioEngine{
     return this.channels[CHANNEL_OF[name]||'impact']||null;
   }
 
+  // Which bus an event goes out on.
+  //
+  // A sound is not owned by its name. `laser` is the operative's beam weapon
+  // and it is also a boss's; `shootHeavy` is fired by both. Routing purely by
+  // name put every one of those on the player's own bus, so the mixer had no
+  // way to tell incoming from outgoing and the dedicated `enemyWeapon` channel
+  // sat built, connected and completely unused. `hostile` is the override: the
+  // caller knows who pulled the trigger, and nothing else does.
+  busFor(name,options){
+    if(options&&options.hostile&&this.channels?.enemyWeapon)return this.channels.enemyWeapon;
+    return this.channel(name);
+  }
+
   // Pull the noisy categories down for a moment so a cue can be heard through
   // them. Recovers on its own; nothing has to remember to put it back.
   duckChannels(names,amount=.45,hold=.18){
@@ -363,7 +394,7 @@ export class AudioEngine{
     // How far each kind of sound pushes the score out of the way. Weapon fire
     // is repetitive, so it takes a little and holds it; an explosion or a
     // signature arriving takes a lot.
-    const duck=DUCKING[name];
+    const duck=options.hostile?DUCKING.enemyWeapon:DUCKING[name];
     if(duck)this.duckMusic(duck[0],duck[1]);
     // An alert makes room for itself in the effects mix, not just in the music.
     if(CHANNEL_OF[name]==='alert')this.duckChannels(ALERT_DUCKS,.4,.22);
@@ -371,7 +402,7 @@ export class AudioEngine{
     // `tone` and `noise` pick this up when no bus is passed explicitly, so a
     // sound made of five layers reaches its category without five arguments,
     // and a sound added later is routed without anyone remembering to.
-    this.currentBus=this.channel(name);
+    this.currentBus=this.busFor(name,options);
     // Every layer of the event is built synchronously inside the switch below,
     // so the routing only has to survive that. It is cleared straight after so
     // a helper called from anywhere else cannot inherit the last category used.
@@ -390,10 +421,15 @@ export class AudioEngine{
   weaponShot(voice,volume,options){
     const v=WEAPON_VOICES[voice]||WEAPON_VOICES.rifle;
     const wobble=1+(Math.random()*2-1)*(v.spread||.05);
-    const tail=(v.tail||.15)*(options.tail??1);
+    // Incoming fire is the same family seen from the other end. One shade
+    // applied over every family, rather than a second set of voices to keep in
+    // step with the first.
+    const far=options.incoming?INCOMING:null;
+    const tail=(v.tail||.15)*(options.tail??1)*(far?far.tail:1);
 
     const [ct,ce,cg,cd]=v.crack;
-    this.noise({duration:cd,gain:cg*volume,freq:ct*wobble,endFreq:ce,
+    this.noise({duration:cd,gain:cg*volume*(far?far.crackGain:1),
+      freq:ct*wobble*(far?far.crackFreq:1),endFreq:ce*(far?far.crackFreq:1),
       filter:'bandpass',q:1.1});
 
     const [bt,be,bg,bd]=v.body;
@@ -406,7 +442,7 @@ export class AudioEngine{
     // The action. Offset a little so it reads as a separate mechanical event
     // rather than as part of the report.
     const [mf,mg,md]=v.mech;
-    if(mg>0){
+    if(mg>0&&!far){
       this.noise({duration:md,gain:mg*volume,freq:mf*wobble,endFreq:mf*.5,
         filter:'bandpass',q:2.4,delay:.012});
     }
@@ -414,8 +450,8 @@ export class AudioEngine{
     // The room answering. Filtered well down, because a reflection has lost its
     // top end by the time it comes back.
     if(tail>.02){
-      this.noise({duration:tail,gain:cg*volume*.3,freq:700,endFreq:180,
-        filter:'lowpass',delay:.02});
+      this.noise({duration:tail,gain:cg*volume*.3*(far?far.crackGain:1),
+        freq:700,endFreq:180,filter:'lowpass',delay:.02});
     }
   }
 
@@ -429,6 +465,17 @@ export class AudioEngine{
         // firing together do not silence one another.
         if(!this.canPlay('weapon:'+voice,options.throttle??.028))return;
         this.weaponShot(voice,volume,options);
+        break;
+      }
+      // Hostile fire. Same layer machinery as the operative's own weapon and
+      // the same family table, shaded to read as incoming.
+      case 'enemyWeapon':{
+        const voice=options.voice||'rifle';
+        // Throttled per family, and looser than the player's: thirty hostiles
+        // firing at once is normal, and the throttle is what stops that from
+        // turning into a wall of noise with no shape to it.
+        if(!this.canPlay('enemyWeapon:'+voice,options.throttle??.045))return;
+        this.weaponShot(voice,volume,{...options,incoming:true});
         break;
       }
       case 'shoot':
