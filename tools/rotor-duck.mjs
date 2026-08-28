@@ -97,7 +97,13 @@ if(out.overhead>=1)fail.push('a gunship overhead does not duck the score at all'
 if(!near(out.overhead,.65,.03))fail.push(`overhead duck is ${out.overhead}, expected about .65`);
 if(!near(out.stillOverhead,out.overhead,.01))fail.push(`the duck decayed while the gunship was still overhead (${out.overhead} -> ${out.stillOverhead})`);
 if(!near(out.firingUnderneath,out.overhead,.01))fail.push(`firing under a gunship stacked the ducks (${out.firingUnderneath}, multiplying would give ${out.wouldBeIfMultiplied})`);
-if(out.oneFrameAfterLeaving>.9)fail.push(`the score snapped back too fast when the gunship left (${out.oneFrameAfterLeaving} after one frame)`);
+// "Not instant", not "not much". The release is measured against the wall
+// clock, so how far it travels in one wait depends on how long that wait
+// really took — and on a loaded machine a nominal 16ms frame can be ten times
+// that, recovering correctly and tripping a tight threshold. What actually
+// distinguishes an eased release from an instant one is that it has not
+// finished yet.
+if(out.oneFrameAfterLeaving>.99)fail.push(`the score snapped back too fast when the gunship left (${out.oneFrameAfterLeaving} after one frame)`);
 if(out.oneFrameAfterLeaving<=out.overhead)fail.push('the score did not start recovering when the gunship left');
 if(!near(out.afterLeaving,1))fail.push(`the score never came back after the gunship left (${out.afterLeaving})`);
 if(!near(out.halfDistance,.825,.03))fail.push(`half distance ducked ${out.halfDistance}, expected about .825`);

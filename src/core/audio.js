@@ -324,7 +324,12 @@ export class AudioEngine{
     return osc;
   }
 
-  noise({duration=.2,gain=.3,delay=0,filter='lowpass',freq=1200,endFreq=null,q=1,bus=null}={}){
+  // `attack` matches `tone`'s. Every noise event used to open in four
+  // milliseconds, which is correct for a gunshot or an impact and wrong for
+  // anything that swells — a gust of wind or distant thunder given a four
+  // millisecond edge does not read as weather, it reads as a gunshot with the
+  // top rolled off.
+  noise({duration=.2,gain=.3,delay=0,filter='lowpass',freq=1200,endFreq=null,q=1,attack=.004,bus=null}={}){
     const ctx=this.ctx,t=ctx.currentTime+delay;
     const src=ctx.createBufferSource();
     src.buffer=this.noiseBuffer;
@@ -336,7 +341,9 @@ export class AudioEngine{
     if(endFreq!==null)biquad.frequency.exponentialRampToValueAtTime(Math.max(40,endFreq),t+duration);
     const env=ctx.createGain();
     env.gain.setValueAtTime(.0001,t);
-    env.gain.exponentialRampToValueAtTime(Math.max(.0001,gain),t+.004);
+    // Clamped below the duration, or a long attack on a short event schedules
+    // its peak after its own release and the sound never arrives at all.
+    env.gain.exponentialRampToValueAtTime(Math.max(.0001,gain),t+Math.min(attack,duration*.9));
     env.gain.exponentialRampToValueAtTime(.0001,t+duration);
     src.connect(biquad);biquad.connect(env);env.connect(bus||this.currentBus||this.sfxBus);
     src.start(t);
@@ -651,6 +658,174 @@ export class AudioEngine{
   // them, so a firefight underneath a helicopter does not stack into silence.
   get musicDuckLevel(){
     return Math.min(this.duck??1,this.rotorDuck??1);
+  }
+
+  // ---- Ambience ----------------------------------------------------------
+  //
+  // The bed a theatre sits on. Continuous like the rotor and built the same
+  // way — nodes held directly rather than pushed through `tone`/`noise`, which
+  // exist for one-shots and would count a permanent voice against the budget
+  // forever.
+  //
+  // The intermittent events do go through the one-shot helpers, because that is
+  // exactly what they are.
+  startAmbience(profile){
+    if(!this.ready||!this.ctx||this.ambience)return;
+    if(!profile)return;
+    const ctx=this.ctx;
+    const out=ctx.createGain();
+    out.gain.value=0;
+    out.connect(this.channels?.ambience||this.sfxBus);
+
+    const parts=[];
+
+    // Air. Broadband noise through a drifting filter.
+    if(profile.air){
+      const a=profile.air;
+      const src=ctx.createBufferSource();
+      src.buffer=this.noiseBuffer;
+      src.loop=true;
+      const filter=ctx.createBiquadFilter();
+      filter.type=a.filter||'lowpass';
+      filter.frequency.value=a.freq;
+      filter.Q.value=a.q||.5;
+      const gain=ctx.createGain();
+      gain.gain.value=a.gain;
+      src.connect(filter);filter.connect(gain);gain.connect(out);
+
+      // The drift. Without it the noise is stationary, and stationary noise
+      // stops reading as an environment within about ten seconds — the ear
+      // files it as circuit hiss and then ignores it completely.
+      let drift=null;
+      if(a.drift){
+        const [rate,depth]=a.drift;
+        drift=ctx.createOscillator();
+        drift.frequency.value=rate;
+        const depthGain=ctx.createGain();
+        depthGain.gain.value=depth;
+        drift.connect(depthGain);
+        depthGain.connect(filter.frequency);
+        drift.start();
+      }
+      src.start();
+      parts.push(src);
+      if(drift)parts.push(drift);
+    }
+
+    // Hum. Whether the place still has power.
+    if(profile.hum){
+      const h=profile.hum;
+      const osc=ctx.createOscillator();
+      osc.type=h.type||'sine';
+      osc.frequency.value=h.freq;
+      const gain=ctx.createGain();
+      gain.gain.value=h.gain;
+      const lp=ctx.createBiquadFilter();
+      lp.type='lowpass';
+      lp.frequency.value=h.freq*4;
+      osc.connect(lp);lp.connect(gain);gain.connect(out);
+      osc.start();
+      parts.push(osc);
+    }
+
+    this.ambience={out,parts,timers:[]};
+    // Faded in rather than switched on. A bed that appears at full level on the
+    // first frame of a contract is heard as a glitch, which is the opposite of
+    // what a bed is for.
+    out.gain.setTargetAtTime(1,ctx.currentTime,1.2);
+
+    for(const event of profile.events||[])this.scheduleAmbientEvent(event);
+  }
+
+  // One event, rescheduling itself. Each occurrence picks its own next gap, so
+  // the pattern never settles into a rhythm the ear can predict.
+  scheduleAmbientEvent(event){
+    if(!this.ambience)return;
+    const [min,max]=event.every;
+    const delay=(min+Math.random()*(max-min))*1000;
+    const timer=setTimeout(()=>{
+      // Checked again on firing, not only on scheduling: the contract can end
+      // inside the gap, and a stale timer would put a drip over the results
+      // screen.
+      if(!this.ambience)return;
+      this.ambientEvent(event.sound,event.gain??.5);
+      this.scheduleAmbientEvent(event);
+    },delay);
+    this.ambience.timers.push(timer);
+  }
+
+  // The event shapes themselves. Small, cheap, and deliberately not weapons —
+  // nothing here has a transient sharp enough to be mistaken for gunfire.
+  ambientEvent(sound,gain){
+    if(!this.ready||!this.ctx)return;
+    const bus=this.channels?.ambience||this.sfxBus;
+    const wobble=.8+Math.random()*.4;
+    switch(sound){
+      case 'drip':
+        this.tone({freq:900*wobble,endFreq:260,type:'sine',duration:.14,
+          gain:.2*gain,bus});
+        break;
+      case 'arc':
+        this.noise({duration:.07,gain:.24*gain,freq:3200*wobble,endFreq:1400,
+          filter:'bandpass',q:3,bus});
+        this.noise({duration:.03,gain:.14*gain,freq:5200,filter:'highpass',
+          delay:.05,bus});
+        break;
+      case 'gust':
+        // Long and slow. A gust is a change in the wind, so it is shaped like
+        // one rather than struck like a note.
+        this.noise({duration:2.4*wobble,gain:.3*gain,freq:700,endFreq:300,
+          filter:'bandpass',q:.7,attack:.9,bus});
+        break;
+      case 'iceCrack':
+        this.noise({duration:.11,gain:.26*gain,freq:1800*wobble,endFreq:420,
+          filter:'bandpass',q:2.2,bus});
+        this.tone({freq:180*wobble,endFreq:70,type:'triangle',duration:.22,
+          gain:.12*gain,delay:.02,bus});
+        break;
+      case 'groan':
+        // Metal under load. Detuned against itself, which is most of why it
+        // sounds like stress rather than like a note.
+        this.tone({freq:104*wobble,endFreq:88,type:'sawtooth',duration:1.6,
+          gain:.1*gain,attack:.5,bus});
+        this.tone({freq:107*wobble,endFreq:90,type:'sawtooth',duration:1.5,
+          gain:.07*gain,attack:.6,detune:14,bus});
+        break;
+      case 'creak':
+        this.tone({freq:420*wobble,endFreq:250,type:'triangle',duration:.5,
+          gain:.1*gain,attack:.14,bus});
+        break;
+      case 'emberPop':
+        this.noise({duration:.05,gain:.2*gain,freq:1500*wobble,endFreq:600,
+          filter:'bandpass',q:2,bus});
+        break;
+      case 'boom':
+        // Distant. No top end at all — that is the entire reason it reads as
+        // far away rather than as something happening to you.
+        this.noise({duration:1.1,gain:.3*gain,freq:150,endFreq:50,
+          filter:'lowpass',attack:.12,bus});
+        break;
+      default:
+        break;
+    }
+  }
+
+  stopAmbience(){
+    if(!this.ambience)return;
+    const a=this.ambience;
+    // Cleared before anything else. A timer that fires between the fade
+    // starting and the nodes stopping would schedule the next one against an
+    // ambience that no longer exists.
+    this.ambience=null;
+    for(const timer of a.timers)clearTimeout(timer);
+    try{
+      a.out.gain.setTargetAtTime(0,this.ctx.currentTime,.4);
+      // Stopped, not merely faded. A gain ramp is a promise about a value and
+      // says nothing about the oscillators behind it, which run until somebody
+      // stops them.
+      const stopAt=this.ctx.currentTime+2;
+      for(const part of a.parts)part.stop(stopAt);
+    }catch{/* already stopped */}
   }
 
   // ---- Rotor -------------------------------------------------------------

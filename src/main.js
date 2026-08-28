@@ -4,6 +4,7 @@ import {commitRun,completeRecruitments,undiscoveredOperatives,
 import {nemesisRecord,commitNemesis} from './game/nemesis.js';
 import {recordContract} from './save/contracts.js';
 import {nemesisDue} from '../data/nemesis.js';
+import {ambienceFor} from '../data/ambience.js';
 import {Screens} from './ui/screens.js';
 import {Splash} from './ui/splash.js';
 import {Hud} from './ui/hud.js';
@@ -254,10 +255,16 @@ function startRun(config){
   // Music is chosen by operation first so a campaign track plays on its own
   // operation, then by theatre so the same piece covers free deployment there.
   // `fallback` names the synthesized bed for everything without a track.
-  audio.unlock().then(()=>audio.startMusic(
-    config.operation?.id||config.map.id,
-    {fallback:config.map.music||'blacksite'}
-  ));
+  audio.unlock().then(()=>{
+    audio.startMusic(
+      config.operation?.id||config.map.id,
+      {fallback:config.map.music||'blacksite'}
+    );
+    // The bed under the contract. Keyed by theatre and never by operation: an
+    // operation can pick its own music, but it cannot change what the room it
+    // happens in sounds like.
+    audio.startAmbience(ambienceFor(config.map.id));
+  });
 
   session.last=performance.now();
   session.raf=requestAnimationFrame(tick);
@@ -426,6 +433,16 @@ function finishRun(summary,config){
 
 function teardownSession(){
   if(!session)return;
+  // Continuous voices die with the session, here rather than only in
+  // `Engine.finish`. Finishing a contract is one way out of a session and not
+  // the only one — `startRun` tears the previous session down directly, so
+  // abandoning a deployment and redeploying skipped `finish` entirely and left
+  // whatever was running to play on underneath the next contract. The rotor
+  // has always had that hole; the theatre bed would have inherited it.
+  //
+  // Both are idempotent, so the ordinary path stopping them twice is free.
+  audio.stopAmbience?.();
+  audio.stopRotor?.();
   cancelAnimationFrame(session.raf);
   window.removeEventListener('resize',session.onResize);
   for(const detach of session.detachSticks)detach?.();

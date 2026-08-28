@@ -3093,6 +3093,8 @@ export class Engine{
     // A rotor is a running voice, and nothing else stops it — left alone it
     // would carry on over the results screen.
     this.audio.stopRotor?.();
+    // The theatre bed is the same: continuous, and stopped here or not at all.
+    this.audio.stopAmbience?.();
     // Nothing more comes over the channel once the contract closes, so a
     // callout cannot arrive over the results screen.
     this.codec.clear();

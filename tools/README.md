@@ -122,5 +122,24 @@ of the same voice and passes on a build with no shading at all; the thresholds
 are set well outside the wobble and were confirmed to fail on three consecutive
 runs with the shading removed.
 
+`ambience.mjs` asserts that every theatre has a bed of its own, that the beds
+differ from one another, and — mostly — that the bed stops. A continuous voice
+is easy to start and easy to believe in; what goes wrong is that it never ends,
+and a drip playing under the command centre is the kind of bug that ships.
+
+Three of its assertions were rewritten after they failed to catch a
+deliberately broken build, and each failure is worth knowing about:
+
+- The randomness check generated its own random numbers and tested those. It
+  proved `Math.random` is random and nothing at all about the game. It now
+  intercepts the scheduler's own timer requests.
+- The stale-timer check called the scheduler by hand after stopping, which
+  returns at its own opening guard whatever the pending timers are doing. It
+  now leaves a real timer in flight, stops, and waits past when it would have
+  fired.
+- The contract-ending check passed with the stop removed from `Engine.finish`
+  outright, because finishing cascades into the session teardown, which also
+  stops the bed. It now cuts that cascade so it tests the path it names.
+
 `parity.mjs` expects the game at `http://127.0.0.1:8931` and Playwright's
 Chromium; edit the two constants at the top if either differs.
