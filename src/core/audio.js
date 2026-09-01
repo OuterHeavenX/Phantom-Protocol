@@ -73,6 +73,29 @@ const REVERB_SENDS={
 //
 // A family is defined by proportion rather than by absolute level, so the mixer
 // can move all of them together without any one losing its character.
+// How hard a family hits, over and above its level.
+//
+// Punch is not volume. It scales the two layers the ear reads as force — the
+// initial transient and the harmonic reinforcement under the body — so a heavy
+// weapon can feel heavier than a submachine gun while sitting at a similar
+// level in the mix. Raising volume instead would just make it mask the enemies.
+const WEAPON_PUNCH={
+  pistol:.9, suppressed:.45, rifle:1, smg:.75, shotgun:1.5, marksman:1.15,
+  sniper:1.3, lmg:1.05, heavy:1.6, beam:.35, tech:.5, corrupted:1.1
+};
+
+// A phone speaker reproduces almost nothing below about 500Hz, so the `press`
+// layer that gives these weapons their weight on headphones is simply absent
+// on the device most people are playing this on.
+//
+// The fix is not more bass — the driver cannot move that air, and asking it to
+// only produces distortion. It is the missing fundamental: given the harmonics
+// of a low tone, the ear reconstructs a pitch that was never in the signal. A
+// quiet partial an octave and a twelfth above the press layer puts the weight
+// back on a small speaker, and on a good one it sits under the fundamental
+// where it is very nearly inaudible.
+const MISSING_FUNDAMENTAL={mult:2.02,gain:.42,duration:.72};
+
 const WEAPON_VOICES={
   // Compact, sharp, quick to get out of the way.
   pistol:{crack:[2600,700,.26,.05],body:[340,120,.17,.07],press:[95,60,.12,.08],
@@ -252,6 +275,29 @@ export class AudioEngine{
       gain.connect(this.sfxBus);
       this.channels[name]=gain;
     }
+
+    // Punch compression, on the operative's weapon bus and nowhere else.
+    //
+    // The attack is deliberately slow enough to let the shot's leading edge
+    // through before the gain reduction arrives, and the release fast enough to
+    // recover between rounds. That combination is what a compressor is actually
+    // for here: it does not make the weapon louder, it makes the transient
+    // stand further above its own body, which is the thing the ear reads as
+    // force. A ratio this gentle also stops a long burst from climbing over the
+    // rest of the mix.
+    //
+    // Deliberately not on the master. The limiter there protects the whole bus
+    // from clipping and must stay transparent; processing everything to make
+    // one category hit harder is how a mix ends up flat.
+    this.channels.playerWeapon.disconnect();
+    this.weaponPunch=this.ctx.createDynamicsCompressor();
+    this.weaponPunch.threshold.value=-20;
+    this.weaponPunch.knee.value=7;
+    this.weaponPunch.ratio.value=2.6;
+    this.weaponPunch.attack.value=.007;
+    this.weaponPunch.release.value=.11;
+    this.channels.playerWeapon.connect(this.weaponPunch);
+    this.weaponPunch.connect(this.sfxBus);
 
     // A limiter stops dense firefights from clipping. It used to sit at -14dB
     // with an 8:1 ratio, which is not gentle: in a real firefight the bus is
@@ -616,7 +662,21 @@ export class AudioEngine{
     // applied over every family, rather than a second set of voices to keep in
     // step with the first.
     const far=options.incoming?INCOMING:null;
-    const tail=(v.tail||.15)*(options.tail??1)*(far?far.tail:1);
+    let tail=(v.tail||.15)*(options.tail??1)*(far?far.tail:1);
+
+    const punch=(WEAPON_PUNCH[voice]??1)*(far?.55:1);
+
+    // The snap: the first two milliseconds, above everything else in the shot.
+    //
+    // This is where "punch" actually lives. The ear judges force from the
+    // leading edge, not from level — a shot with a hard transient reads as
+    // violent at a volume where a shot without one reads as soft, which is why
+    // this pass adds a layer rather than turning anything up. Short enough to
+    // cost almost nothing against the voice budget.
+    if(punch>.4){
+      this.noise({duration:.022,gain:.16*punch*volume,freq:5200*wobble,
+        endFreq:2600,filter:'highpass',attack:.0012});
+    }
 
     const [ct,ce,cg,cd]=v.crack;
     this.noise({duration:cd,gain:cg*volume*(far?far.crackGain:1),
@@ -630,6 +690,20 @@ export class AudioEngine{
     const [pt,pe,pg,pd]=v.press;
     if(pg>0)this.tone({freq:pt,endFreq:pe,type:'sine',duration:pd,gain:pg*volume});
 
+    // Harmonic reinforcement of that press layer, so the weight survives a
+    // phone speaker. Gated on families that have low end worth reinforcing —
+    // a beam has no pressure wave to reconstruct, and adding a partial to one
+    // would be inventing weight the weapon is not supposed to have.
+    //
+    // Detuned very slightly sharp of the exact octave: an exact multiple fuses
+    // with the fundamental and reads as the same tone slightly louder, which
+    // is the thing this is trying not to be.
+    if(pg>=.15&&!far){
+      this.tone({freq:pt*MISSING_FUNDAMENTAL.mult,endFreq:pe*MISSING_FUNDAMENTAL.mult,
+        type:'triangle',duration:pd*MISSING_FUNDAMENTAL.duration,
+        gain:pg*volume*MISSING_FUNDAMENTAL.gain*punch});
+    }
+
     // The action. Offset a little so it reads as a separate mechanical event
     // rather than as part of the report.
     const [mf,mg,md]=v.mech;
@@ -638,8 +712,20 @@ export class AudioEngine{
         filter:'bandpass',q:2.4,delay:.012});
     }
 
-    // The room answering. Filtered well down, because a reflection has lost its
-    // top end by the time it comes back.
+    // The room answering.
+    //
+    // This layer was always a stand-in for a room the mixer did not have. It
+    // now has one, so where a convolved theatre is active the synthetic tail is
+    // pulled most of the way down: leaving both in place reverberates every
+    // shot twice, which smears exactly the transient the rest of this pass was
+    // spent sharpening. It is not removed outright — a little of it still
+    // belongs to the weapon rather than to the room, and it is what the shot
+    // falls back on in a theatre with no profile.
+    //
+    // It is also the longest-lived layer in the shot, so standing down here is
+    // what pays for the two layers added above against the voice budget.
+    const roomed=this.reverbProfile?.wet>0;
+    if(roomed)tail*=.34;
     if(tail>.02){
       this.noise({duration:tail,gain:cg*volume*.3*(far?far.crackGain:1),
         freq:700,endFreq:180,filter:'lowpass',delay:.02});
