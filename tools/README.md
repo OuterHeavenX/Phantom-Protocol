@@ -158,5 +158,23 @@ landing step instead.
 It also used to die on a stack trace rather than report anything when no wreck
 existed at all, which is the one build you most want a diagnosis from.
 
+`enemy-identity.mjs` asserts that a hostile's death, its alert and its arrival
+say what kind of thing it was — that chassis is independent of weapon, that the
+cues land on the enemy bus, that alerting latches instead of retriggering every
+frame, and that infantry and swarms arrive silently so a wave does not turn to
+mush.
+
+Two of its assertions were measuring the harness rather than the game:
+
+- Distinctness compared pitches, and every layer's frequency carries a per-shot
+  wobble — so it passed cleanly on a build where all seven chassis entries had
+  been overwritten with identical values. It was measuring `Math.random`. It
+  now compares durations, which come off the table untouched.
+- Captures ran in one synchronous burst without resetting the voice budget.
+  `canPlay` drops non-essential sounds past 24 live voices, so the seven death
+  captures spent the whole budget and everything measured after them was
+  silently empty. Two unrelated assertions failed on mutations that had nothing
+  to do with them, and the baseline was passing partly by luck of ordering.
+
 `parity.mjs` expects the game at `http://127.0.0.1:8931` and Playwright's
 Chromium; edit the two constants at the top if either differs.

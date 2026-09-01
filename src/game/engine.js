@@ -20,7 +20,7 @@ import {DEPLOY_KITS,deployKit} from '../../data/deploykits.js';
 import {vaultKind} from '../../data/vaults.js';
 import {captureStep,ReplayRecorder,ReplayPlayer,REPLAY_VERSION,SIM_SETTINGS} from './replay.js';
 import {ABILITIES,TRAITS,distanceToSegment} from './abilities.js';
-import {ENEMIES_BY_ID,STATUS_EFFECTS,enemyVoice} from '../../data/enemies.js';
+import {ENEMIES_BY_ID,STATUS_EFFECTS,enemyVoice,enemyChassis} from '../../data/enemies.js';
 import {BOSSES_BY_ID,MINIBOSSES} from '../../data/bosses.js';
 import {baseStats} from '../../data/passives.js';
 import {WEAPONS_BY_ID,weaponVoice} from '../../data/weapons.js';
@@ -1034,6 +1034,14 @@ export class Engine{
     EnemyBrain.init(enemy,archetype,this.rng);
     this.assignAggro(enemy);
     this.enemies.push(enemy);
+    // Arrival. Silent for infantry and swarms by design — the cue exists to
+    // announce something worth turning around for, and twenty riflemen
+    // announcing themselves at once is noise, not information. The chassis
+    // table decides, not this call site.
+    this.audio.play('enemySpawn',{
+      chassis:enemyChassis(enemy),
+      volume:this.audibleAt(x,y,1100)
+    });
     return enemy;
   }
 
@@ -1185,6 +1193,27 @@ export class Engine{
         }
       }else{
         EnemyBrain.update(enemy,dt,context);
+      }
+
+      // The moment it has you.
+      //
+      // Detected here rather than inside the brain: `ai.js` owns behaviour and
+      // knows nothing about the mixer, and awareness is raised from six other
+      // places besides its own line of sight — a squad sharing a contact, a
+      // director spawn arriving alert, a carrier unloading. Watching the value
+      // catches every one of them, where hooking the sight check would have
+      // caught one.
+      if(enemy.awareness>=1&&!enemy.alerted){
+        enemy.alerted=true;
+        this.audio.play('enemyAlert',{
+          chassis:enemyChassis(enemy),
+          volume:this.audibleAt(enemy.x,enemy.y,900)
+        });
+      }else if(enemy.alerted&&enemy.awareness<=0){
+        // Losing you re-arms it, so being hunted twice sounds like being hunted
+        // twice. Zero rather than a threshold: anything higher retriggers on
+        // the noise around the edge of detection.
+        enemy.alerted=false;
       }
 
       // A tracked vehicle drives through light cover rather than around it.
@@ -1772,6 +1801,13 @@ export class Engine{
     }
     this.fx.blood(enemy.x,enemy.y,gore.particle,(enemy.elite?3.4:2.1),
       {mist:!enemy.machine});
+    // `kill` is the operative's feedback that a thing died — it is about the
+    // player, and stays. This is the thing itself, which is about the sector,
+    // and until now twenty-three archetypes shared none.
+    this.audio.play('enemyDeath',{
+      chassis:enemyChassis(enemy),
+      volume:(enemy.elite?1:.7)*this.audibleAt(enemy.x,enemy.y,1000)
+    });
     this.audio.play('kill',{volume:enemy.elite?.8:.35});
     if(enemy.elite){this.camera.addShake(.16);this.fx.freeze(.035)}
 

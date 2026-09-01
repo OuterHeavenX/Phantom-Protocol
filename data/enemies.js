@@ -226,6 +226,46 @@ export function enemyVoice(spec){
   return spec.machine?'tech':'rifle';
 }
 
+// What a hostile is built out of, for everything it does that is not shooting.
+//
+// Weapons are one axis and chassis is the other, and they are genuinely
+// independent: a Shield Trooper and a Breacher Heavy carry different weapons
+// and die the same way, while a Rifle Cell and a Longshot Sniper carry
+// different weapons and also die the same way. Collapsing the two would mean
+// twenty-three death sounds to write and maintain instead of seven.
+//
+// The seven are chosen by what the thing is physically made of, because that is
+// what the ear is actually identifying: meat and webbing, armour plate, a small
+// airframe, something with legs, something with a hull, something scuttling,
+// and something that was never quite there.
+const ENEMY_CHASSIS={
+  scout:'infantry', rifle:'infantry', sniper:'infantry',
+  mortar:'infantry', sapper:'infantry',
+  shield:'heavy', breacher:'heavy', marauder:'heavy',
+  pursuit:'drone', hunter:'drone', jammer:'drone',
+  crawler:'swarm',
+  warden:'walker',
+  veil:'synthetic', phantomcell:'synthetic',
+  chopper:'armour', carrier:'armour',
+
+  nullhunter:'drone', ironvicar:'heavy', signalwarden:'synthetic',
+  glasshound:'swarm', redauditor:'infantry', palewitness:'synthetic'
+};
+
+// The chassis a hostile is built on.
+//
+// Falls back by machine flag rather than to a fixed value, so an archetype
+// added later and forgotten here still dies as roughly the right kind of
+// thing — a new drone sounds like a drone rather than like a man.
+export function enemyChassis(spec){
+  if(!spec)return 'infantry';
+  const id=spec.eliteDef?.id||spec.id;
+  if(ENEMY_CHASSIS[id])return ENEMY_CHASSIS[id];
+  if(spec.base&&ENEMY_CHASSIS[spec.base])return ENEMY_CHASSIS[spec.base];
+  if(spec.flying)return 'drone';
+  return spec.machine?'walker':'infantry';
+}
+
 export const ENEMIES_BY_ID=Object.fromEntries(ENEMIES.map(e=>[e.id,e]));
 export const ELITES_BY_ID=Object.fromEntries(ELITES.map(e=>[e.id,e]));
 

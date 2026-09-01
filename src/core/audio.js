@@ -27,6 +27,7 @@ const CHANNELS=['playerWeapon','enemyWeapon','impact','enemy','ambience','ui','a
 // duck anything itself.
 const CHANNEL_OF={
   weapon:'playerWeapon',enemyWeapon:'enemyWeapon',
+  enemyDeath:'enemy',enemyAlert:'enemy',enemySpawn:'enemy',
   shoot:'playerWeapon',shootHeavy:'playerWeapon',laser:'playerWeapon',
   tech:'playerWeapon',scramble:'playerWeapon',reload:'playerWeapon',
   hit:'impact',crit:'impact',kill:'impact',explode:'impact',
@@ -94,6 +95,47 @@ const WEAPON_VOICES={
   corrupted:{crack:[2300,410,.28,.07],body:[330,660,.2,.14],press:[70,110,.2,.16],
              mech:[1500,.08,.05],tail:.26,spread:.14}
 };
+// How a hostile sounds when it stops, notices you, or arrives.
+//
+// Twenty-three archetypes shared one death sound between them, so a crawler at
+// your ankles and an Aegis Warden ended identically and the sector told you
+// nothing about what had just happened in it.
+//
+// Each chassis is described by what it is made of rather than by a list of
+// samples, and the three events read the same fields — so a chassis is one
+// entry, not three, and a new one cannot arrive half-defined.
+//
+//   fall    the pitch a dying thing slides down, in Hz: [from, to, seconds]
+//   timbre  the oscillator that carries it. Organic things are not square.
+//   body    the mass hitting the deck: [centre Hz, gain, seconds]
+//   debris  what comes off it afterwards: [centre Hz, gain, seconds]
+//   note    the alert: what it says when it sees you, [from, to, seconds]
+//   arrive  gain of the spawn cue, 0 for anything that should arrive silently
+const CHASSIS_VOICES={
+  // Meat and webbing. A cry cut short, then gear on the floor.
+  infantry:{fall:[300,120,.26],timbre:'sawtooth',body:[190,.22,.16],
+    debris:[1400,.1,.12],note:[430,620,.13],arrive:0},
+  // Same shape, lower and longer, with much more metal in it.
+  heavy:{fall:[190,74,.4],timbre:'sawtooth',body:[110,.3,.28],
+    debris:[900,.16,.22],note:[280,380,.18],arrive:.22},
+  // No voice at all. A rotor unspooling and the electronics letting go.
+  drone:{fall:[1300,150,.34],timbre:'square',body:[240,.16,.14],
+    debris:[3000,.13,.09],note:[880,1320,.1],arrive:.3},
+  // Small, fast and mechanically nasty. Chitters rather than falls.
+  swarm:{fall:[1700,520,.14],timbre:'triangle',body:[420,.12,.08],
+    debris:[2600,.11,.07],note:[1500,1900,.07],arrive:0},
+  // Servos losing pressure, then a lot of weight arriving at once.
+  walker:{fall:[420,90,.52],timbre:'sawtooth',body:[74,.36,.42],
+    debris:[700,.2,.3],note:[320,240,.24],arrive:.34},
+  // A hull opening up. Long, deep, and nothing sharp in it anywhere.
+  armour:{fall:[210,44,.75],timbre:'sawtooth',body:[52,.42,.6],
+    debris:[520,.24,.44],note:[150,116,.34],arrive:.4},
+  // Detuned against itself on the way out, which is the tell that it was
+  // never quite a physical object.
+  synthetic:{fall:[760,180,.3],timbre:'square',body:[300,.14,.18],
+    debris:[2200,.12,.16],note:[640,470,.15],arrive:.26}
+};
+
 // What makes a shot read as *incoming* rather than outgoing.
 //
 // Deliberately not a second table of twelve families. A rifle is a rifle
@@ -483,6 +525,54 @@ export class AudioEngine{
         // turning into a wall of noise with no shape to it.
         if(!this.canPlay('enemyWeapon:'+voice,options.throttle??.045))return;
         this.weaponShot(voice,volume,{...options,incoming:true});
+        break;
+      }
+      // A hostile stopping. Three layers: what it was, the mass of it arriving
+      // on the deck, and what came off it afterwards.
+      case 'enemyDeath':{
+        const v=CHASSIS_VOICES[options.chassis]||CHASSIS_VOICES.infantry;
+        // Throttled per chassis rather than globally. A wave dying together
+        // should thin out, but a walker going down in the middle of it must not
+        // be the sound that gets dropped.
+        if(!this.canPlay('enemyDeath:'+options.chassis,options.throttle??.05))return;
+        const wobble=.9+Math.random()*.2;
+        const [from,to,dur]=v.fall;
+        this.tone({freq:from*wobble,endFreq:to,type:v.timbre,duration:dur,
+          gain:.26*volume});
+        const [bf,bg,bd]=v.body;
+        this.noise({duration:bd,gain:bg*volume,freq:bf*wobble,endFreq:bf*.4,
+          filter:'lowpass',attack:.01});
+        const [df,dg,dd]=v.debris;
+        this.noise({duration:dd,gain:dg*volume,freq:df*wobble,endFreq:df*.35,
+          filter:'bandpass',q:1.6,delay:dur*.5});
+        break;
+      }
+      // The moment it has you. Short and pitched clear of the weapon families,
+      // because this has to cut through fire rather than sit inside it.
+      case 'enemyAlert':{
+        const v=CHASSIS_VOICES[options.chassis]||CHASSIS_VOICES.infantry;
+        if(!this.canPlay('enemyAlert:'+options.chassis,options.throttle??.4))return;
+        const [from,to,dur]=v.note;
+        const wobble=.94+Math.random()*.12;
+        this.tone({freq:from*wobble,endFreq:to,type:v.timbre,duration:dur,
+          gain:.2*volume,attack:.012});
+        this.noise({duration:dur*.6,gain:.07*volume,freq:from*2,
+          filter:'bandpass',q:2.2});
+        break;
+      }
+      // Arrival. Deliberately not universal: `arrive` is zero for infantry and
+      // swarms, because twenty of them entering at once is the one case where
+      // a cue per unit becomes noise instead of information. What is left is
+      // the arrival of something big enough to be worth turning around for.
+      case 'enemySpawn':{
+        const v=CHASSIS_VOICES[options.chassis]||CHASSIS_VOICES.infantry;
+        if(!v.arrive)return;
+        if(!this.canPlay('enemySpawn:'+options.chassis,options.throttle??.55))return;
+        const [from,to]=v.note;
+        this.tone({freq:to*.5,endFreq:from*.5,type:v.timbre,duration:.26,
+          gain:.16*volume*v.arrive,attack:.06});
+        this.noise({duration:.3,gain:.1*volume*v.arrive,freq:from,endFreq:from*.4,
+          filter:'lowpass',attack:.05});
         break;
       }
       case 'shoot':
