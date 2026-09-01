@@ -477,6 +477,12 @@ export class DeferredRenderer{
         if(enemy.dead||!enemy.elite)continue;
         push(enemy.x,enemy.y,180,hexToRgb(enemy.color),.9,22);
       }
+      // A burning wreck is a real light source on its way down, and the
+      // brightest thing in the sector for the moment it lands.
+      for(const wreck of engine.wrecks){
+        push(wreck.x,wreck.y,220+(1-wreck.altitude)*160,hexToRgb('#ff8a4c'),
+          1.1+(1-wreck.altitude)*.8,26);
+      }
       if(engine.boss&&!engine.boss.dead){
         push(engine.boss.x,engine.boss.y,engine.boss.radius*6,
           hexToRgb(engine.boss.def.color),1.3,30);

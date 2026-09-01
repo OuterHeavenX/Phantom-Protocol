@@ -291,9 +291,36 @@ export class Fx{
     });
   }
 
-  blood(x,y,color='#8b3a3a',intensity=1){
-    this.burst(x,y,7*intensity,{
-      speed:120*intensity,life:.5,size:2.6,color,gravity:60,drag:.9
+  // `mist` is the fine airborne spray a body throws and a hull does not. Oil
+  // comes out under its own pressure in fat droplets; blood atomises.
+  blood(x,y,color='#8b3a3a',intensity=1,{mist=true}={}){
+    this.burst(x,y,Math.round(11*intensity),{
+      speed:130*intensity,life:.55,size:2.9,color,gravity:70,drag:.9
+    });
+    // Heavier, slower droplets that fall short of the spray and land in a
+    // tighter group, which is what gives the spatter a near edge and a far one
+    // rather than a single even ring.
+    this.burst(x,y,Math.round(6*intensity),{
+      speed:58*intensity,life:.75,size:4.2,color,gravity:150,drag:.86
+    });
+    if(mist){
+      this.burst(x,y,Math.round(7*intensity),{
+        speed:190*intensity,life:.3,size:1.4,color,gravity:20,drag:.82
+      });
+    }
+  }
+
+  // The trail behind a machine that is on fire and going down. Called every
+  // few frames while it falls, so each call is deliberately small — the plume
+  // is made by the trail persisting, not by any one puff being large.
+  deathTrail(x,y,intensity=1){
+    this.burst(x,y,2,{
+      speed:26,life:1.7,size:7*intensity,drag:.93,
+      color:'rgba(74,74,80,.55)',kind:'circle'
+    });
+    this.burst(x,y,2,{
+      speed:54,life:.34,size:3.2*intensity,drag:.9,glow:true,
+      color:['#ffb35c','#ff7043','#ffe6a8']
     });
   }
 

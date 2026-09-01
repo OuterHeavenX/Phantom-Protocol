@@ -1050,11 +1050,15 @@ export class World{
 
   // A kill's worth of staining: a main pool with satellite spatter thrown
   // along the direction of the killing blow.
-  splatter(x,y,{radius=14,color='#4a1f22',alpha=.3,angle=null,intensity=1,kind='splat'}={}){
+  // `drops` scales the satellite count on its own, so a wetter kill can throw
+  // more spatter without also throwing it further — the two used to be the same
+  // number, which meant asking for more mess also asked for it across half the
+  // sector.
+  splatter(x,y,{radius=14,color='#4a1f22',alpha=.3,angle=null,intensity=1,drops=1,kind='splat'}={}){
     const rng=this.rng;
     this.addDecal(x,y,radius*rng.range(.9,1.25),color,alpha,kind);
-    const drops=Math.round(rng.range(3,6)*intensity);
-    for(let i=0;i<drops;i++){
+    const count=Math.round(rng.range(3,6)*intensity*drops);
+    for(let i=0;i<count;i++){
       // Spatter cones along the hit direction when there is one, and throws in
       // all directions when the kill had no clear vector.
       const a=angle!==null?angle+rng.range(-.7,.7):rng.angle();

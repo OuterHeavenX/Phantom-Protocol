@@ -141,5 +141,22 @@ deliberately broken build, and each failure is worth knowing about:
   outright, because finishing cascades into the session teardown, which also
   stops the bed. It now cuts that cascade so it tests the path it names.
 
+`wreck.mjs` drives a gunship kill and steps the simulation by hand at the fixed
+timestep until the wreckage lands, so the result does not depend on how many
+frames a headless browser felt like delivering. The failure it exists for is the
+quiet one: a wreck that spawns, spins, and never reaches the ground, leaving a
+permanent burning object in the sector and a rotor that never stops.
+
+Three of its assertions were wrong before they were right. One checked the enemy
+list immediately after the kill, when removal is swept once per step by design.
+One sampled the queued secondary explosion long after it had already fired, so
+it was zero either way. One counted decals across the whole fall, which let
+ambient kills elsewhere pad the total — it passed on a build with both crash
+splatters deleted outright, and now spies on `addDecal` across the single
+landing step instead.
+
+It also used to die on a stack trace rather than report anything when no wreck
+existed at all, which is the one build you most want a diagnosis from.
+
 `parity.mjs` expects the game at `http://127.0.0.1:8931` and Playwright's
 Chromium; edit the two constants at the top if either differs.

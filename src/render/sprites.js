@@ -320,7 +320,15 @@ export function drawEnemy(ctx,enemy,time,settings){
   const scale=enemy.radius/11;
   // An aircraft's shadow sits offset and smaller, which is what sells it as
   // being above the deck rather than on it.
-  if(enemy.flying)drawShadow(ctx,enemy.x+16,enemy.y+22,enemy.radius*.7,.34);
+  if(enemy.flying){
+    // Altitude is carried by the shadow and nothing else: in a top-down view
+    // the airframe cannot move up the screen to show height, so the shadow
+    // slides out from under it instead. A wreck on its way down brings the two
+    // back together, and the shadow hardens and grows as it closes.
+    const alt=enemy.altitude??1;
+    drawShadow(ctx,enemy.x+16*alt,enemy.y+22*alt,
+      enemy.radius*(.7+(1-alt)*.42),.34+(1-alt)*.22);
+  }
   else drawShadow(ctx,enemy.x,enemy.y,enemy.radius,cloaked?.1:.3);
 
   ctx.translate(enemy.x,enemy.y);

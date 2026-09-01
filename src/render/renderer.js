@@ -788,6 +788,13 @@ export class Renderer{
     for(const pickup of engine.pickups){
       if(camera.isVisible(pickup.x,pickup.y,24))sortable.push(pickup);
     }
+    // Falling wreckage sorts and draws with everything else. A wreck carries
+    // the same fields the sprite layer reads off an aircraft, so it goes
+    // through `drawEnemy` and comes out as the airframe it was — tumbling,
+    // because the only thing that changed is its angle.
+    for(const wreck of engine.wrecks){
+      if(camera.isVisible(wreck.x,wreck.y,wreck.radius+40))sortable.push(wreck);
+    }
     for(const turret of engine.turrets)sortable.push(turret);
     for(const phantom of engine.phantoms)sortable.push(phantom);
     if(engine.boss)sortable.push(engine.boss);
@@ -810,6 +817,12 @@ export class Renderer{
         drawTurret(ctx,entity,time);
       }else if(entity.render!==undefined&&entity.life!==undefined&&!entity.archetype){
         drawPhantom(ctx,entity,time);
+      }else if(entity.wreck){
+        // Explicit rather than left to the fallthrough below. The dispatch
+        // above is duck-typed on field presence, and a wreck happens to miss
+        // every test by luck rather than by design — one added field and it
+        // would silently start drawing as something else.
+        drawEnemy(ctx,entity,time,this.settings);
       }else{
         drawEnemy(ctx,entity,time,this.settings);
       }

@@ -152,6 +152,10 @@ export class Engine{
     this.fields=[];
     this.meleeArcs=[];
     this.decoys=[];
+    // Aircraft that have been destroyed but have not landed yet. A wreck is
+    // not a combatant — it does not shoot, cannot be shot, and gives no credit
+    // — so it is kept out of `enemies` rather than flagged inside it.
+    this.wrecks=[];
     this.scheduled=[];
     this.effects=new Map();
 
@@ -880,6 +884,12 @@ export class Engine{
       if(enemy.dead||!enemy.flying)continue;
       level=Math.max(level,this.audibleAt(enemy.x,enemy.y,1400));
     }
+    // A wreck is still a helicopter until it hits the ground, and it is the one
+    // you most want to hear coming. Its blades are winding down, so it is
+    // quieter than a live one and gets quieter as it falls.
+    for(const wreck of this.wrecks){
+      level=Math.max(level,this.audibleAt(wreck.x,wreck.y,1400)*(.35+wreck.altitude*.45));
+    }
     this.audio.setRotor?.(level);
   }
 
@@ -1416,6 +1426,110 @@ export class Engine{
     this.killEnemy(enemy,{silent:true,noDrops:true});
   }
 
+  // -------------------------------------------------------------------------
+  // Wreckage
+  //
+  // A destroyed aircraft keeps its momentum, loses its tail rotor, and spins in
+  // to the deck. The fall is roughly a second and a half, which is long enough
+  // to be a warning: anything standing where it is going to land has time to
+  // not be there.
+  // -------------------------------------------------------------------------
+
+  spawnWreck(enemy,options={}){
+    const spin=this.rng.next()<.5?-1:1;
+    this.wrecks.push({
+      x:enemy.x,y:enemy.y,
+      // It keeps whatever it was doing, plus a shove from the killing blow.
+      vx:(enemy.vx||0)*.7+(options.direction!=null?Math.cos(options.direction)*70:0),
+      vy:(enemy.vy||0)*.7+(options.direction!=null?Math.sin(options.direction)*70:0),
+      angle:enemy.angle||0,
+      // Yaw. A helicopter that loses drive to the tail rotor turns against its
+      // own main rotor torque, which is why they come down rotating rather
+      // than gliding.
+      spin:spin*this.rng.range(1.6,2.8),
+      rotor:enemy.rotor||0,
+      altitude:1,fall:0,
+      radius:enemy.radius,color:enemy.color,render:enemy.render||'chopper',
+      blastRadius:enemy.blastRadius||150,
+      damage:enemy.damage||9,
+      flying:true,wreck:true,
+      trail:0,timer:0
+    });
+  }
+
+  updateWrecks(dt){
+    if(!this.wrecks.length)return;
+    for(const wreck of this.wrecks){
+      wreck.timer+=dt;
+      // The spin tightens all the way down: nothing is arresting it.
+      wreck.spin+=Math.sign(wreck.spin)*dt*4.5;
+      wreck.angle+=wreck.spin*dt;
+      // The main rotor winds down as the engine dies, so the disc thins out
+      // instead of holding a clean hover blur.
+      wreck.rotor+=dt*Math.max(3,26-wreck.timer*11);
+      // Momentum bleeds off, but it does not stop — it lands somewhere else.
+      const decay=1-Math.min(1,dt*.55);
+      wreck.vx*=decay;wreck.vy*=decay;
+      wreck.x=clamp(wreck.x+wreck.vx*dt,wreck.radius,this.world.width-wreck.radius);
+      wreck.y=clamp(wreck.y+wreck.vy*dt,wreck.radius,this.world.height-wreck.radius);
+      // Accelerating fall rather than a linear one, so it drops away at the end
+      // instead of settling. Altitude works out as 1 - 0.31t², which puts it on
+      // the deck at about 1.8 seconds — long enough to read as a descent and to
+      // give anything standing underneath time to move, short enough that the
+      // fight does not stop to watch it.
+      wreck.fall+=dt*.62;
+      wreck.altitude-=wreck.fall*dt;
+
+      wreck.trail-=dt;
+      if(wreck.trail<=0){
+        wreck.trail=.05;
+        this.fx.deathTrail(wreck.x,wreck.y,1+(1-wreck.altitude));
+      }
+
+      if(wreck.altitude<=0){
+        wreck.altitude=0;
+        this.crashWreck(wreck);
+        wreck.done=true;
+      }
+    }
+    compact(this.wrecks,w=>!w.done);
+  }
+
+  crashWreck(wreck){
+    // Hostile, so it hurts whatever is standing there — including the
+    // operative. The fall is the telegraph.
+    this.spawnExplosion({
+      x:wreck.x,y:wreck.y,
+      radius:wreck.blastRadius,
+      damage:wreck.damage*2.4,knockback:420,color:'#ffb35c',hostile:true
+    });
+    this.camera.addShake(.55,'explosion');
+    this.fx.freeze(.05);
+    this.audio.play('explode',{volume:1,hostile:true});
+
+    // Burning fuel across the impact, and the hull's own oil under it. This is
+    // the biggest single stain anything in the game leaves.
+    this.world.splatter(wreck.x,wreck.y,{
+      radius:wreck.radius*3.4,color:'#0b0b0d',alpha:.72,intensity:2.4,drops:2.6
+    });
+    this.world.splatter(wreck.x,wreck.y,{
+      radius:wreck.radius*5.2,color:GORE.machine.pool,alpha:.3,intensity:1.6,drops:1
+    });
+
+    // Debris thrown outward, heavier and slower than the fireball.
+    this.fx.burst(wreck.x,wreck.y,22,{
+      speed:340,life:.9,size:3.4,drag:.9,gravity:220,
+      color:[wreck.color||'#c8d2d6','#5a6a6c','#2b3338']
+    });
+    // A second, smaller flare a beat later — the fuel that did not go up with
+    // the first one.
+    this.scheduleAction(.42,()=>{
+      this.fx.explosion(wreck.x+this.rng.range(-18,18),wreck.y+this.rng.range(-18,18),
+        wreck.blastRadius*.5,'#ff8a4c');
+      this.camera.addShake(.18,'explosion');
+    });
+  }
+
   blinkEnemy(enemy,range){
     for(let attempt=0;attempt<10;attempt++){
       const angle=this.rng.angle();
@@ -1617,23 +1731,47 @@ export class Engine{
     if(options.ally)options.ally.kills++;
     enemy.squad?.remove(enemy);
 
+    // An aircraft does not stop existing the moment it is killed. It goes
+    // down, and where it lands is a second event the operative has to deal
+    // with. Credit, loot and the kill itself are all resolved here as normal —
+    // only the wreckage outlives this call.
+    if(enemy.flying)this.spawnWreck(enemy,options);
+
     this.fx.death(enemy.x,enemy.y,enemy.color,enemy.elite);
 
     // Machines leak oil, everything else bleeds. Both stain the floor for the
     // rest of the contract; the direction of the killing blow throws the
     // spatter, so a firefight leaves a readable record of where it happened.
-    const gore=enemy.machine
-      ? {color:'#07090b',alpha:.62,particle:'#12161a'}
-      : {color:'#57121a',alpha:.5,particle:'#7d1d24'};
+    //
+    // The two do not behave the same way on the floor, and that is the point of
+    // separating them rather than recolouring one effect. Blood sprays along
+    // the killing blow and stops. Oil keeps coming out of a hull long after
+    // whatever was inside it stopped, and being thinner it spreads further and
+    // pools — so a machine leaves a second, wider, darker stain that a body
+    // does not.
+    const gore=enemy.machine?GORE.machine:GORE.flesh;
     const scale=enemy.elite?2.1:1;
     this.world.splatter(enemy.x,enemy.y,{
-      radius:enemy.radius*1.5*scale,
-      color:gore.color,
+      radius:enemy.radius*gore.spread*scale,
+      color:gore.pool,
       alpha:gore.alpha,
       angle:options.direction??null,
-      intensity:scale
+      intensity:scale,
+      drops:gore.drops
     });
-    this.fx.blood(enemy.x,enemy.y,gore.particle,(enemy.elite?2.2:1.3));
+    if(gore.leak){
+      // The pool. No direction — it is not thrown anywhere, it just runs out.
+      this.world.splatter(enemy.x,enemy.y,{
+        radius:enemy.radius*gore.leak.radius*scale,
+        color:gore.pool,
+        alpha:gore.leak.alpha,
+        angle:null,
+        intensity:scale*.6,
+        drops:.5
+      });
+    }
+    this.fx.blood(enemy.x,enemy.y,gore.particle,(enemy.elite?3.4:2.1),
+      {mist:!enemy.machine});
     this.audio.play('kill',{volume:enemy.elite?.8:.35});
     if(enemy.elite){this.camera.addShake(.16);this.fx.freeze(.035)}
 
@@ -3081,6 +3219,7 @@ export class Engine{
       }
     }
     compact(this.enemies,e=>!e.dead);
+    this.updateWrecks(this.dt);
   }
 
   finish(victory,reason){
@@ -3184,12 +3323,26 @@ export class Engine{
   destroy(){
     this.fx.clear();
     this.enemies.length=0;
+    this.wrecks.length=0;
     this.projectiles.length=0;
     this.enemyProjectiles.length=0;
     this.scheduled.length=0;
     this.effects.clear();
   }
 }
+
+// What a body leaves behind.
+//
+// `spread` is how far the main stain reaches, `drops` how many satellites are
+// thrown, `alpha` how dark it sits on the floor. `leak` is the second stain a
+// machine puts down and a body does not: a wider, fainter pool with no
+// direction to it, because it is not thrown anywhere — it just runs out.
+const GORE={
+  machine:{pool:'#07090b',particle:'#12161a',alpha:.74,spread:2.6,drops:2.2,
+    leak:{radius:3.1,alpha:.36}},
+  flesh:{pool:'#57121a',particle:'#7d1d24',alpha:.6,spread:2.3,drops:2.1,
+    leak:null}
+};
 
 const neighbourScratch=[];
 const turretScratch=[];
