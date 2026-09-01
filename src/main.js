@@ -5,6 +5,7 @@ import {nemesisRecord,commitNemesis} from './game/nemesis.js';
 import {recordContract} from './save/contracts.js';
 import {nemesisDue} from '../data/nemesis.js';
 import {ambienceFor} from '../data/ambience.js';
+import {reverbFor} from '../data/reverb.js';
 import {Screens} from './ui/screens.js';
 import {Splash} from './ui/splash.js';
 import {Hud} from './ui/hud.js';
@@ -264,6 +265,10 @@ function startRun(config){
     // operation can pick its own music, but it cannot change what the room it
     // happens in sounds like.
     audio.startAmbience(ambienceFor(config.map.id));
+    // The room the contract happens in. Keyed by theatre for the same reason
+    // the bed is: an operation chooses its music, it does not choose the
+    // acoustics of the place it is fought in.
+    audio.setReverbProfile(reverbFor(config.map.id));
   });
 
   session.last=performance.now();
@@ -443,6 +448,9 @@ function teardownSession(){
   // Both are idempotent, so the ordinary path stopping them twice is free.
   audio.stopAmbience?.();
   audio.stopRotor?.();
+  // Back to dry. The command centre is not a place, and a menu click arriving
+  // with a foundry's tail on it is the tell that this was left running.
+  audio.setReverbProfile?.(null);
   cancelAnimationFrame(session.raf);
   window.removeEventListener('resize',session.onResize);
   for(const detach of session.detachSticks)detach?.();

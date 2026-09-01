@@ -3270,6 +3270,7 @@ export class Engine{
     this.audio.stopRotor?.();
     // The theatre bed is the same: continuous, and stopped here or not at all.
     this.audio.stopAmbience?.();
+    this.audio.setReverbProfile?.(null);
     // Nothing more comes over the channel once the contract closes, so a
     // callout cannot arrive over the results screen.
     this.codec.clear();

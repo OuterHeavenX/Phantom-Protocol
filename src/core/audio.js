@@ -42,6 +42,21 @@ const CHANNEL_OF={
 // them. Short and shallow: this is making room, not stopping the fight.
 const ALERT_DUCKS=['playerWeapon','enemyWeapon','impact','enemy','ambience'];
 
+// Which categories the room answers, and how much of each relative to the
+// theatre's own wet level.
+//
+// `ui` and `alert` are deliberately absent and must stay that way. A menu
+// click does not happen in the sector, and a critical-health warning that
+// arrives smeared in reflections is a warning the operative hears late — the
+// whole bus topology exists so that cue is never degraded by anything.
+//
+// Ambience is sent at a trickle. It was recorded in the room already, in the
+// sense that it *is* the room; sending it back into itself just makes it
+// mushy.
+const REVERB_SENDS={
+  playerWeapon:1, enemyWeapon:1, impact:.9, enemy:.7, ambience:.18
+};
+
 // ---------------------------------------------------------------------------
 // Weapon voices
 //
@@ -265,10 +280,137 @@ export class AudioEngine{
     this.musicBus.connect(this.musicDuck);
     this.musicDuck.connect(this.master);
 
+    this.buildReverb();
+
     this.buildNoise();
     this.watchContext();
     this.ready=true;
     return Promise.resolve();
+  }
+
+  // ---- Reverb --------------------------------------------------------------
+  //
+  // A parallel send, built once and never rebuilt.
+  //
+  //   channels[n] ─┬─────────────────────────────────→ sfxBus        (dry)
+  //                └→ send[n] → predelay → convolver → damp → return (wet)
+  //
+  // The dry path is untouched, which is the whole reason for doing it this way:
+  // every level, duck and throttle tuned over the last passes still applies
+  // exactly as before, and the room is added beside them rather than in front
+  // of them. Switching theatre swaps one buffer and moves a few gains; nothing
+  // is created per contract and nothing at all per frame.
+  buildReverb(){
+    const ctx=this.ctx;
+    this.reverbSends={};
+
+    this.reverbReturn=ctx.createGain();
+    this.reverbReturn.gain.value=0;
+    this.reverbReturn.connect(this.sfxBus);
+
+    // Tail damping. Concrete and snow eat the top end, sheet metal does not,
+    // and this is most of what makes two rooms of the same size sound
+    // different.
+    this.reverbDamp=ctx.createBiquadFilter();
+    this.reverbDamp.type='lowpass';
+    this.reverbDamp.frequency.value=3000;
+    this.reverbDamp.connect(this.reverbReturn);
+
+    this.convolver=ctx.createConvolver();
+    this.convolver.normalize=true;
+    this.convolver.connect(this.reverbDamp);
+
+    // Pre-delay. A larger room takes longer to answer, and this gap is what
+    // the ear actually reads as size — more reliably than tail length.
+    this.reverbPredelay=ctx.createDelay(.2);
+    this.reverbPredelay.delayTime.value=.01;
+    this.reverbPredelay.connect(this.convolver);
+
+    // Nothing below this is worth reverberating; it only makes the low end
+    // muddy, which on a phone speaker is the difference between weight and
+    // noise.
+    this.reverbCut=ctx.createBiquadFilter();
+    this.reverbCut.type='highpass';
+    this.reverbCut.frequency.value=180;
+    this.reverbCut.connect(this.reverbPredelay);
+
+    for(const name in REVERB_SENDS){
+      const bus=this.channels[name];
+      if(!bus)continue;
+      const send=ctx.createGain();
+      send.gain.value=0;
+      bus.connect(send);
+      send.connect(this.reverbCut);
+      this.reverbSends[name]=send;
+    }
+  }
+
+  // A room, generated rather than loaded.
+  //
+  // Noise under an exponential decay is a serviceable diffuse tail; the early
+  // reflections are added as discrete spikes on top, because hard parallel
+  // surfaces produce distinct slaps and those are what separate a corridor
+  // from a field. The two channels are decorrelated so the result has width.
+  buildImpulse(profile){
+    const ctx=this.ctx;
+    const rate=ctx.sampleRate;
+    const length=Math.max(1,Math.floor(rate*profile.decay));
+    const buffer=ctx.createBuffer(2,length,rate);
+    for(let ch=0;ch<2;ch++){
+      const data=buffer.getChannelData(ch);
+      for(let i=0;i<length;i++){
+        const t=i/length;
+        data[i]=(Math.random()*2-1)*Math.pow(1-t,profile.curve);
+      }
+      for(const [time,gain] of profile.early||[]){
+        const index=Math.floor(time*rate);
+        // Opposite signs per channel: the same slap arriving at both ears
+        // identically collapses the image to the centre and reads as a
+        // delay effect rather than as a room.
+        if(index<length)data[index]+=gain*(ch?-1:1);
+      }
+    }
+    return buffer;
+  }
+
+  // Put the mixer in a room, or take it out of one. `null` is dry.
+  setReverbProfile(profile){
+    if(!this.ready||!this.ctx||!this.convolver)return;
+    const now=this.ctx.currentTime;
+    if(!profile){
+      this.reverbProfile=null;
+      // Ramped down, then set to exactly zero.
+      //
+      // `setTargetAtTime` is exponential: it approaches a value and never
+      // arrives at it. On its own it left a permanent residual send behind
+      // after every contract — quiet, but a convolver still running and a
+      // room still faintly answering menu sounds for the rest of the session.
+      // The hard set lands at a fraction of an already quiet level, well below
+      // anything audible, and guarantees the room is actually gone.
+      const settled=now+.45;
+      for(const name in this.reverbSends){
+        const gain=this.reverbSends[name].gain;
+        gain.setTargetAtTime(0,now,.12);
+        gain.setValueAtTime(0,settled);
+      }
+      this.reverbReturn.gain.setTargetAtTime(0,now,.12);
+      this.reverbReturn.gain.setValueAtTime(0,settled);
+      return;
+    }
+    // Performance mode shortens the room rather than removing it. A convolver
+    // costs in proportion to its impulse, and half a tail still tells the
+    // operative where they are.
+    const scale=this.settings.performanceMode?.55:1;
+    const shaped={...profile,decay:Math.max(.08,profile.decay*scale)};
+    this.reverbProfile=shaped;
+    this.convolver.buffer=this.buildImpulse(shaped);
+    this.reverbPredelay.delayTime.setTargetAtTime(profile.predelay,now,.05);
+    this.reverbDamp.frequency.setTargetAtTime(profile.damping,now,.05);
+    this.reverbReturn.gain.setTargetAtTime(1,now,.2);
+    for(const name in this.reverbSends){
+      this.reverbSends[name].gain.setTargetAtTime(
+        profile.wet*(REVERB_SENDS[name]||0),now,.2);
+    }
   }
 
   // A browser may suspend the context on its own — a backgrounded tab, an
