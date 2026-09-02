@@ -1,59 +1,76 @@
-# Blender asset pipeline — a working proof, and what it found
-
-`gunship.py` builds the Vulture gunship from primitives in Blender and renders
-it orthographically from directly above, transparent, at any size:
+# Blender asset pipeline — R&D, with a corrected measurement
 
     pip install bpy==4.5.13
-    python3 tools/blender/gunship.py assets/sprites/chopper.png 256
+    python3 tools/blender/render.py all out/          # all four, at true size
+    python3 tools/blender/render.py manticore m.png 158
 
-It renders in about 1.5 seconds on CPU. Blender is used as a Python module —
-there is no GUI, no `.blend` file to keep in sync, and the model is the script,
-so an art change is a diff like any other.
+Four assets build from primitives in `render.py`: `gunship`, `carrier`,
+`manticore`, `soldier`. Blender runs as a Python module — no GUI, no `.blend` to
+keep in sync, the model is the script, so an art change is a diff.
 
-## One fact makes this cheap
+The game rotates sprites at draw time, so each entity needs one render along +X
+rather than a sheet of rotations.
 
-The game rotates every sprite at draw time (`ctx.rotate(enemy.angle)`), so an
-entity needs exactly **one** render — nose along +X — and not a sheet of
-rotations. That is the difference between a handful of small PNGs and an atlas
-of hundreds.
+## Correction: the earlier verdict was measured at the wrong size
 
-Only the airframe is rendered. The rotor stays procedural and is drawn over the
-top at runtime, because its blur has to track the engine's actual spin rate —
-and during a crash that rate is winding down. Baking it would freeze it.
+The first pass concluded that a Blender render loses to the hand-drawn sprite at
+"the 60px a gunship occupies on screen". **That number was wrong.** It was taken
+as the collision radius doubled, and these sprites draw far outside their
+collision radius — the gunship's rotor disc reaches 2.7x it.
 
-## The finding: this is not yet an upgrade
+Measured properly, by rendering each sprite on an oversized canvas and taking
+the alpha bounding box:
 
-Rendered at 256px the Blender airframe is plainly richer than the hand-drawn
-one — real specular falloff on the hull, a glass canopy, warm exhaust.
+| Entity | radius x2 (used before) | actual footprint |
+|---|---|---|
+| gunship | 60px | **159px** |
+| carrier | 70px | **145px** |
+| manticore | 120px | **146px** |
+| soldier | 26px | **29px** |
 
-At the size the game actually draws it, that reverses. A gunship has radius 26,
-so it occupies about 60 pixels on screen. Downscaled to 60px against a dark
-theatre floor the render turns to grey mush: the internal shading that carried
-it at 256px is exactly what does not survive, and there is nothing left holding
-the silhouette together.
+So the earlier comparison was judging a render at less than half the size it
+would really be seen at. Everything downstream of it was pessimistic.
 
-The procedural sprite survives because every shape in it is drawn with a light
-**outline stroke**. That stroke is not decoration — it is what separates the
-airframe from a dark floor at 60 pixels, and it is the single reason the flat
-version reads better in play than the shaded one.
+## The outline pass
 
-So a naive swap makes the game look worse where it counts. Anyone continuing
-this should take three things from it:
+The one thing the earlier finding got right was the cause: every shape in the
+procedural art carries a light stroke, and that stroke — not the shading — is
+what holds a silhouette together against a dark floor.
 
-1. **Bake a rim/outline pass into the render.** Freestyle lines or an inverted-
-   hull shell, matched to the stroke weight the procedural sprites already use.
-   Without this, nothing else matters.
-2. **Raise material contrast well past what looks right at full size.** Value
-   range is what survives downscaling; hue and fine detail are not.
-3. **Spend the effort where there are pixels to spend it on.** The win grows
-   with entity size — bosses, the carrier, the Nemesis walker — and is largest
-   of all off the battlefield, in portraits and menu art, where the size
-   constraint does not apply at all. It is smallest on a 22-pixel crawler.
+The render is now done at 6x, the alpha is dilated into a hard edge at a weight
+specified in *final* display pixels, and only then is it downsampled with a
+restrained sharpen. Doing it in post rather than with Blender's line renderer
+keeps the weight exact and independent of camera distance, which is what lets
+one pipeline serve a 29px soldier and a 158px siege platform with the same
+apparent line.
 
-There is also a capability being given up, which is worth stating plainly: the
-procedural sprites are recoloured at runtime from `enemy.color`, which is how
-elites, cloaking alpha and the walker's accumulated damage are drawn today. A
-baked PNG has none of that unless the pipeline emits a tint mask alongside it.
+## Verdict at true gameplay size — mixed, and asset-dependent
 
-Nothing here is wired into the game. It is a pipeline and a measurement, not
-shipped art.
+- **Carrier — Blender wins clearly.** Reads as a tracked vehicle with a hull,
+  glacis, running gear and a turret. The procedural sprite is a flat olive
+  hexagon with wheel blobs.
+- **Gunship — Blender wins on the airframe.** Real volume, a canopy that reads
+  as glass, visible exhausts. Note the procedural version keeps the animated
+  rotor disc, which is drawn at runtime and must stay procedural either way.
+- **Manticore — the procedural sprite wins, and not narrowly.** This is the
+  useful failure. The Blender mech is a competent grey chassis; the shipping
+  sprite is an aggressive red-and-orange radial silhouette that reads as a
+  threat instantly. Bosses carry **semantic colour** — a boss's job is to look
+  dangerous — and a neutral metal palette throws that away. Geometry was never
+  the problem here.
+- **Soldier — a wash.** At 29px there are not enough pixels for either approach
+  to matter.
+
+## Still not production, and why
+
+1. **The boss needs colour identity before it can compete.** Hue is doing work
+   in the procedural art that shading cannot replace.
+2. **Shipping needs a sprite-loading path** that does not exist — the renderers
+   draw procedurally today.
+3. **It gives up runtime recolouring** from `enemy.color`, which is how elites,
+   cloaking and the walker's accumulated damage are drawn. A baked PNG needs a
+   tint mask alongside it to keep those.
+4. **Mixing would look worse than either.** Blender vehicles beside procedural
+   bosses and infantry is less consistent than committing to one.
+
+Judge every future change at the measured footprint above, never zoomed in.

@@ -227,6 +227,16 @@ equivalents for the audio cues that currently have none.
 Covered by `tools/accessibility.mjs`, which tests persistence from genuinely
 empty storage and asserts an older save loads without losing progression.
 
+## Dynamic lighting events — COMPLETE
+
+Explosions, hazards, elites, the boss and burning wreckage drive lights; theatre
+flicker is per-profile; and gunfire now lights the sector it happens in — six
+slots, 55ms each, newest wins, pushed after the hazards so a budget overrun
+drops a muzzle flash rather than a beacon. Reduce-flashing damps it to a quarter
+rather than removing it.
+
+Covered by `tools/muzzle-light.mjs`.
+
 ## Blender asset pipeline — EXPERIMENTAL, and REJECTED for shipping
 
 `tools/blender/gunship.py` builds the Vulture from primitives and renders it
@@ -234,27 +244,34 @@ orthographically in about 1.5 seconds, using Blender as a Python module. Because
 the game rotates sprites at draw time, an entity needs one render rather than a
 sheet of rotations.
 
-**It is not production and must not be treated as production.** At 256px the
-render is plainly richer than the hand-drawn sprite. At the ~60px a gunship
-actually occupies on screen, that reverses: the internal shading carrying it at
-full size is exactly what does not survive the downscale, and against a dark
-floor it goes to grey mush. The hand-authored sprite survives because every
-shape in it carries a light outline stroke — and that stroke, not the shading,
-is what holds a silhouette together at 60px.
+**It is not production and must not be treated as production**, but the earlier
+verdict here was measured wrongly and has been corrected.
 
-A continuation needs a baked rim pass matched to the existing stroke weight,
-material contrast pushed well past what looks right at full size, and the effort
-spent where there are pixels for it — large entities and menu art, not a 22px
-crawler. It also gives up runtime recolouring from `enemy.color`, which is how
-elites, cloaking and the walker's accumulated damage are drawn.
+That verdict judged the gunship at "the ~60px it occupies on screen". The figure
+was the collision radius doubled, and these sprites draw far outside their
+collision radius — the gunship's rotor disc reaches 2.7x it. Measured from the
+alpha bounding box, the real footprints are gunship 159px, carrier 145px,
+manticore 146px, soldier 29px. Everything downstream of the wrong number was
+pessimistic.
 
-Details in `tools/blender/README.md`.
+The cause it identified was right: the procedural art's light outline stroke,
+not its shading, is what holds a silhouette at size. The pipeline now renders at
+6x, dilates the alpha into a hard edge at a weight given in *final* display
+pixels, and downsamples — one pipeline serving a 29px soldier and a 158px siege
+platform with the same apparent line.
 
-## Dynamic lighting events — IN PROGRESS
+At true size the result is mixed and asset-dependent: the **carrier** and
+**gunship** are clearly better than the shipping sprites; the **manticore** is
+clearly worse, because a boss carries semantic colour and a neutral metal
+palette throws that away — geometry was never the problem there; the **soldier**
+is a wash at 29px.
 
-Explosions, hazards, elites, the boss and burning wreckage all drive lights in
-the deferred path, and theatre flicker is in. Per-shot muzzle illumination is
-**not** wired as a discrete light and is not claimed.
+Four things still block shipping: the boss needs colour identity, there is no
+sprite-loading path, baked art gives up runtime recolouring from `enemy.color`
+(elites, cloaking, walker damage), and mixing Blender vehicles with procedural
+bosses would look less consistent than either alone.
+
+Details and the comparison method in `tools/blender/README.md`.
 
 ## Command Centre presentation polish — PLANNED
 
