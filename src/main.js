@@ -6,6 +6,7 @@ import {recordContract} from './save/contracts.js';
 import {nemesisDue} from '../data/nemesis.js';
 import {ambienceFor} from '../data/ambience.js';
 import {reverbFor} from '../data/reverb.js';
+import {setColorblindMode} from '../data/colorblind.js';
 import {Screens} from './ui/screens.js';
 import {Splash} from './ui/splash.js';
 import {Hud} from './ui/hud.js';
@@ -107,6 +108,10 @@ function applyGlobalSettings(){
   document.documentElement.style.setProperty('--touch-scale',save.settings.touchSize||1);
   document.documentElement.classList.toggle('left-handed',!!save.settings.leftHanded);
   document.documentElement.classList.toggle('reduced-flashing',!!save.settings.reducedFlashing);
+  // Applied here as well as from the settings screen, so a save that already
+  // had the mode set comes back with it on rather than only after the operator
+  // visits settings and changes something.
+  setColorblindMode(save.settings.colorblind||'none');
 }
 
 // The command menu is built immediately and the boot title screen is laid

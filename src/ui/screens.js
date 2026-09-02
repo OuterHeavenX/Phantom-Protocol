@@ -36,6 +36,7 @@ import {
   makePreset,storePreset,deletePreset,applyPreset,MAX_PRESETS
 } from '../game/gunsmith.js';
 import {saveGame,exportSave,importSave,resetSave,defaultSettings} from '../save/storage.js';
+import {COLORBLIND_MODES,setColorblindMode} from '../../data/colorblind.js';
 import {formatDuration,formatNumber,formatTime,clamp} from '../core/math.js';
 import {MenuBackground} from './menuBackground.js';
 
@@ -1866,6 +1867,8 @@ export class Screens{
         <section class="settings-block">
           <h3 class="section-title">ACCESSIBILITY</h3>
           ${toggle('reducedFlashing','Reduce flashing',settings.reducedFlashing,'Dampens screen flashes and low-health pulse')}
+          ${select('colorblind','Colour vision',settings.colorblind||'none',COLORBLIND_MODES)}
+          <p class="muted small">Recolours incoming fire, telegraphs and objectives, and outlines hostile rounds so they read by contrast rather than by hue.</p>
           ${toggle('performanceMode','Performance mode',settings.performanceMode,'Fewer hostiles, no lighting pass')}
           ${slider('uiScale','Interface scale',settings.uiScale,.8,1.4,.05,'x')}
         </section>
@@ -1945,6 +1948,15 @@ export class Screens{
 
     document.getElementById('particles')?.addEventListener('change',event=>{
       settings.particles=event.target.value;
+      commit();
+    });
+
+    // Takes effect immediately rather than at the next deployment: it is a
+    // display preference, not a renderer choice, and somebody turning it on is
+    // trying to find out whether it helps.
+    document.getElementById('colorblind')?.addEventListener('change',event=>{
+      settings.colorblind=event.target.value;
+      setColorblindMode(settings.colorblind);
       commit();
     });
 

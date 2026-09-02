@@ -6,6 +6,7 @@ import {EnvironmentArt,drawSprite,drawSlicedWall} from './environment.js';
 import {EXTRACTION_RADIUS,EXTRACTION_HOLD,FIXED_STEP} from '../game/engine.js';
 import {vaultKind} from '../../data/vaults.js';
 import {REVIVE_RADIUS} from '../game/squadmate.js';
+import {colorblindActive,HOSTILE_OUTLINE} from '../../data/colorblind.js';
 import {
   drawPlayer,drawSquadmate,drawEnemy,drawBoss,drawPhantom,drawTurret,drawMine,drawPickup,
   drawShadow,withAlpha,shade,roundedRect
@@ -935,6 +936,19 @@ export class Renderer{
       ctx.beginPath();ctx.moveTo(p.px,p.py);ctx.lineTo(p.x,p.y);ctx.stroke();
       ctx.fillStyle=color;
       ctx.beginPath();ctx.arc(p.x,p.y,p.radius,0,TAU);ctx.fill();
+      // The non-colour tell, and the part of the accessibility work that
+      // actually carries the load.
+      //
+      // No palette remap can make two hues reliably separable for every kind of
+      // colour blindness at once. A hard dark edge against a bright core is
+      // read by contrast instead, which every form of colour vision keeps — and
+      // it costs one stroke on a shape that is already being drawn. Only when
+      // a mode is on, because it is a legibility aid rather than a look.
+      if(colorblindActive()){
+        ctx.strokeStyle=HOSTILE_OUTLINE;
+        ctx.lineWidth=1.6;
+        ctx.stroke();
+      }
       // Hostile rounds get a white core so they read against the background.
       ctx.fillStyle='rgba(255,255,255,.85)';
       ctx.beginPath();ctx.arc(p.x,p.y,p.radius*.42,0,TAU);ctx.fill();

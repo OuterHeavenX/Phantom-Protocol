@@ -21,6 +21,7 @@ import {vaultKind} from '../../data/vaults.js';
 import {captureStep,ReplayRecorder,ReplayPlayer,REPLAY_VERSION,SIM_SETTINGS} from './replay.js';
 import {ABILITIES,TRAITS,distanceToSegment} from './abilities.js';
 import {ENEMIES_BY_ID,STATUS_EFFECTS,enemyVoice,enemyChassis} from '../../data/enemies.js';
+import {roleColor} from '../../data/colorblind.js';
 import {BOSSES_BY_ID,MINIBOSSES} from '../../data/bosses.js';
 import {baseStats} from '../../data/passives.js';
 import {WEAPONS_BY_ID,weaponVoice} from '../../data/weapons.js';
@@ -1380,7 +1381,10 @@ export class Engine{
   }
 
   onEnemyWindup(enemy,action,duration){
-    const color=action==='shot'?'#ff5b5b':action==='detonate'?'#ffa14f':'#ffb35c';
+    // A telegraph and incoming fire mean different things and, for the most
+    // common colour deficiency, used to be the same colour.
+    const color=action==='shot'?roleColor('hostile')
+      :action==='detonate'?roleColor('warning'):roleColor('hazard');
     this.fx.ring(enemy.x,enemy.y,enemy.radius,enemy.radius*2.2,duration,color,2);
     if(action==='detonate')this.audio.play('alarm',{volume:.35});
   }
@@ -1403,7 +1407,7 @@ export class Engine{
       vy:Math.sin(angle)*(spec.speed||250),
       damage:(spec.damage??enemy.damage)*enemy.buffMult,
       radius:spec.tracer?4:3.4,
-      color:spec.tracer?'#ff5b5b':enemy.color||'#ffcf73',
+      color:spec.tracer?roleColor('hostile'):enemy.color||'#ffcf73',
       life:4,piercing:spec.piercing,source:enemy
     });
     this.fx.muzzle(enemy.x+Math.cos(angle)*enemy.radius,enemy.y+Math.sin(angle)*enemy.radius,angle,.6);
