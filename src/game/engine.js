@@ -1805,6 +1805,11 @@ export class Engine{
     }
     this.fx.blood(enemy.x,enemy.y,gore.particle,(enemy.elite?3.4:2.1),
       {mist:!enemy.machine});
+    // A machine additionally comes apart. The fluid says what it was made of;
+    // this says it was a machine.
+    if(enemy.machine){
+      this.fx.machineDeath(enemy.x,enemy.y,enemy.color,enemy.elite?1.6:1);
+    }
     // `kill` is the operative's feedback that a thing died — it is about the
     // player, and stays. This is the thing itself, which is about the sector,
     // and until now twenty-three archetypes shared none.

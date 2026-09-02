@@ -324,6 +324,34 @@ export class Fx{
     });
   }
 
+  // What comes off a chassis when it stops, over and above the fluid.
+  //
+  // Blood and oil already separate the two materials on the floor. This
+  // separates them in the air: a body throws fabric and dust, a machine throws
+  // sparks, hot fragments and a short electrical failure. The objective is
+  // material identity rather than more gore — a player should know what they
+  // just killed without reading the health bar that is no longer there.
+  machineDeath(x,y,color='#8a929a',scale=1){
+    // Sparks: bright, fast, gravity-bound, and gone quickly.
+    this.burst(x,y,Math.round(9*scale),{
+      speed:270*scale,life:.42,size:1.6,drag:.88,gravity:320,glow:true,
+      color:['#ffe6a8','#ffb35c','#fff']
+    });
+    // Fragments of the chassis itself, in its own colour so the wreck reads as
+    // having come from that unit.
+    this.burst(x,y,Math.round(6*scale),{
+      speed:150*scale,life:.65,size:2.8,drag:.9,gravity:260,
+      color:[color,'#5a6a6c','#2b3338']
+    });
+    // The short electrical failure: one bright arc, then nothing.
+    this.ring(x,y,2,26*scale,.16,'#bfe9ff',2);
+    // Smoke, which is what is left a moment later.
+    this.burst(x,y,Math.round(4*scale),{
+      speed:44*scale,life:1.25,size:6.5*scale,drag:.93,
+      color:'rgba(70,72,78,.5)',kind:'circle'
+    });
+  }
+
   explosion(x,y,radius,color='#ffb35c'){
     this.ring(x,y,radius*.25,radius,.42,color,4);
     this.ring(x,y,radius*.1,radius*.7,.28,'#fff',2);

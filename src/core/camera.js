@@ -16,6 +16,15 @@ const SHAKE_LAYERS={
 };
 // The whole camera, however many sources are shouting at once.
 const SHAKE_TOTAL_CAP=.9;
+// Where a layer settles under sustained input, as a fraction of its own cap.
+//
+// The cap alone is not enough. A weapon firing ten rounds a second into a layer
+// that decays at 2.6 reaches the cap almost immediately and then sits on it, so
+// the camera stops responding to anything and simply vibrates. Repeated
+// additions converge here instead, which leaves the top of every layer free for
+// the events that deserve it — a single round cannot shake the camera as hard
+// as a detonation no matter how many times it is fired.
+const SHAKE_SUSTAIN=.7;
 
 // Caps on how much world may be visible along each axis. Using the larger of
 // the two required zooms keeps a tall portrait phone from showing an absurd
@@ -85,9 +94,27 @@ export class Camera{
   addShake(amount,layer='impact'){
     const spec=SHAKE_LAYERS[layer]||SHAKE_LAYERS.impact;
     const current=this.shakeLayers[layer]||0;
-    this.shakeLayers[layer]=clamp(current+amount,0,spec.cap);
-    // Kept in step so anything still reading `trauma` sees the whole picture.
-    this.trauma=clamp(this.totalTrauma(),0,1);
+    // Diminishing returns as the layer fills.
+    //
+    // A hard clamp stops the number growing but not the problem: a weapon
+    // firing ten rounds a second against a layer that decays at 2.6 arrives at
+    // the cap almost immediately and then sits on it, so the camera stops
+    // moving *in response to anything* and simply vibrates. Scaling each
+    // addition by the headroom left makes the layer asymptotic instead — the
+    // first round of a burst lands in full, later ones add less and less, and
+    // decay between shots still shows through. A single heavy hit is unchanged,
+    // because at rest there is a full cap of headroom to land in.
+    // Headroom is measured against the sustain level, not the cap, so repeated
+    // input converges below the ceiling rather than onto it. A single impulse
+    // is unaffected: at rest there is a full sustain's worth of headroom, and
+    // the hard cap still allows one big hit through above it.
+    const headroom=Math.max(0,1-current/(spec.cap*SHAKE_SUSTAIN));
+    this.shakeLayers[layer]=clamp(current+amount*headroom,0,spec.cap);
+    // Kept in step so anything still reading `trauma` sees the whole picture —
+    // and against the same ceiling `update` uses. These disagreed: this path
+    // clamped to 1 and `update` to the real cap, so for one frame after any
+    // pile-up the camera was allowed past its own limit.
+    this.trauma=clamp(this.totalTrauma(),0,SHAKE_TOTAL_CAP);
   }
 
   totalTrauma(){
