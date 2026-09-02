@@ -91,6 +91,15 @@ def lighting():
     fo.rotation_euler = (math.radians(-28), math.radians(-18), math.radians(124))
 
 def camera(centre_x, span):
+    # `centre_x` must be zero for anything the game rotates.
+    #
+    # The game rotates a sprite about the entity's origin, so the origin has to
+    # land at the centre of the image. Framing on the model's bounding box
+    # instead puts the origin off-centre — and the gunship, whose tail reaches
+    # far further back than its nose reaches forward, then orbits its own
+    # position instead of yawing in place. Caught by the centring assertion in
+    # tools/entity-art.mjs; the fix is a wider span, not a shifted camera.
+    assert centre_x == 0, 'camera must be centred on the model origin'
     # Straight down, orthographic, zero yaw. Image-right is +X, which is where
     # `ctx.rotate(enemy.angle)` expects zero degrees to face.
     cd = bpy.data.cameras.new('cam')
@@ -132,7 +141,7 @@ def gunship(P):
             rot=(0,math.radians(90),0),scale=(.15,.15,.22),vertices=12)
     add('primitive_cylinder_add','rotorhead',P['trim'],loc=(0,0,.78),
         scale=(.20,.20,.18),vertices=16)
-    return -.85, 5.6
+    return 0, 7.2
 
 def carrier(P):
     # Tracked armoured carrier. Wide, flat, and unmistakably not a person.
@@ -159,91 +168,143 @@ def carrier(P):
         scale=(.11,.11,.10),vertices=10)
     return 0, 4.6
 
-def manticore(P):
-    # MANTICORE SIEGE PLATFORM — quadrupedal.
+def boss_hull(P, spec):
+    # A boss HULL. Deliberately no legs.
     #
-    # The grey version of this lost to the hand-drawn sprite and the reason was
-    # not geometry. A boss's job is to read as a threat the instant it enters
-    # the frame, and the shipping sprite does that with hue: an aggressive red
-    # radial silhouette you cannot mistake for anything else in the sector. A
-    # neutral metal chassis throws that away however well modelled it is.
-    #
-    # So the colours here are the boss's own, straight out of data/bosses.js
-    # (`color` and `accent`) rather than an orange invented for the render. The
-    # two cannot then drift apart, and the mech agrees with its own health bar,
-    # its telegraphs and its minimap mark.
-    plate  = material('plate',  hexrgb('#ff665f'), metallic=.55, rough=.42)
-    accent = material('accent', hexrgb('#ffb35c'), metallic=.5,  rough=.38,
-                      emission=hexrgb('#ffb35c'), strength=.55)
-    core   = material('core',   hexrgb('#ff8a3c'), metallic=.2,  rough=.5,
-                      emission=hexrgb('#ff7a22'), strength=6.0)
-    # The structure under the armour. Dark, so the red reads as plating bolted
-    # onto something rather than as a solid red toy.
+    # `drawBoss` draws mech legs separately, animated from the gait and walk
+    # phase, and the chopper's rotor disc is animated the same way. Baking
+    # either into the sprite would freeze a moving part — the walker would
+    # glide, which is the single most obvious way to make an expensive asset
+    # look cheap. So the pipeline renders what does not move and leaves what
+    # does to the runtime.
+    plate  = material('plate',  hexrgb(spec['color']), metallic=.55, rough=.42)
+    accent = material('accent', hexrgb(spec['accent']), metallic=.5, rough=.38,
+                      emission=hexrgb(spec['accent']), strength=.5)
+    core   = material('core',   hexrgb(spec['core']), metallic=.2, rough=.5,
+                      emission=hexrgb(spec['core']), strength=6.0)
     frame  = P['dark']
-    # Hull: a dark frame with red plating over it, and a forward-heavy glacis so
-    # the chassis has an obvious front.
-    # Frame below, plating above, and the numbers have to actually say so.
-    #
-    # First attempt had the frame spanning z -0.14 to 1.06 and the plating
-    # 0.70 to 1.02 — so the armour was *inside* the frame, and from a camera
-    # looking straight down the chassis rendered grey with a red trim. The
-    # recolour looked like it had barely worked; it had simply been buried.
-    add('primitive_cube_add','frame',frame,loc=(0,0,.40),scale=(1.2,1.06,.44))
-    add('primitive_cube_add','deckplate',plate,loc=(0,0,.96),scale=(1.1,.98,.18))
-    # Panel breaks, so the deck is not one flat red slab from above.
+    return plate, accent, core, frame
+
+# Each boss's colours come from data/bosses.js so the hull cannot drift from
+# its own health bar, telegraphs and minimap mark.
+BOSS_SPEC={
+  'manticore':{'color':'#ff665f','accent':'#ffb35c','core':'#ff7a22'},
+  'carrion':  {'color':'#c895ff','accent':'#8fd8ff','core':'#b46bff'},
+  'aegis':    {'color':'#7fd4c4','accent':'#f5d27a','core':'#5fe0c0'},
+  'arbiter':  {'color':'#e0e6ea','accent':'#ff5b5b','core':'#ff3b3b'},
+}
+
+def manticore(P):
+    # MANTICORE SIEGE PLATFORM — broad, forward-heavy, six-barrel rotary array.
+    # The widest hull of the four; it should look like it is bracing.
+    plate, accent, core, frame = boss_hull(P, BOSS_SPEC['manticore'])
+    add('primitive_cube_add','frame',frame,loc=(0,0,.40),scale=(1.2,1.10,.44))
+    add('primitive_cube_add','deck',plate,loc=(0,0,.96),scale=(1.12,1.02,.18))
+    add('primitive_cube_add','glacis',plate,loc=(1.02,0,.72),
+        rot=(0,math.radians(-34),0),scale=(.46,.94,.30))
+    for i,off in enumerate((-.46,0,.46)):
+        add('primitive_cube_add',f'chev{i}',accent,loc=(1.20,off,.88),
+            rot=(0,math.radians(-34),math.radians(30)),scale=(.20,.075,.05))
+    add('primitive_uv_sphere_add','sensor',P['glass'],loc=(1.06,0,.98),
+        scale=(.34,.46,.22),segments=24,ring_count=12)
     for s in (1,-1):
-        add('primitive_cube_add',f'seam{s}',frame,loc=(0,s*.52,1.15),
-            scale=(1.0,.035,.03))
-    add('primitive_cube_add','seamx',frame,loc=(.15,0,1.15),scale=(.035,.9,.03))
-    add('primitive_cube_add','glacis',plate,loc=(.98,0,.60),
-        rot=(0,math.radians(-32),0),scale=(.46,.9,.30))
-    # Hazard chevrons across the glacis — the one piece of pure signage on the
-    # chassis, and the thing that reads first at distance.
-    for i,off in enumerate((-.44,0,.44)):
-        add('primitive_cube_add',f'chev{i}',accent,loc=(1.16,off,.74),
-            rot=(0,math.radians(-32),math.radians(30)),scale=(.20,.075,.05))
-    add('primitive_uv_sphere_add','sensor',P['glass'],loc=(1.06,0,.92),
-        scale=(.34,.46,.24),segments=24,ring_count=12)
-    # Shoulder pauldrons. Mass over the front legs, which is what makes a siege
-    # platform look like it is leaning into the sector.
-    for s in (1,-1):
-        add('primitive_cube_add',f'pauldron{s}',plate,loc=(.52,s*.96,1.02),
-            rot=(math.radians(s*-16),0,0),scale=(.40,.30,.20))
-    # Four legs, splayed. Front and rear differ so the chassis has a heading.
-    for sx,sy,name in ((1,1,'fr'),(1,-1,'fl'),(-1,1,'rr'),(-1,-1,'rl')):
-        hipx = sx*.86
-        add('primitive_cylinder_add',f'hip{name}',accent,loc=(hipx,sy*.92,.46),
-            rot=(math.radians(90),0,0),scale=(.26,.26,.22),vertices=14)
-        thigh = add('primitive_cube_add',f'thigh{name}',plate,
-                    loc=(hipx+sx*.42,sy*1.35,.28),scale=(.5,.20,.16))
-        thigh.rotation_euler = (sy*math.radians(-22),0,sx*math.radians(14))
-        shin = add('primitive_cube_add',f'shin{name}',P['trim'],
-                   loc=(hipx+sx*.86,sy*1.72,-.02),scale=(.42,.13,.12))
-        shin.rotation_euler = (sy*math.radians(-34),0,sx*math.radians(22))
-        add('primitive_cylinder_add',f'foot{name}',P['dark'],
-            loc=(hipx+sx*1.18,sy*1.94,-.30),scale=(.24,.24,.10),vertices=12)
-    # Shoulder weapons and the reactor glow that says which end is dangerous.
-    # Six-barrel rotary array, because that is what the boss's own title says it
-    # carries. Mounted high and forward so it is visible from directly above.
-    for s in (1,-1):
-        add('primitive_cube_add',f'mount{s}',frame,loc=(-.10,s*.90,1.20),
+        add('primitive_cube_add',f'pauldron{s}',plate,loc=(.50,s*1.00,1.04),
+            rot=(math.radians(s*-16),0,0),scale=(.42,.30,.20))
+        add('primitive_cube_add',f'mount{s}',frame,loc=(-.10,s*.92,1.20),
             scale=(.44,.26,.20))
         for i in range(3):
             add('primitive_cylinder_add',f'gun{s}{i}',P['trim'],
-                loc=(.78,s*.90+(i-1)*.13,1.20+(i%2)*.06),
-                rot=(0,math.radians(90),0),scale=(.055,.055,.70),vertices=10)
-    # The reactor. Strongly emissive: at this size it is the brightest thing on
-    # the chassis and the part the eye lands on first.
+                loc=(.80,s*.92+(i-1)*.13,1.20+(i%2)*.06),
+                rot=(0,math.radians(90),0),scale=(.055,.055,.72),vertices=10)
     add('primitive_cylinder_add','reactor',core,loc=(-.70,0,1.22),
         scale=(.40,.40,.22),vertices=20)
-    add('primitive_torus_add','reactorring',accent,loc=(-.70,0,1.24),
-        major_radius=.52,minor_radius=.07,major_segments=24,minor_segments=8)
-    # Exhaust venting off the back, in the same hot colour, so the rear reads as
-    # the working end of a machine rather than as its front.
+    add('primitive_torus_add','ring',accent,loc=(-.70,0,1.24),
+        major_radius=.54,minor_radius=.07,major_segments=24,minor_segments=8)
     for s in (1,-1):
-        add('primitive_cube_add',f'vent{s}',core,loc=(-1.16,s*.34,.62),
+        add('primitive_cube_add',f'vent{s}',core,loc=(-1.18,s*.34,.62),
             scale=(.12,.20,.20))
     return 0, 5.4
+
+def carrion(P):
+    # CARRION ARRAY — a sensor mast, not a gun platform. Tall, thin, radial:
+    # the silhouette that separates it from Manticore is the dish and the spines.
+    plate, accent, core, frame = boss_hull(P, BOSS_SPEC['carrion'])
+    add('primitive_cylinder_add','frame',frame,loc=(0,0,.42),
+        scale=(.94,.94,.40),vertices=8)
+    add('primitive_cylinder_add','collar',plate,loc=(0,0,.92),
+        scale=(1.02,1.02,.16),vertices=8)
+    # The dish, offset forward so the array has a heading.
+    add('primitive_uv_sphere_add','dish',plate,loc=(.30,0,1.20),
+        scale=(.86,.86,.34),segments=32,ring_count=14)
+    add('primitive_cylinder_add','emitter',core,loc=(.30,0,1.46),
+        scale=(.22,.22,.16),vertices=16)
+    # Radial spines. A shape nothing else in the game has, which is the point.
+    for i in range(8):
+        a=i/8*math.tau
+        sp=add('primitive_cube_add',f'spine{i}',accent,
+               loc=(math.cos(a)*1.34,math.sin(a)*1.34,.86),
+               scale=(.44,.055,.055))
+        sp.rotation_euler=(0,0,a)
+        add('primitive_cylinder_add',f'tip{i}',core,
+            loc=(math.cos(a)*1.76,math.sin(a)*1.76,.86),
+            scale=(.075,.075,.075),vertices=8)
+    add('primitive_cylinder_add','stack',frame,loc=(-.72,0,1.12),
+        scale=(.24,.24,.34),vertices=10)
+    return 0, 5.0
+
+def aegis(P):
+    # AEGIS BREAKER — a shield, worn. Broad frontal plates and a heavy, blunt
+    # hull; the silhouette reads as armour first and weapon second.
+    plate, accent, core, frame = boss_hull(P, BOSS_SPEC['aegis'])
+    add('primitive_cube_add','frame',frame,loc=(-.10,0,.42),scale=(1.0,1.02,.44))
+    add('primitive_cube_add','deck',plate,loc=(-.10,0,.96),scale=(.92,.94,.18))
+    # The shield: two overlapping slabs angled forward, with a gap you can see
+    # the core through.
+    for s in (1,-1):
+        sh=add('primitive_cube_add',f'shield{s}',plate,loc=(.86,s*.52,.86),
+               scale=(.24,.62,.52))
+        sh.rotation_euler=(0,math.radians(-14),math.radians(s*10))
+        add('primitive_cube_add',f'rib{s}',accent,loc=(1.06,s*.52,.86),
+            rot=(0,math.radians(-14),math.radians(s*10)),scale=(.05,.56,.10))
+        add('primitive_cube_add',f'brace{s}',frame,loc=(.44,s*.72,.78),
+            scale=(.34,.10,.26))
+    add('primitive_cylinder_add','core',core,loc=(.62,0,.96),
+        rot=(0,math.radians(90),0),scale=(.24,.24,.14),vertices=18)
+    add('primitive_cube_add','spine',frame,loc=(-.86,0,1.06),scale=(.34,.44,.24))
+    for s in (1,-1):
+        add('primitive_cylinder_add',f'thruster{s}',core,loc=(-1.10,s*.44,.80),
+            rot=(0,math.radians(90),0),scale=(.16,.16,.16),vertices=12)
+    return 0, 5.2
+
+def arbiter(P):
+    # THE ARBITER — mirrors the operative's own loadout, so it is the sleek one:
+    # pale, narrow, bilaterally symmetric, with a single red eye. The only boss
+    # whose accent is hostile red against a white hull.
+    plate, accent, core, frame = boss_hull(P, BOSS_SPEC['arbiter'])
+    body=add('primitive_uv_sphere_add','frame',plate,loc=(0,0,.80),
+             scale=(1.20,.72,.46),segments=36,ring_count=18)
+    for v in body.data.vertices:
+        if v.co.x<0:
+            f=1+v.co.x*.28
+            v.co.y*=max(.45,f)
+    add('primitive_cube_add','spine',frame,loc=(-.30,0,1.14),scale=(.86,.14,.12))
+    # The eye. One hard red point on an otherwise pale hull — the whole read.
+    add('primitive_uv_sphere_add','eye',core,loc=(.86,0,1.02),
+        scale=(.22,.30,.16),segments=20,ring_count=10)
+    add('primitive_torus_add','socket',accent,loc=(.86,0,1.02),
+        major_radius=.32,minor_radius=.05,major_segments=20,minor_segments=8)
+    # Mirrored arms, held out — it is copying your weapons, so it has hands.
+    for s in (1,-1):
+        arm=add('primitive_cube_add',f'arm{s}',plate,loc=(.30,s*.88,.92),
+                scale=(.52,.16,.14))
+        arm.rotation_euler=(0,0,math.radians(s*-18))
+        add('primitive_cube_add',f'hand{s}',frame,loc=(.86,s*1.10,.92),
+            scale=(.20,.12,.12))
+        add('primitive_cylinder_add',f'muzzle{s}',accent,loc=(1.14,s*1.16,.92),
+            rot=(0,math.radians(90),0),scale=(.06,.06,.18),vertices=10)
+    add('primitive_cylinder_add','vent',core,loc=(-1.06,0,.90),
+        rot=(0,math.radians(90),0),scale=(.20,.20,.14),vertices=14)
+    return 0, 5.0
 
 def soldier(P):
     # Infantry, at roughly 26px on screen — the hardest case for this pipeline
@@ -261,9 +322,10 @@ def soldier(P):
     # Weapon, held across the body and pointing +X so the sprite reads a facing.
     add('primitive_cube_add','weapon',P['trim'],loc=(.62,.14,.52),scale=(.46,.07,.07))
     add('primitive_cube_add','mag',P['dark'],loc=(.52,.14,.38),scale=(.09,.06,.14))
-    return .08, 2.3
+    return 0, 2.6
 
-ASSETS = {'gunship':gunship,'carrier':carrier,'manticore':manticore,'soldier':soldier}
+ASSETS = {'gunship':gunship,'carrier':carrier,'soldier':soldier,
+          'manticore':manticore,'carrion':carrion,'aegis':aegis,'arbiter':arbiter}
 
 # ---------------------------------------------------------------------------
 # Render and outline
@@ -346,7 +408,8 @@ if __name__ == '__main__':
         # the difference between "loses badly" and "has room to work".
         # Measured by rendering each sprite on an oversized canvas and taking
         # the alpha bounding box.
-        for name, px in (('gunship',160),('carrier',146),('manticore',158),('soldier',30)):
+        for name, px in (('gunship',160),('carrier',146),('soldier',30),
+                         ('manticore',158),('carrion',158),('aegis',158),('arbiter',158)):
             path = os.path.join(out_dir, f'{name}.png')
             render(name, path, px)
             print('wrote', path, f'{px}px')

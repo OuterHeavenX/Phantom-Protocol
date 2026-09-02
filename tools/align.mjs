@@ -26,6 +26,21 @@ const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium-1194/ch
 const p=await b.newPage({viewport:{width:900,height:600}});
 p.on('pageerror',e=>console.log('PAGEERROR',String(e).slice(0,200)));
 await p.goto('http://127.0.0.1:8931/index.html',{waitUntil:'load'});
+
+// The authored-art layer is switched off for this harness.
+//
+// It locates entities by tinting them a known colour and finding that colour on
+// screen, and a baked sprite deliberately ignores `enemy.color` for anything
+// that is not an elite — so with the art on, five of the six markers vanish and
+// the harness reports a false all-clear on one lucky hit. Turning it off keeps
+// this measuring what it was written to measure: that the PROCEDURAL sprite
+// agrees with its collider.
+//
+// The art layer's own alignment is asserted separately, in entity-art.mjs, by
+// checking the drawn ink is centred on the entity's origin.
+await p.addInitScript(()=>{
+  window.__ppDisableEntityArt=true;
+});
 await p.waitForTimeout(400);
 await p.evaluate(m=>{const raw=JSON.parse(localStorage.getItem('red-static-save')||'{}');
   // Without a version the save goes through `migrate`, which rebuilds it from

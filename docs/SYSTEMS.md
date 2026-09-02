@@ -237,7 +237,29 @@ rather than removing it.
 
 Covered by `tools/muzzle-light.mjs`.
 
-## Blender asset pipeline — EXPERIMENTAL, and REJECTED for shipping
+## Authored entity art — COMPLETE (shipped)
+
+Seven Blender renders are now drawn in the running game: the gunship, the
+carrier, infantry, and all four boss hulls. `src/render/entityart.js` loads
+them; `drawEnemy` and `drawBoss` use them where one exists.
+
+Three rules govern it:
+
+- **Moving parts stay procedural.** Boss legs are animated from the gait and the
+  gunship's rotor from its spin rate, so only hulls are baked. A walker that
+  glides is the most obvious way to make an expensive asset look cheap.
+- **Nothing is required.** Every entity keeps its procedural routine, which
+  draws until the image decodes and forever if it is missing.
+- **Runtime colour still works.** Elites tint through a small cache of
+  pre-composited canvases; `tintFor` holds the policy so it can be asserted.
+
+Total asset weight is 96 KB for all seven.
+
+Covered by `tools/entity-art.mjs`, whose central assertion is that the frame
+differs with the art layer on and off — the check that would have caught the
+pipeline never being wired in at all.
+
+## Blender asset pipeline — EXPERIMENTAL for anything not listed above
 
 `tools/blender/gunship.py` builds the Vulture from primitives and renders it
 orthographically in about 1.5 seconds, using Blender as a Python module. Because

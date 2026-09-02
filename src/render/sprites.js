@@ -1,4 +1,5 @@
 import {TAU} from '../core/math.js';
+import {entityArt,drawEntityArt,tintFor,ENTITY_ART} from './entityart.js';
 
 // Vector sprite library. Every character is drawn procedurally with animated
 // limbs, a directional weapon and a ground shadow — no image assets, which
@@ -335,8 +336,23 @@ export function drawEnemy(ctx,enemy,time,settings){
   ctx.rotate(enemy.angle);
 
   const kind=enemy.render||'soldier';
-  const renderer=ENEMY_RENDERERS[kind]||ENEMY_RENDERERS.soldier;
-  renderer(ctx,enemy,scale,time);
+  // Authored art where one exists, procedural otherwise — including while the
+  // image is still decoding, so the first seconds of a contract never show a
+  // hole where a hostile should be.
+  const art=entityArt(kind);
+  if(art){
+    // Elites carry their own colour and must keep reading as elites; the
+    // policy lives in `tintFor` so it can be asserted on directly.
+    const {color,tint}=tintFor(enemy);
+    drawEntityArt(ctx,art,enemy.radius,{color,tint,file:ENTITY_ART[kind]?.file});
+    // The rotor is a moving part and stays procedural over the baked airframe.
+    // Its blur has to track the engine's real spin rate, and during a crash
+    // that rate is winding down — baking it would freeze it.
+    if(kind==='chopper')drawRotor(ctx,enemy,scale,time);
+  }else{
+    const renderer=ENEMY_RENDERERS[kind]||ENEMY_RENDERERS.soldier;
+    renderer(ctx,enemy,scale,time);
+  }
 
   ctx.restore();
 
@@ -421,6 +437,49 @@ function drawApc(ctx,enemy,scale,time){
   }
 }
 
+// The main rotor, extracted so it can be drawn over a baked airframe as well
+// as over the procedural one.
+//
+// A moving part cannot be baked: the blur has to track the engine's real spin
+// rate, and during a crash that rate is winding down. This is the one piece of
+// a gunship that must stay drawn at runtime whatever the hull is made of.
+export function drawRotor(ctx,enemy,scale,time){
+  const s=scale*.92;
+  const spin=enemy.rotor||time*26;
+  ctx.save();
+  ctx.globalAlpha=.11;
+  ctx.fillStyle='#dfe9ee';
+  ctx.beginPath();ctx.arc(0,0,34*s,0,TAU);ctx.fill();
+  // The blades sit under the disc in weight so the airframe still reads.
+  ctx.globalAlpha=.5;
+  ctx.strokeStyle='#e6eef2';
+  ctx.lineWidth=1.8*s;
+  ctx.beginPath();
+  for(let i=0;i<4;i++){
+    const a=spin+i*(TAU/4);
+    ctx.moveTo(0,0);
+    ctx.lineTo(Math.cos(a)*34*s,Math.sin(a)*34*s);
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  // Tail rotor. Turns faster than the main and is driven off the same spin, so
+  // it belongs with it rather than with the airframe — a wreck losing drive to
+  // the tail rotor is the reason it goes down at all.
+  ctx.save();
+  ctx.translate(-34*s,0);
+  ctx.globalAlpha=.6;
+  ctx.strokeStyle='#dfe9ee';
+  ctx.lineWidth=1.4*s;
+  ctx.beginPath();
+  for(let i=0;i<3;i++){
+    const a=spin*1.7+i*(TAU/3);
+    ctx.moveTo(0,0);ctx.lineTo(Math.cos(a)*9*s,Math.sin(a)*9*s);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawChopper(ctx,enemy,scale,time){
   const s=scale*.92;
   const body=enemy.color||'#c8d2d6';
@@ -455,38 +514,8 @@ function drawChopper(ctx,enemy,scale,time){
   ctx.beginPath();roundedRect(ctx,-4*s,-19*s,12*s,8*s,2*s);ctx.fill();ctx.stroke();
   ctx.beginPath();roundedRect(ctx,-4*s,11*s,12*s,8*s,2*s);ctx.fill();ctx.stroke();
 
-  // Main rotor: a fast disc plus blades, so it reads as turning at any speed.
-  const spin=enemy.rotor||time*26;
-  ctx.save();
-  ctx.globalAlpha=.11;
-  ctx.fillStyle='#dfe9ee';
-  ctx.beginPath();ctx.arc(0,0,34*s,0,TAU);ctx.fill();
-  // The blades sit under the disc in weight so the airframe still reads.
-  ctx.globalAlpha=.5;
-  ctx.strokeStyle='#e6eef2';
-  ctx.lineWidth=1.8*s;
-  ctx.beginPath();
-  for(let i=0;i<4;i++){
-    const a=spin+i*(TAU/4);
-    ctx.moveTo(0,0);
-    ctx.lineTo(Math.cos(a)*34*s,Math.sin(a)*34*s);
-  }
-  ctx.stroke();
-  ctx.restore();
+  drawRotor(ctx,enemy,scale,time);
 
-  // Tail rotor.
-  ctx.save();
-  ctx.translate(-34*s,0);
-  ctx.globalAlpha=.6;
-  ctx.strokeStyle='#dfe9ee';
-  ctx.lineWidth=1.4*s;
-  ctx.beginPath();
-  for(let i=0;i<3;i++){
-    const a=spin*1.7+i*(TAU/3);
-    ctx.moveTo(0,0);ctx.lineTo(Math.cos(a)*9*s,Math.sin(a)*9*s);
-  }
-  ctx.stroke();
-  ctx.restore();
 
   // Navigation strobe.
   const blink=(Math.sin(time*5)+1)/2;
@@ -834,8 +863,17 @@ export function drawBoss(ctx,boss,time){
   // out from underneath rather than being stuck to the front. The Nemesis
   // draws its own, which are part of its chassis rather than bolted under it.
   if(boss.def.gait&&boss.def.render!=='nemesis')drawMechLegs(ctx,boss,flash);
-  const renderer=BOSS_RENDERERS[boss.def.render]||BOSS_RENDERERS.manticore;
-  renderer(ctx,boss,time,body);
+  // The legs above are animated from the gait and stay procedural; only the
+  // hull is baked, and it is drawn over them exactly as the procedural hull was
+  // — so the walk cycle is unchanged and the chassis still sits on top of its
+  // own limbs.
+  const bossArt=flash?null:entityArt(boss.def.render,true);
+  if(bossArt){
+    drawEntityArt(ctx,bossArt,boss.radius,{});
+  }else{
+    const renderer=BOSS_RENDERERS[boss.def.render]||BOSS_RENDERERS.manticore;
+    renderer(ctx,boss,time,body);
+  }
 
   ctx.restore();
 
