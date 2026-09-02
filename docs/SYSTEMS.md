@@ -259,44 +259,108 @@ Covered by `tools/entity-art.mjs`, whose central assertion is that the frame
 differs with the art layer on and off — the check that would have caught the
 pipeline never being wired in at all.
 
-## Blender asset pipeline — EXPERIMENTAL for anything not listed above
+## Authored character and machine art — COMPLETE (shipped)
 
-`tools/blender/gunship.py` builds the Vulture from primitives and renders it
-orthographically in about 1.5 seconds, using Blender as a Python module. Because
-the game rotates sprites at draw time, an entity needs one render rather than a
-sheet of rotations.
+The roster: twelve enemy body kinds, and the operative in eight per-operative
+variants. Rendered by `tools/blender/render.py` from one parametric figure
+(build, helmet, weapon, pack, armour, shield, charge) plus four small-machine
+builders, in the game's own units so a render scales with `radius` exactly as
+the procedural sprite did. Colours are read out of `data/enemies.js` and
+`data/operatives.js` at render time and never restated.
 
-**It is not production and must not be treated as production**, but the earlier
-verdict here was measured wrongly and has been corrected.
+**What is baked and what is not.** Bodies only. Every unit's moving part stays
+procedural and is drawn under or over the render by `ART_PARTS`: legs swing
+from the walk phase on all infantry, rotors turn on the drone, the crawler's
+legs wobble, the jammer's dish rotates and pulses, the warden's ring
+counter-rotates, the sapper's charge pulses, the veil shimmers, the marauder's
+enrage ring shows. Each fragment is lifted from the procedural renderer it came
+from, so the animation is identical whichever body is under it. A hit flash
+draws the procedural body for that one frame, because a baked render cannot go
+white.
 
-That verdict judged the gunship at "the ~60px it occupies on screen". The figure
-was the collision radius doubled, and these sprites draw far outside their
-collision radius — the gunship's rotor disc reaches 2.7x it. Measured from the
-alpha bounding box, the real footprints are gunship 159px, carrier 145px,
-manticore 146px, soldier 29px. Everything downstream of the wrong number was
-pessimistic.
+**The operative** is eight one-kilobyte renders rather than one tinted sprite,
+because a whole-figure tint would shift the teal body along with the accent.
+One capability is given up on this path and recorded here: the livery weapon
+tint, which coloured the weapon in the operative's hands — the weapon is part
+of the render.
 
-The cause it identified was right: the procedural art's light outline stroke,
-not its shading, is what holds a silhouette at size. The pipeline now renders at
-6x, dilates the alpha into a hard edge at a weight given in *final* display
-pixels, and downsamples — one pipeline serving a 29px soldier and a 158px siege
-platform with the same apparent line.
+**Sizing is asserted, not assumed.** The harness compares each baked body's
+on-screen extent against the procedural sprite it replaces and fails outside
+0.8–1.3×. The first render pass shipped the sniper at 0.77 and the heavy at
+0.63 of their footprint. The bodies were not small and the weapons were not
+short: the weapons were *clipped by the frame*, because the origin sits at the
+frame centre and the frame was sized to the sprite's width rather than twice
+its forward reach. The renderer now refuses to clip.
 
-At true size the result is mixed and asset-dependent: the **carrier** and
-**gunship** are clearly better than the shipping sprites; the **soldier** is a
-wash at 29px; and the **manticore** still loses after a full colour pass built
-on the boss's own `color`/`accent`. That last one is the informative result —
-the remaining gap is silhouette (a radial six-armed star against a rectangle
-with legs) and value range (near-black with a hot outline against a narrow mid
-band), not fidelity. The first is a design decision rather than a render
-setting.
+**Three top-down modelling lessons**, each found by looking at the sheet:
 
-Four things still block shipping: the boss needs colour identity, there is no
-sprite-loading path, baked art gives up runtime recolouring from `enemy.color`
-(elites, cloaking, walker damage), and mixing Blender vehicles with procedural
-bosses would look less consistent than either alone.
+- A vertical shield slab is a line from above. It has to be angled to have any
+  width in the frame.
+- The drone's rotor hubs were the rotor colour, so the runtime arcs drawn over
+  them were invisible — and measured as frozen. Hubs are dark now.
+- An emissive plate on top of a dark chassis washes the whole unit pale. The
+  warden's rim is a thin edge.
 
-Details and the comparison method in `tools/blender/README.md`.
+**The honest limit.** Infantry are 28–40 px wide on screen and a face is two
+pixels. "Detailed" is not available at that size in any pipeline. What the
+render buys is a solid, lit, outlined silhouette; the heavies at 46–63 px are
+where the extra pixels actually show, and the verdict below is per kind for
+that reason.
+
+**Verdict per kind, from the art-on/art-off sheet at true size (3× zoom to
+read it, judged at 1×):**
+
+- **Heavy — clear gain.** An armoured exo figure with a rotary cannon on its
+  shoulder replaces a grey blob with a tube. The one infantry body with enough
+  pixels (63) for form to show, and it does.
+- **Mortar, crawler, sapper — gain.** The tripod and tube read as a mortar
+  where the procedural sprite was a two-legged lump; the crawler has a body
+  with volume under its legs; the sapper's charge is a lit sphere on a pack.
+- **Shield, sniper, soldier, augment, veil — a solid lit silhouette, not
+  "detail".** Same footprint as before (0.95–1.13), rounder shoulders, a helmet
+  and a weapon with thickness. At 28–40px a face is two pixels in any
+  pipeline; these are cleaner, not richer. The shield's pale accent reads
+  weaker than the procedural yellow outline it replaces.
+- **Drone — a wash.** A 22px X-frame under animated arcs; the render is
+  thinner than the diamond it replaces (0.86) and neither is better.
+- **Jammer, warden — a wash on form; the warden's hull reads lighter.** The
+  moving dish and ring are the identity of both units and stay procedural, so
+  the baked hull is a box or a hexagon either way. The lit top face of the
+  warden hull is paler than the procedural dark green.
+- **Operative — slightly darker and 0.85 of the procedural width.** The body
+  is the same `#22484c`; the procedural version's bright livery weapon is the
+  contrast that is given up, and it is the one sprite on screen all run. Worth
+  a pass of its own if the player reads as dim in play.
+
+Sizing after the frame fix: soldier 1.04, shield 0.95, sniper 1.03, heavy
+1.02, veil 1.13, augment 1.04, sapper 1.00, mortar 1.08, drone 0.86, crawler
+1.11, jammer 1.00, warden 1.00, operative 0.85. Total weight for all 31 assets
+is 168 KB.
+
+Covered by `tools/entity-art.mjs`.
+
+## Blender asset pipeline — COMPLETE (production source)
+
+`tools/blender/render.py` is the source of every PNG in
+`assets/sprites/entities/`: thirty-one assets from primitives, rendered
+orthographically with Blender as a Python module. The renderer enforces three
+things structurally rather than by convention: the camera is centred on the
+entity origin (asserted), units per pixel are derived per kind so `ref` in
+`entityart.js` stays correct (`span_for`), and a model that would be clipped by
+its frame aborts the render with the size it needs (`fit()`).
+
+That last guard exists because of a defect found late: the sniper and heavy
+weapons were cut off at the frame edge, so three successive passes that
+lengthened the weapon changed nothing on screen. The frame has to be twice the
+forward reach, not the sprite width, because the origin is the frame centre.
+
+What the pipeline gives up, and what replaces it: whole-figure runtime
+recolouring from `enemy.color` is replaced by the elite tint cache and by
+per-operative renders; the hit flash draws the procedural body for its one
+frame. Baked art is never required — every entity keeps its procedural routine
+as the fallback.
+
+Details, measurements and modelling lessons in `tools/blender/README.md`.
 
 ## Command Centre presentation polish — PLANNED
 

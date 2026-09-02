@@ -38,6 +38,10 @@ const out=await p.evaluate(async()=>{
 
   // Give the loader's own images time to arrive.
   for(const [kind,,boss] of specs)art.entityArt(kind,boss);
+  // The operative's art too, or the player comparison below measures two
+  // procedural draws and reports the art as absent when it merely had not
+  // been asked for yet.
+  for(const op of Object.keys(art.PLAYER_ART))art.entityArt(op,'player');
   await new Promise(r=>setTimeout(r,900));
   res.loaded=specs.filter(([k,,boss])=>!!art.entityArt(k,boss)).length;
 
@@ -75,6 +79,71 @@ const out=await p.evaluate(async()=>{
   const def=BOSSES[0];
   res.boss=compare(260,ctx=>drawBoss(ctx,{x:0,y:0,angle:0,radius:52,def,
     render:def.render,hp:2600,maxHp:2600,stridePhase:0},0));
+
+  // 2b. Every declared infantry and machine kind changes the frame, and the
+  //     operative does too — the whole roster, not just the three vehicles.
+  res.kinds={};
+  for(const kind of ['soldier','shield','sniper','heavy','veil','augment','sapper',
+                     'mortar','drone','crawler','jammer','warden']){
+    const r=art.ENTITY_ART[kind].ref;
+    res.kinds[kind]=compare(160,ctx=>drawEnemy(ctx,{x:0,y:0,angle:0,radius:r,
+      color:'#a7b8b9',render:kind,walkPhase:0,vx:0,vy:0,hitFlash:0},0,{})).changed;
+  }
+  const {drawPlayer}=await import('/src/render/sprites.js');
+  const {OPERATIVES_BY_ID}=await import('/data/operatives.js');
+  res.player=compare(200,ctx=>drawPlayer(ctx,{x:0,y:0,angle:0,radius:13,vx:0,vy:0,
+    walkPhase:0,hitFlash:0},OPERATIVES_BY_ID.vesper,0,null)).changed;
+  res.kindsUnchanged=Object.entries(res.kinds).filter(([,v])=>v<80).map(([k])=>k);
+
+  // 2c. Moving parts on the small units, with the art on: legs on infantry,
+  //     rotors on the drone, dish on the jammer, ring on the warden.
+  // RGB, not alpha. A rotor arc drawn over an opaque baked hub changes the
+  // colour of pixels that were already opaque, so an alpha diff sees almost
+  // nothing and reports a moving part as frozen while it is plainly turning.
+  // `walkPhase:0` on every entity. The rotor and dish phases add walkPhase to
+  // time, and an entity without one produces NaN — which draws nothing and
+  // reported the drone's rotors as frozen. Real entities always carry it.
+  const anim=(kind,r,a,b)=>differRgb(
+    paint(160,ctx=>drawEnemy(ctx,{walkPhase:0,...a,x:0,y:0,angle:0,radius:r,color:'#a7b8b9',render:kind},a.time||0,{})),
+    paint(160,ctx=>drawEnemy(ctx,{walkPhase:0,...b,x:0,y:0,angle:0,radius:r,color:'#a7b8b9',render:kind},b.time||0,{})));
+  res.moves={
+    soldierLegs:anim('soldier',11,{walkPhase:0,vx:90,vy:0},{walkPhase:1.6,vx:90,vy:0}),
+    heavyLegs:anim('heavy',17,{walkPhase:0},{walkPhase:1.6}),
+    droneRotors:anim('drone',9,{time:0},{time:.3}),
+    crawlerLegs:anim('crawler',10,{walkPhase:0},{walkPhase:.8}),
+    jammerDish:anim('jammer',13,{time:0},{time:.5}),
+    wardenRing:anim('warden',16,{time:0},{time:.5})
+  };
+  res.frozen=Object.entries(res.moves).filter(([,v])=>v<20).map(([k])=>k);
+
+  // 2d. Sizing. A baked body must occupy about the same screen extent as the
+  //     procedural sprite it replaces — the game's collision, targeting and
+  //     hit-reads were all tuned against that footprint. A render half the
+  //     width reads as a different, smaller unit, and the first pass shipped
+  //     exactly that on the sniper and heavy because their weapons were short.
+  const ext=fn=>{const c=document.createElement('canvas');c.width=c.height=200;
+    const x=c.getContext('2d');x.translate(100,100);fn(x);
+    const d=x.getImageData(0,0,200,200).data;let a=200,bb=0;
+    for(let y=0;y<200;y++)for(let i=0;i<200;i++)if(d[(y*200+i)*4+3]>40){a=Math.min(a,i);bb=Math.max(bb,i)}
+    return bb-a};
+  res.sizing={};
+  for(const kind of Object.keys(res.kinds)){
+    const r=art.ENTITY_ART[kind].ref;
+    const f=x=>drawEnemy(x,{x:0,y:0,angle:0,radius:r,color:'#a7b8b9',render:kind,walkPhase:0,vx:0,vy:0,hitFlash:0},0,{});
+    art.setEntityArtEnabled(true);const on=ext(f);art.setEntityArtEnabled(false);const off=ext(f);
+    art.setEntityArtEnabled(true);
+    res.sizing[kind]=+(on/off).toFixed(2);
+  }
+  {
+    // The operative's frame was sized the same way, and the player is the one
+    // sprite on screen for the whole run.
+    const f=x=>drawPlayer(x,{x:0,y:0,angle:0,radius:13,vx:0,vy:0,walkPhase:0,hitFlash:0},OPERATIVES_BY_ID.vesper,0,null);
+    art.setEntityArtEnabled(true);const on=ext(f);art.setEntityArtEnabled(false);const off=ext(f);
+    art.setEntityArtEnabled(true);
+    res.sizing.player=+(on/off).toFixed(2);
+  }
+  res.undersized=Object.entries(res.sizing).filter(([,v])=>v<.8).map(([k,v])=>`${k}:${v}`);
+  res.oversized=Object.entries(res.sizing).filter(([,v])=>v>1.3).map(([k,v])=>`${k}:${v}`);
 
   // 3. Moving parts must still move with the art on.
   const spin=t=>paint(200,ctx=>drawEnemy(ctx,{x:0,y:0,angle:0,radius:26,
@@ -198,6 +267,11 @@ if(!(out.apc.changed>200))fail.push(`the carrier draws identically with the art 
 if(!(out.boss.changed>200))fail.push(`the boss draws identically with the art layer on and off (${out.boss.changed} px) — this is the exact failure this file exists for`);
 if(!(out.chopper.onInk>500))fail.push('the gunship draws almost nothing with the art layer on');
 if(!(out.boss.onInk>500))fail.push('the boss draws almost nothing with the art layer on');
+if(out.kindsUnchanged.length)fail.push(`these kinds draw identically with the art on and off: ${out.kindsUnchanged}`);
+if(!(out.player>80))fail.push(`the operative draws identically with the art on and off (${out.player} px)`);
+if(out.frozen.length)fail.push(`these moving parts are frozen with the art on: ${out.frozen}`);
+if(out.undersized.length)fail.push(`baked bodies well under their procedural footprint: ${out.undersized}`);
+if(out.oversized.length)fail.push(`baked bodies well over their procedural footprint: ${out.oversized}`);
 if(!(out.rotorMoves>50))fail.push(`the rotor is frozen with the art layer on (${out.rotorMoves} px changed across a spin)`);
 if(!(out.legsMove>50))fail.push(`the boss legs are frozen with the art layer on (${out.legsMove} px changed across a stride) — the walker glides`);
 if(!(out.fallbackInk>500))fail.push('an entity with no decoded image draws nothing');

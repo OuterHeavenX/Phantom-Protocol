@@ -25,7 +25,36 @@
 export const ENTITY_ART={
   chopper:{file:'gunship.png',ref:26},
   apc:{file:'carrier.png',ref:30},
-  soldier:{file:'soldier.png',ref:11}
+  // Infantry, BODY ONLY. The runtime draws the legs beneath these, animated
+  // from the walk phase. `ref` is the archetype radius the render was sized
+  // for; a variant sharing the kind at a different radius simply scales.
+  soldier:{file:'soldier.png',ref:11},
+  shield:{file:'shield.png',ref:13},
+  sniper:{file:'sniper.png',ref:11},
+  heavy:{file:'heavy.png',ref:17},
+  veil:{file:'veil.png',ref:11},
+  augment:{file:'augment.png',ref:15},
+  sapper:{file:'sapper.png',ref:12},
+  mortar:{file:'mortar.png',ref:13},
+  // Small machines, STATIC PART ONLY. Rotors, legs, dishes and rings are drawn
+  // at runtime over or under these.
+  drone:{file:'drone.png',ref:9},
+  crawler:{file:'crawler.png',ref:10},
+  jammer:{file:'jammer.png',ref:13},
+  warden:{file:'warden.png',ref:16}
+};
+
+// The operative, one render per operative so the accent is exact rather than
+// a wash over the whole figure. Keyed by operative id.
+export const PLAYER_ART={
+  vesper:{file:'player-vesper.png',ref:13},
+  bastion:{file:'player-bastion.png',ref:13},
+  mirage:{file:'player-mirage.png',ref:13},
+  wraith:{file:'player-wraith.png',ref:13},
+  oracle:{file:'player-oracle.png',ref:13},
+  ferrous:{file:'player-ferrous.png',ref:13},
+  cipher:{file:'player-cipher.png',ref:13},
+  requiem:{file:'player-requiem.png',ref:13}
 };
 
 export const BOSS_ART={
@@ -75,7 +104,7 @@ function load(file){
 // The art for a render kind, or null to draw procedurally.
 export function entityArt(kind,boss=false){
   if(!enabled)return null;
-  const spec=(boss?BOSS_ART:ENTITY_ART)[kind];
+  const spec=(boss===true?BOSS_ART:boss==='player'?PLAYER_ART:ENTITY_ART)[kind];
   if(!spec)return null;
   const img=load(spec.file);
   return img?{img,ref:spec.ref}:null;

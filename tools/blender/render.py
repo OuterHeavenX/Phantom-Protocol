@@ -60,6 +60,30 @@ def hexrgb(h):
         return c / 12.92 if c <= .04045 else ((c + .055) / 1.055) ** 2.4
     return (lin(0), lin(2), lin(4))
 
+import re as _re
+
+def registry_colours():
+    """id -> hex, read straight out of data/enemies.js and data/operatives.js.
+
+    The JS files are the only source of truth for what colour a unit is; a
+    second copy here would drift and the sprite would stop matching its own
+    health bar and minimap mark. Regex is enough because the registries are
+    written one object per entry."""
+    out = {}
+    for path in ('data/enemies.js', 'data/operatives.js'):
+        try:
+            src = open(path).read()
+        except OSError:
+            continue
+        for blk in _re.split(r'\n\s*\{\s*\n', src):
+            i = _re.search(r"id:'(\w+)'", blk)
+            c = _re.search(r"color:'(#[0-9a-fA-F]{6})'", blk)
+            if i and c and i.group(1) not in out:
+                out[i.group(1)] = c.group(1)
+    return out
+
+COLOURS = registry_colours()
+
 def palette():
     # Deliberately higher contrast than looks right at full size.
     #
@@ -324,8 +348,224 @@ def soldier(P):
     add('primitive_cube_add','mag',P['dark'],loc=(.52,.14,.38),scale=(.09,.06,.14))
     return 0, 2.6
 
-ASSETS = {'gunship':gunship,'carrier':carrier,'soldier':soldier,
-          'manticore':manticore,'carrion':carrion,'aegis':aegis,'arbiter':arbiter}
+# ---------------------------------------------------------------------------
+# Infantry. One parametric figure, in the game's own units (radius 11 = 1 unit
+# per pixel), BODY ONLY — the runtime draws the legs, animated from the walk
+# phase, underneath. Facing +X.
+# ---------------------------------------------------------------------------
+
+def shade(hexc, k):
+    r, g, b = hexrgb(hexc)
+    f = (lambda v: v + (1 - v) * k) if k > 0 else (lambda v: v * (1 + k))
+    return (f(r), f(g), f(b))
+
+def figure(P, body_hex, accent_hex, build='medium', helmet='visor',
+           weapon='rifle', pack=False, armor=False, shield=False, charge=False,
+           outline_hex=None):
+    body   = material('body',   hexrgb(body_hex),      metallic=.15, rough=.62)
+    dark   = material('bdark',  shade(body_hex, -.38), metallic=.2,  rough=.7)
+    accent = material('baccent',hexrgb(accent_hex),    metallic=.35, rough=.4,
+                      emission=hexrgb(accent_hex), strength=.9)
+    skin   = material('head',   shade(body_hex, .18),  metallic=.1,  rough=.6)
+    steel  = P['trim']; frame = P['dark']
+    w = {'light':.85,'medium':1.0,'heavy':1.18,'exo':1.32}[build]
+
+    # Torso: a rounded block, wider for heavier builds.
+    add('primitive_cube_add','torso',body,loc=(1.0,0,1.6),scale=(5.0,5.6*w,1.9))
+    if armor:
+        add('primitive_cube_add','plate',accent,loc=(2.2,0,2.9),scale=(2.8,3.4*w,.5))
+    # Shoulders
+    for sd in (1,-1):
+        add('primitive_uv_sphere_add',f'shoulder{sd}',dark,loc=(0.2,sd*5.4*w,2.6),
+            scale=(2.0,1.6,1.5),segments=16,ring_count=8)
+        # Arms forward, holding the weapon.
+        a=add('primitive_cylinder_add',f'arm{sd}',dark,loc=(3.6,sd*3.6*w,2.4),
+              rot=(0,math.radians(78),0),scale=(1.0,1.0,3.4),vertices=10)
+    if build=='exo':
+        for sd in (1,-1):
+            add('primitive_cube_add',f'exo{sd}',steel,loc=(-0.5,sd*6.6,2.4),scale=(2.4,1.2,1.4))
+    # Head, set back from centre so the figure reads as facing forward.
+    add('primitive_uv_sphere_add','head',skin,loc=(-2.4,0,3.9),scale=(4.0,4.0,3.2),
+        segments=20,ring_count=10)
+    if helmet=='visor':
+        add('primitive_cube_add','visor',accent,loc=(0.2,0,3.9),scale=(.9,2.4,1.2))
+    elif helmet=='full':
+        add('primitive_uv_sphere_add','dome',dark,loc=(-2.4,0,4.4),scale=(4.4,4.4,2.8),
+            segments=20,ring_count=10)
+        add('primitive_cube_add','slit',accent,loc=(0.6,0,4.2),scale=(.7,2.8,.5))
+    elif helmet=='hood':
+        add('primitive_cone_add','hood',dark,loc=(-2.6,0,4.6),scale=(4.6,4.6,3.2),vertices=16)
+        add('primitive_uv_sphere_add','lens',accent,loc=(0.4,0,4.0),scale=(.9,1.4,.9),
+            segments=10,ring_count=6)
+    else:  # cap
+        add('primitive_cylinder_add','cap',dark,loc=(-2.4,0,5.4),scale=(3.8,3.8,.9),vertices=16)
+        add('primitive_cube_add','brim',dark,loc=(0.4,0,5.0),scale=(2.2,3.2,.3))
+    if pack:
+        add('primitive_cube_add','pack',dark,loc=(-4.8,0,2.2),scale=(2.0,4.0,2.4))
+    if charge:
+        add('primitive_uv_sphere_add','charge',P['warn'],loc=(-5.6,0,3.4),scale=(2.2,2.2,2.2),
+            segments=14,ring_count=8)
+    if shield:
+        sh=add('primitive_cube_add','shield',accent,loc=(12.5,0,3.2),scale=(4.6,11.5,.6))
+        sh.rotation_euler=(0,math.radians(-28),0)
+        add('primitive_cube_add','shieldrib',steel,loc=(11.6,0,3.9),rot=(0,math.radians(-28),0),scale=(.4,9.5,.3))
+    # Weapon, in front.
+    # Reach is set to the procedural sprite's measured forward extent (see
+    # tools/entity-art.mjs sizing): rifle 15px at 1 unit/px, sniper 28px,
+    # heavy 45px at 11/17 units/px = 29 units. The frame must then be wide
+    # enough to hold it — `fit()` in render() refuses to clip.
+    if weapon=='rifle':
+        add('primitive_cube_add','wep',steel,loc=(8.5,1.2,2.6),scale=(6.5,.8,.8))
+        add('primitive_cube_add','mag',frame,loc=(6.5,1.2,1.6),scale=(.9,.6,1.3))
+    elif weapon=='smg':
+        add('primitive_cube_add','wep',steel,loc=(7.4,1.2,2.6),scale=(4.2,.8,.8))
+        add('primitive_cube_add','mag',frame,loc=(6.6,1.2,1.5),scale=(.7,.6,1.4))
+    elif weapon=='sniper':
+        add('primitive_cube_add','wep',steel,loc=(15.5,1.2,2.6),scale=(12.5,.8,.8))
+        add('primitive_cylinder_add','scope',frame,loc=(7.5,1.2,3.5),
+            rot=(0,math.radians(90),0),scale=(.6,.6,2.2),vertices=10)
+    elif weapon=='heavy':
+        add('primitive_cylinder_add','wep',steel,loc=(15.0,1.4,2.6),
+            rot=(0,math.radians(90),0),scale=(2.4,2.4,14.0),vertices=12)
+        add('primitive_cube_add','box',frame,loc=(5.5,1.4,1.4),scale=(2.2,1.6,1.8))
+    elif weapon=='blade':
+        add('primitive_cube_add','wep',accent,loc=(13.0,1.2,2.6),scale=(9.5,.35,1.2))
+    elif weapon=='launcher':
+        add('primitive_cylinder_add','wep',steel,loc=(11.0,1.4,2.8),
+            rot=(0,math.radians(90),0),scale=(2.2,2.2,7.5),vertices=12)
+
+# The collision radius each render is sized for. The figure is modelled at
+# radius 11 = 1 unit per pixel, so a kind at radius r must be rendered with
+# span = px * 11 / r — that keeps units-per-pixel identical to the game and is
+# the only thing that makes `ref` in entityart.js correct. Hand-set spans were
+# the bug: widening one to fit a longer weapon shrank the whole figure by the
+# same factor, and the sizing ratio never moved.
+REF_RADIUS = {'soldier':11,'shield':13,'sniper':11,'heavy':17,'veil':11,'augment':15,
+              'sapper':12,'mortar':13,'drone':9,'crawler':10,'jammer':13,'warden':16}
+def span_for(kind, px, radius=None):
+    r = radius or REF_RADIUS.get(kind, 11)
+    return px * 11.0 / r
+
+def infantry_builder(kind, spec):
+    def build(P):
+        body = COLOURS.get(spec.get('colour_from', kind), '#a7b8b9')
+        accent = spec.get('accent') or shade_hex(body, .3)
+        figure(P, body, accent, **{k:v for k,v in spec.items() if k not in ('colour_from','accent','span')})
+        return 0, span_for(kind, CURRENT_PX)
+    return build
+
+def shade_hex(hexc, k):
+    r, g, b = shade(hexc, k)
+    to = lambda v: int(round(max(0, min(1, v)) ** (1/2.2) * 255))
+    return '#%02x%02x%02x' % (to(r), to(g), to(b))
+
+INFANTRY = {
+    'soldier': dict(colour_from='rifle',   build='medium', helmet='visor', weapon='rifle'),
+    'shield':  dict(colour_from='shield',  accent='#e0c982', build='heavy', helmet='full', weapon='smg', armor=True, shield=True),
+    'sniper':  dict(colour_from='sniper',  accent='#e6b9d2', build='light', helmet='cap',  weapon='sniper', pack=True),
+    'heavy':   dict(colour_from='breacher',build='exo',    helmet='full',  weapon='heavy', armor=True),
+    'veil':    dict(colour_from='veil',    accent='#d6e2ff', build='light', helmet='hood', weapon='blade'),
+    'augment': dict(colour_from='marauder',accent='#ffb0a0', build='heavy', helmet='full', weapon='blade', armor=True),
+    'sapper':  dict(colour_from='sapper',  accent='#ffd166', build='medium',helmet='cap',  weapon='none', pack=True, charge=True),
+}
+
+# The operative. Same figure, the game's teal body, the operative's own accent
+# and weapon. Eight variants: a whole-sprite tint would shift the body too, and
+# eight one-kilobyte files are cheaper than getting that wrong.
+WEAPON_LOOK = {'needle':'smg','bulwark':'rifle','kite':'none','monofilament':'blade',
+               'specter':'sniper','scatter':'heavy','vector':'smg','shard':'launcher',
+               'tripmine':'smg','microwave':'none','emp':'none','sentry':'smg',
+               'micro':'launcher','rail':'sniper','nanite':'none','lance':'sniper',
+               'orbital':'launcher','revenant':'blade'}
+OPERATIVES = {'vesper':'needle','bastion':'bulwark','mirage':'kite','wraith':'monofilament',
+              'oracle':'specter','ferrous':'shard','cipher':'nanite','requiem':'revenant'}
+
+def player_builder(op):
+    def build(P):
+        accent = COLOURS.get(op, '#76e7d4')
+        figure(P, '#22484c', accent, build='medium', helmet='visor',
+               weapon=WEAPON_LOOK.get(OPERATIVES[op], 'rifle'), armor=True,
+               outline_hex='#c8fff8')
+        return 0, span_for('player', CURRENT_PX, 13)
+    return build
+
+# ---------------------------------------------------------------------------
+# Small machines. Static part only; the moving part stays procedural.
+# ---------------------------------------------------------------------------
+
+def drone(P):
+    # Fuselage only. The rotors spin at runtime.
+    c = COLOURS.get('pursuit', '#82d0d8')
+    hull = material('dhull', hexrgb('#1a3238'), metallic=.6, rough=.5)
+    acc  = material('dacc',  hexrgb(c), metallic=.4, rough=.4, emission=hexrgb(c), strength=1.4)
+    add('primitive_cone_add','nose',hull,loc=(6,0,1.5),rot=(0,math.radians(90),0),
+        scale=(3.6,3.6,3.6),vertices=12)
+    add('primitive_cube_add','body',hull,loc=(-2,0,1.5),scale=(6.5,3.4,1.5))
+    add('primitive_cube_add','tail',hull,loc=(-9,0,1.6),scale=(2.2,1.0,.6))
+    for sd in (1,-1):
+        add('primitive_cube_add',f'boom{sd}',hull,loc=(-4,sd*7,1.4),scale=(1.4,3.6,.5))
+        add('primitive_cylinder_add',f'hub{sd}',hull,loc=(-4,sd*9,1.9),scale=(1.1,1.1,.6),vertices=10)
+    add('primitive_uv_sphere_add','eye',acc,loc=(3,0,2.4),scale=(2.2,2.2,1.4),segments=12,ring_count=6)
+    return 0, span_for('drone', CURRENT_PX)
+
+def crawler(P):
+    # Chassis only. The legs wobble at runtime.
+    c = COLOURS.get('crawler', '#9ad7c5')
+    hull = material('chull', hexrgb('#1e3438'), metallic=.6, rough=.5)
+    acc  = material('cacc',  hexrgb(c), metallic=.4, rough=.4, emission=hexrgb(c), strength=1.2)
+    add('primitive_cube_add','chassis',hull,loc=(0.5,0,1.4),scale=(8.5,6,1.6))
+    add('primitive_cube_add','ridge',acc,loc=(0.5,0,3.1),scale=(5.5,.8,.3))
+    add('primitive_cube_add','mandible',acc,loc=(9.5,0,1.4),scale=(2.2,1.6,.9))
+    add('primitive_uv_sphere_add','opt',acc,loc=(6,0,2.6),scale=(1.4,2.0,1.0),segments=10,ring_count=6)
+    return 0, span_for('crawler', CURRENT_PX)
+
+def jammer(P):
+    # Body only. The dish rotates at runtime.
+    c = COLOURS.get('jammer', '#b29ae9')
+    body = material('jbody', hexrgb(c), metallic=.5, rough=.45)
+    trim = material('jtrim', hexrgb('#dcd2ff'), metallic=.6, rough=.35)
+    add('primitive_cube_add','body',body,loc=(0.5,0,1.8),scale=(6.5,7,2.0))
+    add('primitive_cube_add','panel',trim,loc=(0.5,0,3.9),scale=(5.0,5.5,.3))
+    add('primitive_cylinder_add','mast',trim,loc=(0,0,5.4),scale=(1.4,1.4,1.4),vertices=12)
+    for sd in (1,-1):
+        add('primitive_cube_add',f'fin{sd}',trim,loc=(-5,sd*4.5,2.2),scale=(1.4,1.2,2.6))
+    return 0, span_for('jammer', CURRENT_PX)
+
+def warden(P):
+    # Hex chassis and core. The shield ring counter-rotates at runtime.
+    c = COLOURS.get('warden', '#7fd4c4')
+    hull = material('whull', hexrgb('#123832'), metallic=.6, rough=.5)
+    acc  = material('wacc',  hexrgb(c), metallic=.4, rough=.4, emission=hexrgb(c), strength=1.8)
+    add('primitive_cylinder_add','hex',hull,loc=(0,0,2.0),scale=(11,11,2.2),vertices=6)
+    add('primitive_cylinder_add','rim',acc,loc=(0,0,4.3),scale=(10.6,10.6,.25),vertices=6)
+    add('primitive_cylinder_add','rimcut',hull,loc=(0,0,4.45),scale=(9.2,9.2,.3),vertices=6)
+    add('primitive_cylinder_add','core',acc,loc=(0,0,4.9),scale=(4,4,1.2),vertices=18)
+    for i in range(6):
+        a=i/6*math.tau
+        add('primitive_cube_add',f'node{i}',hull,loc=(math.cos(a)*9.5,math.sin(a)*9.5,4.6),
+            scale=(1.4,1.4,.9))
+    return 0, span_for('warden', CURRENT_PX)
+
+def mortar(P):
+    # No moving part; the whole thing is baked.
+    c = COLOURS.get('mortar', '#c9b27f')
+    body = material('mbody', hexrgb(c), metallic=.5, rough=.5)
+    dark = material('mdark', shade(c,-.35), metallic=.5, rough=.6)
+    for i in range(3):
+        a=i/3*math.tau+.5
+        leg=add('primitive_cylinder_add',f'leg{i}',dark,loc=(math.cos(a)*5,math.sin(a)*5,1.0),
+                scale=(.8,.8,5.5),vertices=8)
+        leg.rotation_euler=(math.radians(-math.sin(a)*40),math.radians(math.cos(a)*40),0)
+    add('primitive_cylinder_add','tube',body,loc=(2.5,0,4.0),rot=(0,math.radians(-55),0),
+        scale=(2.4,2.4,9.0),vertices=14)
+    add('primitive_cylinder_add','base',dark,loc=(0,0,1.2),scale=(4,4,1.0),vertices=16)
+    return 0, span_for('mortar', CURRENT_PX)
+
+ASSETS = {'gunship':gunship,'carrier':carrier,
+          'manticore':manticore,'carrion':carrion,'aegis':aegis,'arbiter':arbiter,
+          'drone':drone,'crawler':crawler,'jammer':jammer,'warden':warden,'mortar':mortar}
+for _k,_spec in INFANTRY.items(): ASSETS[_k]=infantry_builder(_k,_spec)
+for _op in OPERATIVES: ASSETS['player-'+_op]=player_builder(_op)
 
 # ---------------------------------------------------------------------------
 # Render and outline
@@ -340,11 +580,58 @@ OUTLINE_RGB = (10, 9, 13)
 # stair-stepped outline that reads as an artefact.
 SUPERSAMPLE = 6
 
-def render(asset, out_path, display_px):
-    P = None
+CURRENT_PX = 64
+
+def fit(span, display_px):
+    # Refuse to clip. The camera is centred on the origin, so the frame holds
+    # half the span in every direction; a weapon that reaches past that is
+    # silently cut off at the edge, and the sizing ratio then never moves no
+    # matter how long the weapon is made — which is exactly how the sniper and
+    # heavy shipped at 0.77 of their footprint. The remedy is a wider frame
+    # (units per pixel are fixed per kind by span_for), never a shorter weapon.
+    from mathutils import Vector
+    bpy.context.view_layer.update()
+    reach = 0.0
+    for o in bpy.context.scene.objects:
+        if o.type != 'MESH':
+            continue
+        for c in o.bound_box:
+            w = o.matrix_world @ Vector(c)
+            reach = max(reach, abs(w.x), abs(w.y))
+    margin = OUTLINE_PX * span / display_px + span / display_px
+    assert reach + margin <= span / 2, (
+        f'model reaches {reach:.1f} units from origin but the frame holds '
+        f'{span/2:.1f}: render at {int(math.ceil(2*(reach+margin)*display_px/span))}px or more')
+
+def auto_px(asset):
+    # The frame a figure needs: twice its forward reach plus the outline, in
+    # pixels, rounded up to a multiple of four. Only meaningful for assets whose
+    # span comes from span_for (units per pixel fixed per kind); the vehicles
+    # and boss hulls fill a frame sized to the sprite footprint by hand.
+    global CURRENT_PX
+    from mathutils import Vector
+    CURRENT_PX = 100
+    reset()
+    _, span = ASSETS[asset](palette())
+    bpy.context.view_layer.update()
+    reach = 0.0
+    for o in bpy.context.scene.objects:
+        if o.type == 'MESH':
+            for c in o.bound_box:
+                w = o.matrix_world @ Vector(c)
+                reach = max(reach, abs(w.x), abs(w.y))
+    need = 2 * (reach * 100 / span + OUTLINE_PX + 1)
+    return int(math.ceil(need / 4) * 4)
+
+def render(asset, out_path, display_px=None):
+    global CURRENT_PX
+    if display_px is None:
+        display_px = auto_px(asset)
+    CURRENT_PX = display_px
     reset()
     P = palette()
     centre, span = ASSETS[asset](P)
+    fit(span, display_px)
     lighting()
     camera(centre, span)
     scene = bpy.context.scene
@@ -408,14 +695,23 @@ if __name__ == '__main__':
         # the difference between "loses badly" and "has room to work".
         # Measured by rendering each sprite on an oversized canvas and taking
         # the alpha bounding box.
-        for name, px in (('gunship',160),('carrier',146),('soldier',30),
-                         ('manticore',158),('carrion',158),('aegis',158),('arbiter',158)):
+        #
+        # Figures and small machines are measured instead (`auto_px`): their
+        # frame is 2 x the model's FORWARD reach, not the sprite width, because
+        # the origin sits at the frame centre and the weapon reaches one way.
+        # A hand-kept list here is how the sniper and heavy shipped clipped.
+        sizes=[('gunship',160),('carrier',146),
+               ('manticore',158),('carrion',158),('aegis',158),('arbiter',158)]
+        sizes+=[(k,None) for k in ('soldier','shield','sniper','heavy','veil','augment',
+                                   'sapper','mortar','drone','crawler','jammer','warden')]
+        sizes+=[('player-'+op,None) for op in OPERATIVES]
+        for name, px in sizes:
             path = os.path.join(out_dir, f'{name}.png')
             render(name, path, px)
-            print('wrote', path, f'{px}px')
+            print('wrote', path, f'{CURRENT_PX}px')
     else:
         asset = args[0] if args else 'gunship'
         out = args[1] if len(args) > 1 else f'{asset}.png'
-        px = int(args[2]) if len(args) > 2 else 64
+        px = int(args[2]) if len(args) > 2 else None
         render(asset, out, px)
-        print('wrote', out, f'{px}px')
+        print('wrote', out, f'{CURRENT_PX}px')

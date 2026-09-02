@@ -7,24 +7,33 @@ import {entityArt,drawEntityArt,tintFor,ENTITY_ART} from './entityart.js';
 // rather than the flat arrow the previous build used.
 
 // Shared helper: a walking figure with swinging legs and a shouldered weapon.
+// `part` selects what is drawn: 'all' (default), 'legs' or 'body'.
+//
+// The split exists for the authored-art layer. Legs are animated from the walk
+// phase and cannot be baked without freezing the walk, so where a baked body
+// exists the runtime draws the legs here and the render on top — the same
+// division the bosses use, and for the same reason.
 function drawHumanoid(ctx,options){
   const{
     bodyColor,accentColor,outline='rgba(230,244,242,.55)',
     scale=1,phase=0,moving=1,weapon='rifle',weaponColor=accentColor,
-    flash=false,armor=0
+    flash=false,armor=0,part='all'
   }=options;
 
   ctx.scale(scale,scale);
 
   // Legs — counter-swinging, amplitude driven by movement speed.
-  const swing=Math.sin(phase)*4.5*moving;
-  ctx.strokeStyle=shade(bodyColor,-.35);
-  ctx.lineWidth=3.6;
-  ctx.lineCap='round';
-  ctx.beginPath();
-  ctx.moveTo(-1,-3.5);ctx.lineTo(-3+swing*.5,-7.5-swing*.35);
-  ctx.moveTo(-1,3.5);ctx.lineTo(-3-swing*.5,7.5+swing*.35);
-  ctx.stroke();
+  if(part!=='body'){
+    const swing=Math.sin(phase)*4.5*moving;
+    ctx.strokeStyle=shade(bodyColor,-.35);
+    ctx.lineWidth=3.6;
+    ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(-1,-3.5);ctx.lineTo(-3+swing*.5,-7.5-swing*.35);
+    ctx.moveTo(-1,3.5);ctx.lineTo(-3-swing*.5,7.5+swing*.35);
+    ctx.stroke();
+  }
+  if(part==='legs')return;
 
   // Torso.
   ctx.fillStyle=flash?'#ffffff':bodyColor;
@@ -256,20 +265,32 @@ export function drawPlayer(ctx,player,operative,time,weaponTint){
     ctx.restore();
   }
 
-  drawHumanoid(ctx,{
-    bodyColor:'#22484c',
-    accentColor:operative.color,
-    outline:'rgba(200,255,248,.7)',
-    scale:1.28,
-    phase:player.walkPhase*7,
-    moving,
-    weapon:WEAPON_LOOK[operative.weapon]||'rifle',
-    // A livery tints the weapon in the operative's hands. Without one the
-    // weapon stays the operative's own accent, as it always has.
-    weaponColor:weaponTint||operative.color,
-    flash:player.hitFlash>0,
-    armor:1
-  });
+  const playerArt=player.hitFlash>0?null:entityArt(operative.id,'player');
+  if(playerArt){
+    // Legs from the walk phase, then the operative's own baked body over them.
+    // The livery weapon tint is lost here — the weapon is part of the render —
+    // which is the one thing this path gives up, and is noted in SYSTEMS.md.
+    ctx.save();
+    drawHumanoid(ctx,{bodyColor:'#22484c',scale:1.28,phase:player.walkPhase*7,
+      moving,part:'legs'});
+    ctx.restore();
+    drawEntityArt(ctx,playerArt,player.radius,{});
+  }else{
+    drawHumanoid(ctx,{
+      bodyColor:'#22484c',
+      accentColor:operative.color,
+      outline:'rgba(200,255,248,.7)',
+      scale:1.28,
+      phase:player.walkPhase*7,
+      moving,
+      weapon:WEAPON_LOOK[operative.weapon]||'rifle',
+      // A livery tints the weapon in the operative's hands. Without one the
+      // weapon stays the operative's own accent, as it always has.
+      weaponColor:weaponTint||operative.color,
+      flash:player.hitFlash>0,
+      armor:1
+    });
+  }
   ctx.restore();
 
   // Directional shield arc.
@@ -312,6 +333,94 @@ const WEAPON_LOOK={
 // Enemies — one routine per render kind.
 // ---------------------------------------------------------------------------
 
+// What the runtime still draws when a baked body exists for a kind.
+//
+// `under` is drawn beneath the render, `over` on top. Everything here moves:
+// legs swing from the walk phase, rotors and dishes and rings turn, charges
+// pulse. None of it can be baked without freezing it, and a walker that glides
+// is the most obvious way to make an expensive asset look cheap. Each fragment
+// is lifted from the procedural renderer it belongs to, so the animation is
+// identical whichever body is drawn under it.
+const legsOf=k=>(ctx,enemy)=>drawHumanoid(ctx,{
+  bodyColor:enemy.color,scale:k,phase:enemy.walkPhase,
+  moving:Math.min(1,Math.hypot(enemy.vx,enemy.vy)/90),part:'legs'
+});
+const ART_PARTS={
+  soldier:{under:legsOf(1)},
+  shield:{under:legsOf(1)},
+  sniper:{under:legsOf(.96)},
+  sapper:{under:legsOf(.95),over(ctx,enemy,scale,time){
+    const armed=enemy.windup>0;
+    ctx.save();ctx.scale(scale,scale);
+    ctx.fillStyle=armed?withAlpha('#ff3b30',.55+Math.sin(time*(armed?26:5))*.45):withAlpha('#ffa14f',.6);
+    ctx.beginPath();ctx.arc(-6,0,4.5,0,TAU);ctx.fill();ctx.restore();
+  }},
+  veil:{under:legsOf(.92),over(ctx,enemy,scale,time){
+    ctx.save();ctx.scale(scale,scale);
+    ctx.strokeStyle=withAlpha('#b58cff',.3);ctx.lineWidth=1;
+    ctx.beginPath();ctx.arc(0,0,13+Math.sin(time*6)*2,0,TAU);ctx.stroke();ctx.restore();
+  }},
+  augment:{under:(ctx,enemy)=>drawHumanoid(ctx,{
+    bodyColor:enemy.enraged?'#ff5b45':enemy.color,scale:1.08,
+    phase:enemy.walkPhase*(enemy.enraged?1.8:1),moving:1,part:'legs'
+  }),over(ctx,enemy,scale,time){
+    if(!enemy.enraged)return;
+    ctx.save();ctx.scale(scale,scale);
+    ctx.strokeStyle=withAlpha('#ff5b30',.45+Math.sin(time*14)*.2);ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(0,0,16,0,TAU);ctx.stroke();ctx.restore();
+  }},
+  heavy:{under(ctx,enemy){
+    ctx.save();ctx.scale(1.18,1.18);
+    ctx.strokeStyle=shade(enemy.color,-.45);ctx.lineWidth=4.5;ctx.lineCap='round';
+    const swing=Math.sin(enemy.walkPhase)*3;
+    ctx.beginPath();
+    ctx.moveTo(-2,-6);ctx.lineTo(-5+swing,-11);
+    ctx.moveTo(-2,6);ctx.lineTo(-5-swing,11);
+    ctx.stroke();ctx.restore();
+  }},
+  drone:{over(ctx,enemy,scale,time){
+    // Brighter and a touch wider than the procedural rotors. Those sat over a
+    // dark outlined fuselage and read at alpha .4; over the baked hubs, which
+    // are opaque and lit, the same arcs all but vanished.
+    ctx.save();ctx.scale(scale,scale);
+    ctx.strokeStyle=withAlpha(enemy.color,.6);ctx.lineWidth=1.3;
+    const spin=time*26+(enemy.walkPhase||0);
+    for(const [rx,ry] of [[-4,-9],[-4,9]]){
+      ctx.beginPath();ctx.arc(rx,ry,6,spin%TAU,spin%TAU+2.4);ctx.stroke();
+    }
+    ctx.restore();
+  }},
+  crawler:{under(ctx,enemy){
+    ctx.save();ctx.scale(1,1);
+    const legPhase=Math.sin(enemy.walkPhase*2)*2.6;
+    ctx.strokeStyle=shade(enemy.color,-.2);ctx.lineWidth=1.6;ctx.lineCap='round';
+    ctx.beginPath();
+    for(const side of [-1,1])for(let i=0;i<3;i++){
+      const ox=(i-1)*5,wobble=(i%2?legPhase:-legPhase)*side;
+      ctx.moveTo(ox,side*5);ctx.lineTo(ox+wobble,side*12);
+    }
+    ctx.stroke();ctx.restore();
+  }},
+  jammer:{over(ctx,enemy,scale,time){
+    ctx.save();ctx.scale(scale,scale);
+    ctx.save();ctx.rotate(time*1.6);
+    ctx.strokeStyle='#c8b6ff';ctx.lineWidth=1.6;
+    ctx.beginPath();ctx.arc(0,0,10,-.9,.9);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(10,0);ctx.stroke();
+    ctx.restore();
+    const pulse=(time*.8+(enemy.walkPhase||0)*.1)%1;
+    ctx.strokeStyle=withAlpha('#b29ae9',(1-pulse)*.4);ctx.lineWidth=1.4;
+    ctx.beginPath();ctx.arc(0,0,10+pulse*22,0,TAU);ctx.stroke();
+    ctx.restore();
+  }},
+  warden:{over(ctx,enemy,scale,time){
+    ctx.save();ctx.scale(scale,scale);ctx.rotate(-time*1.1);
+    ctx.strokeStyle=withAlpha(enemy.color,.5);ctx.lineWidth=2;ctx.setLineDash([6,6]);
+    ctx.beginPath();ctx.arc(0,0,17,0,TAU);ctx.stroke();ctx.restore();
+  }},
+  mortar:{}
+};
+
 export function drawEnemy(ctx,enemy,time,settings){
   // Cloaked infiltrators are barely visible until they commit.
   const cloaked=enemy.cloaked;
@@ -341,14 +450,27 @@ export function drawEnemy(ctx,enemy,time,settings){
   // hole where a hostile should be.
   const art=entityArt(kind);
   if(art){
+    const parts=ART_PARTS[kind]||{};
+    // Legs and anything else that moves beneath the body. Drawn in the same
+    // scale space the procedural renderer used, so the animation is unchanged.
+    if(parts.under){ctx.save();ctx.scale(scale,scale);parts.under(ctx,enemy,scale,time);ctx.restore()}
     // Elites carry their own colour and must keep reading as elites; the
     // policy lives in `tintFor` so it can be asserted on directly.
     const {color,tint}=tintFor(enemy);
-    drawEntityArt(ctx,art,enemy.radius,{color,tint,file:ENTITY_ART[kind]?.file});
+    // A hit flash is a whole-body white; the baked render cannot do it, so
+    // the procedural body draws for that frame instead. It is one frame, and
+    // the procedural silhouette is close enough that it reads as a flash
+    // rather than as a swap.
+    if(enemy.hitFlash>0&&ENEMY_RENDERERS[kind]){
+      ENEMY_RENDERERS[kind](ctx,enemy,scale,time);
+    }else{
+      drawEntityArt(ctx,art,enemy.radius,{color,tint,file:ENTITY_ART[kind]?.file});
+    }
     // The rotor is a moving part and stays procedural over the baked airframe.
     // Its blur has to track the engine's real spin rate, and during a crash
     // that rate is winding down — baking it would freeze it.
     if(kind==='chopper')drawRotor(ctx,enemy,scale,time);
+    if(parts.over)parts.over(ctx,enemy,scale,time);
   }else{
     const renderer=ENEMY_RENDERERS[kind]||ENEMY_RENDERERS.soldier;
     renderer(ctx,enemy,scale,time);
