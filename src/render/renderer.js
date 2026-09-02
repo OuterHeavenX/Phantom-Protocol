@@ -7,6 +7,7 @@ import {EXTRACTION_RADIUS,EXTRACTION_HOLD,FIXED_STEP} from '../game/engine.js';
 import {vaultKind} from '../../data/vaults.js';
 import {REVIVE_RADIUS} from '../game/squadmate.js';
 import {colorblindActive,HOSTILE_OUTLINE} from '../../data/colorblind.js';
+import {lightingFor,exposureAt} from '../../data/lighting.js';
 import {
   drawPlayer,drawSquadmate,drawEnemy,drawBoss,drawPhantom,drawTurret,drawMine,drawPickup,
   drawShadow,withAlpha,shade,roundedRect
@@ -1486,7 +1487,15 @@ export class Renderer{
     ctx.setTransform(1,0,0,1,0,0);
     ctx.globalCompositeOperation='lighter';
     ctx.imageSmoothingEnabled=true;
+    // The theatre's grade. The 2D path has no exposure uniform to scale, so it
+    // scales how much of the light layer is composited instead — which reaches
+    // the same place by the only route this renderer has, and costs one
+    // property write rather than a second fullscreen pass.
+    const grade=lightingFor(engine.config?.map?.id);
+    ctx.globalAlpha=clamp(
+      exposureAt(grade,engine.elapsed||0,this.settings.reducedFlashing),.7,1.3);
     ctx.drawImage(this.lightCanvas,0,0,camera.width,camera.height);
+    ctx.globalAlpha=1;
     ctx.globalCompositeOperation='source-over';
     ctx.restore();
   }

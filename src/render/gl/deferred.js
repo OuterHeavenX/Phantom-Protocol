@@ -38,6 +38,7 @@ import {createContext,describe,createProgram,createTarget,resizeTarget,
 import * as S from './shaders.js';
 import {buildDressing,LIGHT,hexToRgb} from './dressing.js';
 import {presetForSettings} from './presets.js';
+import {lightingFor,exposureAt} from '../../../data/lighting.js';
 import {probeWebGL2} from './support.js';
 import {Renderer} from '../renderer.js';
 import {profiler} from '../../core/profiler.js';
@@ -677,6 +678,12 @@ export class DeferredRenderer{
     this.timings.gbuffer=performance.now()-mark;
 
     // 2. Ambient + emissive into the lit buffer.
+    // The theatre's grade, resolved once for the whole frame and multiplied
+    // onto the preset rather than replacing it — so the low-end and
+    // performance presets keep their meaning, and no profile can push the
+    // frame outside the range the preset already allowed.
+    const grade=lightingFor(this.engine.config?.map?.id);
+
     mark=performance.now();
     bindTarget(gl,this.targets.lit);
     gl.clearColor(0,0,0,1);
@@ -689,8 +696,9 @@ export class DeferredRenderer{
     // this is most of the light in the frame; indoors it is the floor under
     // the fixtures.
     const sky=this.scene.ambient;
-    const k=(q.ambient??.17)/.17;
-    gl.uniform3f(ap.uniforms.uAmbient,sky[0]*k,sky[1]*k,sky[2]*k);
+    const k=(q.ambient??.17)/.17*grade.ambient;
+    gl.uniform3f(ap.uniforms.uAmbient,
+      sky[0]*k*grade.tint[0],sky[1]*k*grade.tint[1],sky[2]*k*grade.tint[2]);
     gl.bindVertexArray(this.quad.vao);
     gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
 
@@ -784,9 +792,10 @@ export class DeferredRenderer{
     gl.uniform1f(cp.uniforms.uBloomAmount,q.bloom===false?0:(q.bloomAmount??.85));
     gl.uniform1f(cp.uniforms.uTime,this.time);
     gl.uniform1f(cp.uniforms.uGrain,this.settings.reducedFlashing?0:(q.grain??.04));
-    gl.uniform1f(cp.uniforms.uVignette,q.vignette??.85);
+    gl.uniform1f(cp.uniforms.uVignette,(q.vignette??.85)*grade.vignette);
     gl.uniform1f(cp.uniforms.uScanline,q.scanline??.35);
-    gl.uniform1f(cp.uniforms.uExposure,q.exposure??1.25);
+    gl.uniform1f(cp.uniforms.uExposure,(q.exposure??1.25)*
+      exposureAt(grade,this.time,this.settings.reducedFlashing));
     gl.uniform2f(cp.uniforms.uEntityTexel,1/this.spriteCanvas.width,1/this.spriteCanvas.height);
     gl.uniform1f(cp.uniforms.uRim,q.silhouetteRim??.75);
     useTexture(gl,3,this.targets.surface.texture,cp.uniforms.uSurface);
