@@ -334,7 +334,7 @@ read it, judged at 1×):**
 
 Sizing after the frame fix: soldier 1.04, shield 0.95, sniper 1.03, heavy
 1.02, veil 1.13, augment 1.04, sapper 1.00, mortar 1.08, drone 0.86, crawler
-1.11, jammer 1.00, warden 1.00, operative 0.85. Total weight for all 31 assets
+1.11, jammer 1.00, warden 1.00, operative 0.85. Total weight for all 26 assets
 is 168 KB.
 
 Covered by `tools/entity-art.mjs`.
@@ -342,7 +342,7 @@ Covered by `tools/entity-art.mjs`.
 ## Blender asset pipeline — COMPLETE (production source)
 
 `tools/blender/render.py` is the source of every PNG in
-`assets/sprites/entities/`: thirty-one assets from primitives, rendered
+`assets/sprites/entities/`: twenty-six assets from primitives, rendered
 orthographically with Blender as a Python module. The renderer enforces three
 things structurally rather than by convention: the camera is centred on the
 entity origin (asserted), units per pixel are derived per kind so `ref` in

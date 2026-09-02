@@ -1,10 +1,10 @@
 # Blender asset pipeline — production source for the entity art
 
     pip install bpy==4.5.13
-    python3 tools/blender/render.py all assets/sprites/entities/   # all 31, at frame size
+    python3 tools/blender/render.py all assets/sprites/entities/   # all 26, at frame size
     python3 tools/blender/render.py heavy heavy.png 96
 
-Thirty-one assets build from primitives in `render.py`: the gunship and
+Twenty-six assets build from primitives in `render.py`: the gunship and
 carrier, four boss hulls, twelve enemy body kinds from one parametric figure
 plus four small-machine builders, and the operative in eight variants. Blender
 runs as a Python module — no GUI, no `.blend` to keep in sync, the model is the
