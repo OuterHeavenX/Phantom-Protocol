@@ -337,6 +337,14 @@ clip       10 theatres, tunnelled 0, sunk-in-geometry 0
 weapon-audio  0 unresolved, 0 identical rounds
 ```
 
+> **This document is a historical record and is two passes out of date.**
+> For the systems as they actually stand, see `docs/SYSTEMS.md`. The two
+> sections below were accurate when written and are now wrong: phases C, D and
+> E are complete, G is complete, and the colour-vision setting listed under I as
+> "already present" was present in the save and read by nothing at all until it
+> was wired up. Kept unedited below so the record of what was claimed at the
+> time survives.
+
 ### Phases C, D, E, G — not started
 
 Enemy audio identity, environment-aware reverb, theatre ambience profiles and
