@@ -52,14 +52,44 @@ apparent line.
 - **Gunship — Blender wins on the airframe.** Real volume, a canopy that reads
   as glass, visible exhausts. Note the procedural version keeps the animated
   rotor disc, which is drawn at runtime and must stay procedural either way.
-- **Manticore — the procedural sprite wins, and not narrowly.** This is the
-  useful failure. The Blender mech is a competent grey chassis; the shipping
-  sprite is an aggressive red-and-orange radial silhouette that reads as a
-  threat instantly. Bosses carry **semantic colour** — a boss's job is to look
-  dangerous — and a neutral metal palette throws that away. Geometry was never
-  the problem here.
+- **Manticore — the procedural sprite still wins after a colour pass.** The
+  most useful result here, and worth reading in full below.
 - **Soldier — a wash.** At 29px there are not enough pixels for either approach
   to matter.
+
+## The Manticore colour pass — done, measured, still second
+
+The grey chassis was rebuilt around the boss's own `color` and `accent` from
+`data/bosses.js` rather than an orange invented for the render, so the mech
+cannot drift from its own health bar, telegraphs and minimap mark. Red plating
+over a dark frame, hazard chevrons on the glacis, an emissive reactor, the
+six-barrel array the boss's title says it carries.
+
+Two real bugs were found and fixed doing it:
+
+- sRGB colours were fed straight into Blender's linear Base Color, which
+  desaturates every saturated hue — most of how a deliberate hazard red ends up
+  looking like grey plastic.
+- The frame spanned z −0.14 to 1.06 and the plating 0.70 to 1.02, so the armour
+  was *inside* the frame. From a top-down camera the chassis rendered grey with
+  a red trim, and the recolour looked like it had barely worked when it had
+  simply been buried.
+
+Both fixed, and the result is a clearly better mech than the grey one. It is
+still not a better **boss**, and the reason is not fidelity:
+
+1. **Silhouette.** The shipping sprite is a radial six-armed star. Nothing else
+   in the game is that shape, so it is identifiable at a glance and at any
+   angle. The Blender chassis is a rectangle with four legs — a shape a hundred
+   other games use. Recolouring a generic silhouette does not make it iconic.
+2. **Value range.** The sprite is a near-black body with a hot red outline:
+   enormous contrast. The render sits in a narrow mid band — mid red on mid
+   grey — which is exactly the mistake this file warns about two sections up.
+   Colour was raised; *value separation* was not.
+
+The first of those is a design decision, not a rendering setting, and it belongs
+to whoever owns the art direction. The honest summary is that a colour pass was
+necessary and insufficient: it closed the gap and did not close it enough.
 
 ## Still not production, and why
 

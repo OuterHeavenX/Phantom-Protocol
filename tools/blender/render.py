@@ -50,6 +50,16 @@ def add(prim, name, mat, loc=(0,0,0), rot=(0,0,0), scale=(1,1,1), **kw):
     bpy.ops.object.shade_smooth()
     return o
 
+def hexrgb(h):
+    h = h.lstrip('#')
+    # sRGB to linear, because Blender's Base Color is linear and feeding it an
+    # sRGB triple washes every saturated colour out — which is most of how a
+    # deliberate hazard red ends up looking like grey plastic.
+    def lin(c):
+        c = int(h[c:c+2], 16) / 255
+        return c / 12.92 if c <= .04045 else ((c + .055) / 1.055) ** 2.4
+    return (lin(0), lin(2), lin(4))
+
 def palette():
     # Deliberately higher contrast than looks right at full size.
     #
@@ -150,20 +160,61 @@ def carrier(P):
     return 0, 4.6
 
 def manticore(P):
-    # MANTICORE SIEGE PLATFORM — quadrupedal, and the largest thing the game
-    # draws at roughly 120px, which is where this pipeline has the most pixels
-    # to work with.
-    add('primitive_cube_add','core',P['hull'],loc=(0,0,.5),scale=(1.15,1.0,.62))
-    add('primitive_cube_add','glacis',P['trim'],loc=(.95,0,.55),
-        rot=(0,math.radians(-30),0),scale=(.42,.86,.3))
-    add('primitive_uv_sphere_add','sensor',P['glass'],loc=(1.05,0,.72),
-        scale=(.36,.5,.26),segments=24,ring_count=12)
+    # MANTICORE SIEGE PLATFORM — quadrupedal.
+    #
+    # The grey version of this lost to the hand-drawn sprite and the reason was
+    # not geometry. A boss's job is to read as a threat the instant it enters
+    # the frame, and the shipping sprite does that with hue: an aggressive red
+    # radial silhouette you cannot mistake for anything else in the sector. A
+    # neutral metal chassis throws that away however well modelled it is.
+    #
+    # So the colours here are the boss's own, straight out of data/bosses.js
+    # (`color` and `accent`) rather than an orange invented for the render. The
+    # two cannot then drift apart, and the mech agrees with its own health bar,
+    # its telegraphs and its minimap mark.
+    plate  = material('plate',  hexrgb('#ff665f'), metallic=.55, rough=.42)
+    accent = material('accent', hexrgb('#ffb35c'), metallic=.5,  rough=.38,
+                      emission=hexrgb('#ffb35c'), strength=.55)
+    core   = material('core',   hexrgb('#ff8a3c'), metallic=.2,  rough=.5,
+                      emission=hexrgb('#ff7a22'), strength=6.0)
+    # The structure under the armour. Dark, so the red reads as plating bolted
+    # onto something rather than as a solid red toy.
+    frame  = P['dark']
+    # Hull: a dark frame with red plating over it, and a forward-heavy glacis so
+    # the chassis has an obvious front.
+    # Frame below, plating above, and the numbers have to actually say so.
+    #
+    # First attempt had the frame spanning z -0.14 to 1.06 and the plating
+    # 0.70 to 1.02 — so the armour was *inside* the frame, and from a camera
+    # looking straight down the chassis rendered grey with a red trim. The
+    # recolour looked like it had barely worked; it had simply been buried.
+    add('primitive_cube_add','frame',frame,loc=(0,0,.40),scale=(1.2,1.06,.44))
+    add('primitive_cube_add','deckplate',plate,loc=(0,0,.96),scale=(1.1,.98,.18))
+    # Panel breaks, so the deck is not one flat red slab from above.
+    for s in (1,-1):
+        add('primitive_cube_add',f'seam{s}',frame,loc=(0,s*.52,1.15),
+            scale=(1.0,.035,.03))
+    add('primitive_cube_add','seamx',frame,loc=(.15,0,1.15),scale=(.035,.9,.03))
+    add('primitive_cube_add','glacis',plate,loc=(.98,0,.60),
+        rot=(0,math.radians(-32),0),scale=(.46,.9,.30))
+    # Hazard chevrons across the glacis — the one piece of pure signage on the
+    # chassis, and the thing that reads first at distance.
+    for i,off in enumerate((-.44,0,.44)):
+        add('primitive_cube_add',f'chev{i}',accent,loc=(1.16,off,.74),
+            rot=(0,math.radians(-32),math.radians(30)),scale=(.20,.075,.05))
+    add('primitive_uv_sphere_add','sensor',P['glass'],loc=(1.06,0,.92),
+        scale=(.34,.46,.24),segments=24,ring_count=12)
+    # Shoulder pauldrons. Mass over the front legs, which is what makes a siege
+    # platform look like it is leaning into the sector.
+    for s in (1,-1):
+        add('primitive_cube_add',f'pauldron{s}',plate,loc=(.52,s*.96,1.02),
+            rot=(math.radians(s*-16),0,0),scale=(.40,.30,.20))
     # Four legs, splayed. Front and rear differ so the chassis has a heading.
     for sx,sy,name in ((1,1,'fr'),(1,-1,'fl'),(-1,1,'rr'),(-1,-1,'rl')):
         hipx = sx*.86
-        add('primitive_cylinder_add',f'hip{name}',P['dark'],loc=(hipx,sy*.92,.46),
+        add('primitive_cylinder_add',f'hip{name}',accent,loc=(hipx,sy*.92,.46),
             rot=(math.radians(90),0,0),scale=(.26,.26,.22),vertices=14)
-        thigh = add('primitive_cube_add',f'thigh{name}',P['hull'],
+        thigh = add('primitive_cube_add',f'thigh{name}',plate,
                     loc=(hipx+sx*.42,sy*1.35,.28),scale=(.5,.20,.16))
         thigh.rotation_euler = (sy*math.radians(-22),0,sx*math.radians(14))
         shin = add('primitive_cube_add',f'shin{name}',P['trim'],
@@ -172,15 +223,27 @@ def manticore(P):
         add('primitive_cylinder_add',f'foot{name}',P['dark'],
             loc=(hipx+sx*1.18,sy*1.94,-.30),scale=(.24,.24,.10),vertices=12)
     # Shoulder weapons and the reactor glow that says which end is dangerous.
+    # Six-barrel rotary array, because that is what the boss's own title says it
+    # carries. Mounted high and forward so it is visible from directly above.
     for s in (1,-1):
-        add('primitive_cube_add',f'mount{s}',P['dark'],loc=(-.15,s*.86,.98),
-            scale=(.46,.24,.20))
-        add('primitive_cylinder_add',f'gun{s}',P['trim'],loc=(.75,s*.86,1.0),
-            rot=(0,math.radians(90),0),scale=(.11,.11,.72),vertices=12)
-    add('primitive_cylinder_add','reactor',P['hot'],loc=(-.72,0,.92),
-        scale=(.34,.34,.20),vertices=18)
-    add('primitive_cube_add','vent',P['hot'],loc=(-1.1,0,.62),scale=(.14,.56,.22))
-    return 0, 5.2
+        add('primitive_cube_add',f'mount{s}',frame,loc=(-.10,s*.90,1.20),
+            scale=(.44,.26,.20))
+        for i in range(3):
+            add('primitive_cylinder_add',f'gun{s}{i}',P['trim'],
+                loc=(.78,s*.90+(i-1)*.13,1.20+(i%2)*.06),
+                rot=(0,math.radians(90),0),scale=(.055,.055,.70),vertices=10)
+    # The reactor. Strongly emissive: at this size it is the brightest thing on
+    # the chassis and the part the eye lands on first.
+    add('primitive_cylinder_add','reactor',core,loc=(-.70,0,1.22),
+        scale=(.40,.40,.22),vertices=20)
+    add('primitive_torus_add','reactorring',accent,loc=(-.70,0,1.24),
+        major_radius=.52,minor_radius=.07,major_segments=24,minor_segments=8)
+    # Exhaust venting off the back, in the same hot colour, so the rear reads as
+    # the working end of a machine rather than as its front.
+    for s in (1,-1):
+        add('primitive_cube_add',f'vent{s}',core,loc=(-1.16,s*.34,.62),
+            scale=(.12,.20,.20))
+    return 0, 5.4
 
 def soldier(P):
     # Infantry, at roughly 26px on screen — the hardest case for this pipeline

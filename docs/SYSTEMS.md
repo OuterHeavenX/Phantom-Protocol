@@ -261,10 +261,13 @@ pixels, and downsamples — one pipeline serving a 29px soldier and a 158px sieg
 platform with the same apparent line.
 
 At true size the result is mixed and asset-dependent: the **carrier** and
-**gunship** are clearly better than the shipping sprites; the **manticore** is
-clearly worse, because a boss carries semantic colour and a neutral metal
-palette throws that away — geometry was never the problem there; the **soldier**
-is a wash at 29px.
+**gunship** are clearly better than the shipping sprites; the **soldier** is a
+wash at 29px; and the **manticore** still loses after a full colour pass built
+on the boss's own `color`/`accent`. That last one is the informative result —
+the remaining gap is silhouette (a radial six-armed star against a rectangle
+with legs) and value range (near-black with a hot outline against a narrow mid
+band), not fidelity. The first is a design decision rather than a render
+setting.
 
 Four things still block shipping: the boss needs colour identity, there is no
 sprite-loading path, baked art gives up runtime recolouring from `enemy.color`
