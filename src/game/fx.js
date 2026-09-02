@@ -145,6 +145,23 @@ export class Fx{
       t=>{t.vy=-34;t.crit=false;t.size=12},
       128
     );
+    // Muzzle illumination.
+    //
+    // A fixed ring of six slots, allocated once and written in place — no pool,
+    // no allocation, and a hard cap that cannot be exceeded however fast the
+    // sector is firing. The cap is the point: the renderers have their own
+    // light budget, and gunfire is the one source that can arrive faster than
+    // anything else in the game. Left uncapped, a squad of riflemen would push
+    // the hazards, the boss and the extraction beacon out of the budget
+    // entirely — the lights that actually tell the operative something.
+    //
+    // Six is enough to read as a sector lit by its own gunfire. Newest wins,
+    // because the flash you want to see is the one that just happened.
+    this.muzzleLights=Array.from({length:6},()=>({
+      x:0,y:0,life:0,maxLife:1,radius:0,r:1,g:.86,b:.55
+    }));
+    this.muzzleCursor=0;
+
     this.rings=new Pool(
       ()=>({x:0,y:0,radius:0,targetRadius:0,life:0,maxLife:1,color:'#fff',width:2,filled:false}),
       r=>{r.width=2;r.filled=false},
@@ -222,6 +239,7 @@ export class Fx{
       });
     }
     if(m.ring>0)this.ring(x,y,10*s,m.ring*s,.1,m.ringColor||'#ffe08a',3);
+    this.muzzleLight(x,y,s,m);
     // Smoke lingers where the flash was, on the weapons big enough to make it.
     if(m.smoke>0){
       this.burst(x+Math.cos(angle)*8,y+Math.sin(angle)*8,m.smoke,{
@@ -308,6 +326,53 @@ export class Fx{
         speed:190*intensity,life:.3,size:1.4,color,gravity:20,drag:.82
       });
     }
+  }
+
+  // One flash of illumination, written into the next slot of the ring.
+  //
+  // Deliberately shorter than the muzzle particles it accompanies: real muzzle
+  // flash is over in a couple of milliseconds and what persists is the smoke,
+  // so a light that outlives its own flash reads as a lamp rather than a shot.
+  muzzleLight(x,y,scale,spec){
+    // A suppressed weapon has almost no flash to light anything with, and the
+    // table already says so — the light is scaled by the same ring size the
+    // muzzle effect uses rather than by a second number that could disagree
+    // with it.
+    // `??`, not `||`. The suppressed family declares `ring:0` to say it has no
+    // visible flash at all, and `||` reads that explicit zero as "unset" and
+    // substitutes the default — so the one weapon in the game whose whole point
+    // is not lighting up the room lit up the room.
+    const reach=(spec.ring??14)*scale;
+    if(reach<8)return;
+    const slot=this.muzzleLights[this.muzzleCursor];
+    this.muzzleCursor=(this.muzzleCursor+1)%this.muzzleLights.length;
+    slot.x=x;slot.y=y;
+    slot.radius=reach*3.4;
+    slot.life=slot.maxLife=.055;
+    // Warm, from the hottest colour the flash itself is drawn in, so the light
+    // and the thing casting it agree.
+    const hex=(spec.color&&spec.color[0])||'#fff3c4';
+    slot.r=parseInt(hex.slice(1,3),16)/255;
+    slot.g=parseInt(hex.slice(3,5),16)/255;
+    slot.b=parseInt(hex.slice(5,7),16)/255;
+  }
+
+  // Live flashes, brightest first, for whichever renderer is asking.
+  //
+  // Intensity is squared on the way out so the flash falls off fast rather than
+  // fading — which is what makes it read as a flash. `reducedFlashing` damps it
+  // rather than removing it: a strobing light is exactly what that setting is
+  // for, but the illumination still carries information about where fire is
+  // coming from.
+  activeMuzzleLights(out=[]){
+    out.length=0;
+    const damp=this.settings.reducedFlashing?.28:1;
+    for(const l of this.muzzleLights){
+      if(l.life<=0)continue;
+      const t=l.life/l.maxLife;
+      out.push({x:l.x,y:l.y,radius:l.radius,intensity:t*t*damp,r:l.r,g:l.g,b:l.b});
+    }
+    return out;
   }
 
   // The trail behind a machine that is on fire and going down. Called every
@@ -416,6 +481,7 @@ export class Fx{
   }
 
   update(dt){
+    for(const l of this.muzzleLights)if(l.life>0)l.life-=dt;
     this.particles.update(dt,(p,step)=>{
       p.life-=step;
       if(p.life<=0)return false;
@@ -462,6 +528,9 @@ export class Fx{
     this.streaks.clear();
     this.chains.length=0;
     this.screenFlash=0;
+    // Written in place rather than pooled, so they need clearing explicitly —
+    // a flash left live here would light the first frame of the next contract.
+    for(const l of this.muzzleLights)l.life=0;
   }
 
   get stats(){

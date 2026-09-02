@@ -59,6 +59,8 @@ export class Renderer{
     this.lightCtx=this.lightCanvas.getContext('2d');
 
     this.sortBuffer=[];
+    // Reused across frames so reading the muzzle flashes allocates nothing.
+    this.muzzleScratch=[];
     this.frameTimes=[];
     this.lastFrame=performance.now();
     this.fps=60;
@@ -1467,6 +1469,15 @@ export class Renderer{
     for(const hazard of engine.world.hazards){
       if(hazard.active)addLight(hazard.x,hazard.y,hazard.radius*1.6,hazard.color,.8);
       else if(hazard.passive&&hazard.damage)addLight(hazard.x,hazard.y,hazard.radius,hazard.color,.3);
+    }
+
+    // Gunfire. Brief and warm, and the only light in the frame that can arrive
+    // several times a second — which is why it is capped in `Fx` rather than
+    // here, where a cap would have to be repeated in both renderers.
+    for(const f of engine.fx.activeMuzzleLights(this.muzzleScratch)){
+      addLight(f.x,f.y,f.radius,
+        `rgb(${Math.round(f.r*255)},${Math.round(f.g*255)},${Math.round(f.b*255)})`,
+        f.intensity);
     }
 
     // Elites and bosses are self-lit so they stand out in a crowd.

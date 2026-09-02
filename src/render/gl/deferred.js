@@ -398,6 +398,9 @@ export class DeferredRenderer{
   // The dynamic half deliberately mirrors what the 2D lighting pass emits, so
   // the same events light the room under either renderer and nothing that used
   // to glow stops glowing.
+  // Reused across frames so reading the flashes allocates nothing.
+  muzzleScratch=[];
+
   collectLights(){
     const engine=this.engine;
     const camera=engine.camera;
@@ -478,6 +481,14 @@ export class DeferredRenderer{
         if(enemy.dead||!enemy.elite)continue;
         push(enemy.x,enemy.y,180,hexToRgb(enemy.color),.9,22);
       }
+      // Gunfire lighting the sector it happens in. Pushed before the
+      // scene-scale sources below and after the hazards above, so if the
+      // budget does run out it is a muzzle flash that is dropped rather than
+      // the boss or the extraction beacon.
+      for(const f of engine.fx.activeMuzzleLights(this.muzzleScratch)){
+        push(f.x,f.y,f.radius,[f.r,f.g,f.b],f.intensity*1.5,14);
+      }
+
       // A burning wreck is a real light source on its way down, and the
       // brightest thing in the sector for the moment it lands.
       for(const wreck of engine.wrecks){
