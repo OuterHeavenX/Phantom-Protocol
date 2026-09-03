@@ -46,29 +46,48 @@ heard late.
 The master limiter sits at -6dB, 3.5:1. It protects against clipping and is
 deliberately kept transparent.
 
-## Player weapon families — COMPLETE
+## Player weapon families — COMPLETE (rendered rounds)
 
-Twelve families, defined by proportion rather than absolute level so the mixer
-can move them together without any losing character: pistol, suppressed, rifle,
-smg, shotgun, marksman, sniper, lmg, heavy, beam, tech, corrupted.
+Twelve families: pistol, suppressed, rifle, smg, shotgun, marksman, sniper,
+lmg, heavy, beam, tech, corrupted.
 
-Each shot is layered: snap, crack, body, pressure, harmonic reinforcement,
-mechanical action, tail. Per-family `punch` scales the snap and the
-reinforcement — force without volume, so a heavy weapon out-hits a submachine
-gun at a similar level in the mix.
+**Each family ships as three rendered rounds** in `assets/audio/sfx/weapons/`
+(352 KB for all thirty-six), built by `tools/sfx/weapons.py` with numpy and
+scipy. The live synthesis that preceded them was five clean layers — filtered
+noise, a sawtooth, a sine — and the owner's word for the result was
+"peashooter". Clean was the problem: a report is a pressure wave clipping the
+air and a receiver ringing, and Web Audio has no cheap saturation stage and
+charges a voice per layer. Rendering offline allows any amount of processing
+for zero runtime cost. The recipes use the same vocabulary the synth did —
+crack, body, sub, mech, tail — plus the two things it could not do: the
+summed stack driven into saturation, and resonators that give a body a pitch
+instead of a band. The sub's harmonics are baked in by that saturation, which
+is the missing-fundamental translation for phone speakers, now free.
 
-**Mobile translation.** A phone speaker reproduces almost nothing below ~500Hz,
-so the pressure layer is simply absent on the device most people play on. The
-answer is not more bass but the missing fundamental: a quiet partial slightly
-sharp of the octave, which the ear reconstructs into a pitch never present in
-the signal. Gated to families with low end worth reconstructing, and off for
-incoming fire.
+**At runtime a shot is one voice** instead of six: `weaponShot` plays the
+family's next round (round-robin across the three files, plus a small rate
+wobble) through the same bus as before. Incoming fire is the same round
+slowed, lowpassed and softened. On open ground with no convolved room the
+short synthetic air is still added under the round; in a room it stays out.
+The synthesis remains as the fallback for the moment before the files decode
+and for any family that never does — a family counts as loaded only when all
+three rounds decoded.
 
-**Punch compression** sits on the weapon bus only, at 2.6:1 with a 7ms attack —
-slow enough to let the leading edge through before gain reduction arrives.
-Deliberately not on the master.
+**Punch compression** is unchanged: weapon bus only, 2.6:1, 7ms attack, never
+the master.
 
-Covered by `tools/weapon-audio.mjs` and `tools/weapon-punch.mjs`.
+**What cannot be verified here.** Nobody on this side has listened to these
+rounds. What is asserted is what can be measured: a hard leading edge on
+every family, weight under 120 Hz on the ballistic ten and none under the
+beam, the suppressed weapon the quietest, the heavy out-punching the SMG,
+three distinct files per family, and the runtime path above. If the rounds
+still read as thin in play, `tools/sfx/weapons.py analyze` prints the
+transient, band balance and length per family, and each recipe is a dozen
+lines.
+
+Covered by `tools/weapon-audio.mjs` and `tools/weapon-punch.mjs`, which
+decodes the shipped files through the game's own loader; nine reintroduced
+defects are each caught.
 
 ## Enemy weapon routing — COMPLETE
 

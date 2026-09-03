@@ -23,6 +23,8 @@ await p.evaluate(()=>document.querySelector('[data-map="blacksite"]')?.click());
 await p.evaluate(()=>document.querySelector('#deployBtn')?.click());
 await p.waitForTimeout(2200);
 
+// The rendered rounds decode in the background after the unlock gesture.
+await p.waitForFunction(()=>window.__pp?.engine?.audio?.sampleStatus&&window.__pp.engine.audio.sampleStatus!=='loading',null,{timeout:15000}).catch(()=>{});
 const out=await p.evaluate(async()=>{
   const {ENEMIES,ELITES,CHOPPER,CARRIER,enemyVoice}=await import('/data/enemies.js');
   const a=window.__pp.engine.audio;
@@ -50,8 +52,28 @@ const out=await p.evaluate(async()=>{
   res.sharedNamePlayer=a.busFor('laser',{})===a.channels.playerWeapon;
   res.playerStaysPlayer=a.busFor('weapon',{})===a.channels.playerWeapon;
 
-  // 3. The incoming shade. Same family, measurably different shot: the crack
-  //    loses level and top end, the action disappears entirely.
+  // 3. The incoming shade. Same family, measurably different shot.
+  //
+  //    Two paths carry it. The rendered round (the normal case) is slowed,
+  //    lowpassed and softened; the synthesis (the fallback before the files
+  //    decode) loses crack level and top end and its action entirely. Both are
+  //    measured: the synthesis with the rounds detached, so this keeps
+  //    proving the fallback and not the round.
+  const sampleShot=incoming=>{
+    let got=null;
+    const rs=a.sample.bind(a);
+    a.sample=(buf,o)=>{got={...o,seconds:buf.duration};return rs(buf,o)};
+    a.lastPlayed.clear();
+    try{a.weaponShot('rifle',1,incoming?{incoming:true}:{})}finally{a.sample=rs}
+    return got;
+  };
+  res.roundsLoaded=a.samples.size;
+  res.roundOut=sampleShot(false);
+  res.roundIn=sampleShot(true);
+  // Three hostile families, three different rounds.
+  res.roundDistinct=new Set(['sniper','tech','shotgun'].map(v=>a.weaponSample(v))).size;
+  const attached=a.samples;
+  a.samples=new Map();
   const capture=()=>{
     const layers=[];
     const realTone=a.tone.bind(a),realNoise=a.noise.bind(a);
@@ -86,6 +108,7 @@ const out=await p.evaluate(async()=>{
   res.sniperCrack=crackFreq('sniper');
   res.techCrack=crackFreq('tech');
   res.shotgunCrack=crackFreq('shotgun');
+  a.samples=attached;
 
   // 5. Integration. Everything above tests `busFor` and `weaponShot` directly,
   //    which proves the machinery works and proves nothing about whether a
@@ -129,6 +152,14 @@ if(!out.hostileBus)fail.push('hostile fire does not go out on the enemy bus');
 if(!out.sharedNameHostile)fail.push('a boss firing `laser` still lands on the player bus');
 if(!out.sharedNamePlayer)fail.push('the operative firing `laser` was moved off the player bus');
 if(!out.playerStaysPlayer)fail.push('the operative weapon left the player bus');
+if(!(out.roundsLoaded>=12))fail.push(`only ${out.roundsLoaded} rendered families loaded`);
+if(!out.roundOut||!out.roundIn)fail.push('a rifle shot did not play its rendered round');
+else{
+  if(!(out.roundIn.gain<out.roundOut.gain*.85))fail.push(`incoming rounds are not attenuated (${out.roundIn.gain} vs ${out.roundOut.gain})`);
+  if(!(out.roundIn.lowpass>0&&!out.roundOut.lowpass))fail.push('incoming rounds keep their top end');
+  if(!(out.roundIn.rate<out.roundOut.rate*.99))fail.push('incoming rounds are not slowed');
+}
+if(out.roundDistinct<3)fail.push(`hostile families share a rendered round (${out.roundDistinct} distinct of 3)`);
 if(out.incomingCrack.gain/out.outgoingCrack.gain>.85)fail.push(`incoming fire is not attenuated (${out.incomingCrack.gain} vs ${out.outgoingCrack.gain})`);
 // A margin, not a strict inequality. Every shot is detuned by up to the
 // family's `spread` (5% on a rifle), so "lower than the last one" is a coin

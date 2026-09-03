@@ -1,14 +1,15 @@
-// Do the operative's weapons hit harder, and did that cost anything?
+// Do the weapons hit? Measured on the rounds the game actually decodes.
 //
-// "Punch" is the easiest thing in a mixer to fake by turning something up, and
-// turning something up is exactly what this pass was told not to do. So the
-// assertions are about shape: that a transient exists above the body, that the
-// low end is reinforced by harmonics rather than by level, that heavy weapons
-// out-punch light ones, and that the whole thing did not quietly eat the voice
-// budget a phone depends on.
+// Every shot used to be five clean live layers — "peashooter" was the owner's
+// word. The families now ship as rendered rounds (tools/sfx/weapons.py) and
+// the synthesis is the fallback. This harness decodes the shipped files
+// through the game's own loader and checks the things that make a report
+// read as force: a hard leading edge, weight under the ballistic families and
+// none under the beam, the suppressed weapon still the quiet one, incoming
+// fire shaded darker and softer, the weapon-bus compressor still gentle, and a
+// shot costing one voice rather than six.
 //
-// Storage key: `red-static-save` is the live one and a seed must carry a
-// version, or `migrate` rebuilds it from defaults.
+// Storage key: `red-static-save` is the live one.
 import {chromium} from '/opt/node22/lib/node_modules/playwright/index.mjs';
 const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome',args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--autoplay-policy=no-user-gesture-required']});
 const p=await b.newPage({viewport:{width:900,height:600}});
@@ -22,127 +23,127 @@ await p.evaluate(()=>{[...document.querySelectorAll('button,a')].find(e=>/DEPLOY
 await p.evaluate(()=>document.querySelector('[data-map="blacksite"]')?.click());await p.waitForTimeout(250);
 await p.evaluate(()=>document.querySelector('#deployBtn')?.click());
 await p.waitForTimeout(2200);
+// The rounds decode in the background after the unlock gesture.
+await p.waitForFunction(()=>window.__pp?.engine?.audio?.sampleStatus&&window.__pp.engine.audio.sampleStatus!=='loading',null,{timeout:15000}).catch(()=>{});
 
 const out=await p.evaluate(async()=>{
   const a=window.__pp.engine.audio;
-  const res={};
-
-  // Voice budget is reset per capture. `canPlay` drops non-essential sounds
-  // past 24 live voices and these fire in one synchronous burst, so without
-  // this the later captures measure an exhausted mixer rather than a weapon.
-  const shot=(voice,opts={})=>{
-    const layers=[];
-    a.voices=0;a.lastPlayed.clear();
-    const rt=a.tone.bind(a),rn=a.noise.bind(a);
-    a.tone=o=>{layers.push({k:'tone',...o});return rt(o)};
-    a.noise=o=>{layers.push({k:'noise',...o});return rn(o)};
-    try{a.weaponShot(voice,1,opts)}finally{a.tone=rt;a.noise=rn}
-    return layers;
-  };
-  // The snap is the only highpass layer in a shot; the reinforcement is the
-  // only triangle. Identified by role, not by index, so reordering the layers
-  // does not silently change what is being measured.
-  const snapOf=ls=>ls.find(l=>l.k==='noise'&&l.filter==='highpass');
-  const reinforceOf=ls=>ls.find(l=>l.k==='tone'&&l.type==='triangle');
-  const pressOf=ls=>ls.find(l=>l.k==='tone'&&l.type==='sine');
-
+  const res={status:a.sampleStatus,loaded:[...a.samples.keys()].sort()};
   const families=['pistol','suppressed','rifle','smg','shotgun','marksman',
     'sniper','lmg','heavy','beam','tech','corrupted'];
+
+  // ---- The files, as decoded --------------------------------------------
+  const analyse=buf=>{
+    const x=buf.getChannelData(0),sr=buf.sampleRate,n=x.length;
+    const first=Math.floor(sr*.006);
+    let t=0;for(let i=0;i<first;i++)t+=x[i]*x[i];
+    let e=0;for(let i=0;i<n;i++)e+=x[i]*x[i];
+    // Sub energy by a crude 120 Hz lowpass (one pole), against the total.
+    let lpv=0,sub=0;const k=1-Math.exp(-2*Math.PI*120/sr);
+    for(let i=0;i<n;i++){lpv+=k*(x[i]-lpv);sub+=lpv*lpv}
+    return {transient:Math.sqrt(t/first),rms:Math.sqrt(e/n),subFraction:sub/(e||1),seconds:buf.duration};
+  };
   res.families={};
   for(const f of families){
-    const ls=shot(f);
-    const snap=snapOf(ls),rein=reinforceOf(ls),press=pressOf(ls);
+    const list=a.samples.get(f);
+    if(!list){res.families[f]=null;continue}
+    const m=list.map(analyse);
     res.families[f]={
-      layers:ls.length,
-      snap:snap?+snap.gain.toFixed(4):0,
-      snapMs:snap?+(snap.duration*1000).toFixed(1):0,
-      reinforce:rein?+rein.gain.toFixed(4):0,
-      press:press?+press.gain.toFixed(4):0
+      rounds:list.length,
+      transient:+(m.reduce((s,v)=>s+v.transient,0)/m.length).toFixed(4),
+      rms:+(m.reduce((s,v)=>s+v.rms,0)/m.length).toFixed(4),
+      subFraction:+(m.reduce((s,v)=>s+v.subFraction,0)/m.length).toFixed(3),
+      seconds:+Math.max(...m.map(v=>v.seconds)).toFixed(2),
+      // The three rounds are different files, not one file three times.
+      distinctRounds:new Set(list.map(bf=>bf.getChannelData(0).slice(200,400).join(','))).size
     };
   }
+  const F=res.families;
+  const have=families.filter(f=>F[f]);
+  res.heavyVsSmg=[F.heavy?.transient??0,F.smg?.transient??0];
+  res.shotgunVsSuppressed=[F.shotgun?.transient??0,F.suppressed?.transient??0];
+  res.suppressedIsQuietest=!!F.suppressed&&F.suppressed.rms===Math.min(...have.map(f=>F[f].rms));
+  res.weightedFamilies=have.filter(f=>F[f].subFraction>=.2);
+  res.beamSub=F.beam?.subFraction??1;
+  res.longestSeconds=Math.max(...have.map(f=>F[f].seconds));
+  res.repeatedRounds=have.filter(f=>F[f].distinctRounds<F[f].rounds);
 
-  // A transient must exist and must be genuinely short — a long "transient" is
-  // just more body.
-  res.withSnap=families.filter(f=>res.families[f].snap>0).length;
-  res.longestSnapMs=Math.max(...families.map(f=>res.families[f].snapMs));
-
-  // Heavier weapons punch harder than light ones, at the same call volume.
-  res.heavyVsSmg=[res.families.heavy.snap,res.families.smg.snap];
-  res.shotgunVsSuppressed=[res.families.shotgun.snap,res.families.suppressed.snap];
-  // A suppressed weapon must stay the quiet one — punch must not erase family
-  // identity, which is the failure mode of a global "make it punchier" pass.
-  res.suppressedIsQuietest=res.families.suppressed.snap===
-    Math.min(...families.map(f=>res.families[f].snap).filter(v=>v>0));
-
-  // Reinforcement is harmonic, not level: it must sit under its own
-  // fundamental, and must be absent where there is no low end to reconstruct.
-  res.reinforcedFamilies=families.filter(f=>res.families[f].reinforce>0);
-  res.beamReinforced=res.families.beam.reinforce>0;
-  res.reinforceUnderPress=families.every(f=>{
-    const e=res.families[f];
-    return e.reinforce===0||e.reinforce<e.press;
-  });
-
-  // Incoming fire must not gain the operative's punch — that would erase the
-  // whole incoming/outgoing distinction built last pass.
+  // ---- The shot, as played ------------------------------------------------
+  const shot=(voice,opts={})=>{
+    const calls={samples:[],layers:[]};
+    a.voices=0;a.lastPlayed.clear();
+    const rs=a.sample.bind(a),rt=a.tone.bind(a),rn=a.noise.bind(a);
+    a.sample=(buf,o)=>{calls.samples.push({...o,seconds:buf.duration});return rs(buf,o)};
+    a.tone=o=>{calls.layers.push({k:'tone',...o});return rt(o)};
+    a.noise=o=>{calls.layers.push({k:'noise',...o});return rn(o)};
+    const before=a.voices;
+    try{a.weaponShot(voice,1,opts)}finally{a.sample=rs;a.tone=rt;a.noise=rn}
+    calls.voices=a.voices-before;
+    return calls;
+  };
+  const {reverbFor}=await import('/data/reverb.js');
+  a.setReverbProfile(null);
+  const dry=shot('rifle');
+  res.dryUsesSample=dry.samples.length===1;
+  res.dryVoices=dry.voices;
+  // The open-ground air is gated on the family's tail, and the rifle's sits
+  // exactly on the gate — measured there, the room test passed with the gate
+  // removed. The sniper's long tail is what the air exists for.
+  const open=shot('sniper');
+  res.openVoices=open.voices;
+  a.setReverbProfile(reverbFor('foundry'));
+  const roomed=shot('sniper');
+  res.roomedVoices=roomed.voices;
+  a.setReverbProfile(null);
   const inc=shot('rifle',{incoming:true});
-  res.incomingSnap=snapOf(inc)?+snapOf(inc).gain.toFixed(4):0;
-  res.incomingReinforced=!!reinforceOf(inc);
-  res.outgoingSnap=res.families.rifle.snap;
+  res.incoming={gain:inc.samples[0]?.gain??null,rate:inc.samples[0]?.rate??null,lowpass:inc.samples[0]?.lowpass??null};
+  res.outgoing={gain:dry.samples[0]?.gain??null,lowpass:dry.samples[0]?.lowpass??null};
+  // Round robin: three shots, three files.
+  const seen=new Set();for(let i=0;i<3;i++)seen.add(shot('rifle').samples[0]?.seconds);
+  res.roundRobinFiles=seen.size;
+  // The synthesis is still there for a family that has not decoded.
+  const kept=a.samples.get('pistol');a.samples.delete('pistol');
+  const fallback=shot('pistol');
+  a.samples.set('pistol',kept);
+  res.fallbackLayers=fallback.layers.length;
+  res.fallbackUsedSample=fallback.samples.length;
 
-  // Compression sits on the weapon bus, not the master.
+  // ---- The bus -------------------------------------------------------------
   res.hasWeaponCompressor=!!a.weaponPunch;
   res.compressorRatio=a.weaponPunch?+a.weaponPunch.ratio.value.toFixed(2):0;
   res.compressorAttackMs=a.weaponPunch?+(a.weaponPunch.attack.value*1000).toFixed(1):0;
   res.masterLimiterRatio=+a.limiter.ratio.value.toFixed(2);
-
-  // The budget. Two layers were added to a five-layer sound; a phone has 24
-  // voices and this must not have quietly halved how many shots fit.
   res.maxVoices=a.maxVoices;
-  res.rifleLayers=res.families.rifle.layers;
-  res.concurrentShots=Math.floor(a.maxVoices/res.rifleLayers);
-
-  // In a theatre with a real room the synthetic tail stands down, so a shot
-  // costs one layer less and is not reverberated twice.
-  const {reverbFor}=await import('/data/reverb.js');
-  const tailLayer=ls=>ls.find(l=>l.k==='noise'&&l.filter==='lowpass');
-  // Dry first, then in the room. Taking the "dry" sample before clearing the
-  // profile measured the same room twice and reported no difference — which
-  // looked exactly like the feature not working.
-  a.setReverbProfile(null);
-  const dryShot=shot('rifle');
-  const dryTail=tailLayer(dryShot);
-  a.setReverbProfile(reverbFor('foundry'));
-  const roomed=shot('rifle');
-  res.roomedLayers=roomed.length;
-  const roomedTail=tailLayer(roomed);
-  a.setReverbProfile(null);
-  res.tailInRoom=roomedTail?+roomedTail.duration.toFixed(3):0;
-  res.tailDry=dryTail?+dryTail.duration.toFixed(3):0;
-  res.roomedConcurrentShots=Math.floor(a.maxVoices/res.roomedLayers);
+  res.concurrentShots=Math.floor(a.maxVoices/Math.max(1,res.dryVoices));
   return res;
 });
 console.log(JSON.stringify(out,null,1));
 console.log('errors:',errs.length?errs.slice(0,4):'none');
 
 const fail=[];
-if(out.withSnap<9)fail.push(`only ${out.withSnap}/12 families have a transient`);
-if(out.longestSnapMs>40)fail.push(`longest transient is ${out.longestSnapMs}ms — that is body, not a transient`);
+if(out.status!=='ready')fail.push(`rendered rounds did not load (status ${out.status})`);
+if(out.loaded.length<12)fail.push(`only ${out.loaded.length}/12 families decoded: ${out.loaded}`);
 if(!(out.heavyVsSmg[0]>out.heavyVsSmg[1]))fail.push(`a heavy weapon does not out-punch an SMG (${out.heavyVsSmg})`);
 if(!(out.shotgunVsSuppressed[0]>out.shotgunVsSuppressed[1]))fail.push(`a shotgun does not out-punch a suppressed weapon (${out.shotgunVsSuppressed})`);
-if(!out.suppressedIsQuietest)fail.push('the suppressed family lost its identity — it is no longer the softest hitting');
-if(out.reinforcedFamilies.length<4)fail.push(`only ${out.reinforcedFamilies.length} families get low-end reinforcement`);
-if(out.beamReinforced)fail.push('a beam weapon was given a pressure wave it does not have');
-if(!out.reinforceUnderPress)fail.push('harmonic reinforcement is louder than the fundamental it reinforces — that is added bass, not translation');
-if(!(out.incomingSnap<out.outgoingSnap))fail.push(`incoming fire punches as hard as the operative's own (${out.incomingSnap} vs ${out.outgoingSnap})`);
-if(out.incomingReinforced)fail.push('incoming fire got the mobile reinforcement layer, blurring incoming against outgoing');
+if(!out.suppressedIsQuietest)fail.push('the suppressed family lost its identity — it is no longer the quiet one');
+if(out.weightedFamilies.length<7)fail.push(`only ${out.weightedFamilies.length} families carry weight under 120 Hz`);
+if(!(out.beamSub<.05))fail.push(`the beam carries a pressure wave it does not have (sub ${out.beamSub})`);
+if(out.longestSeconds>1.6)fail.push(`a round runs ${out.longestSeconds}s — that is a tail the room should be providing`);
+if(out.repeatedRounds.length)fail.push(`families whose rounds are one file repeated: ${out.repeatedRounds}`);
+if(!out.dryUsesSample)fail.push('a shot does not play the rendered round');
+if(!(out.dryVoices<=2))fail.push(`a shot costs ${out.dryVoices} voices — rendering was meant to make it one`);
+if(!(out.openVoices===2))fail.push(`a sniper shot on open ground costs ${out.openVoices} voices — the synthetic air is not there`);
+if(!(out.roomedVoices===1))fail.push(`a sniper shot in a room costs ${out.roomedVoices} voices — the synthetic air did not stand down`);
+if(!(out.incoming.gain<out.outgoing.gain))fail.push(`incoming fire is as loud as the operative's own (${out.incoming.gain} vs ${out.outgoing.gain})`);
+if(!(out.incoming.lowpass>0&&!out.outgoing.lowpass))fail.push('incoming fire is not shaded darker than outgoing');
+if(!(out.incoming.rate<1))fail.push('incoming fire is not slowed');
+if(out.roundRobinFiles<3)fail.push(`a burst repeats the same file (${out.roundRobinFiles} distinct in 3 shots)`);
+if(!(out.fallbackLayers>=4&&out.fallbackUsedSample===0))fail.push(`the synthesis fallback is gone (${out.fallbackLayers} layers, ${out.fallbackUsedSample} samples)`);
 if(!out.hasWeaponCompressor)fail.push('there is no compressor on the weapon bus');
 if(out.compressorRatio>4)fail.push(`weapon-bus compression at ${out.compressorRatio}:1 is not subtle`);
 if(!(out.compressorAttackMs>=3))fail.push(`weapon-bus attack of ${out.compressorAttackMs}ms clamps the transient it is meant to let through`);
-if(out.masterLimiterRatio>4)fail.push(`the master limiter was made aggressive (${out.masterLimiterRatio}:1) — that is processing everything to fix one category`);
-if(out.concurrentShots<3)fail.push(`only ${out.concurrentShots} shots fit in the voice budget — the new layers cost too much`);
-if(!(out.tailInRoom<out.tailDry))fail.push(`the synthetic tail does not stand down in a real room (${out.tailInRoom} vs ${out.tailDry}) — every shot is reverberated twice`);
-if(out.roomedConcurrentShots<out.concurrentShots)fail.push('a shot costs more in a room than out of one');
+if(out.masterLimiterRatio>4)fail.push(`the master limiter was made aggressive (${out.masterLimiterRatio}:1)`);
+if(out.concurrentShots<10)fail.push(`only ${out.concurrentShots} shots fit in the voice budget`);
 if(fail.length){console.log('\nFAILURES');for(const f of fail)console.log('  '+f);process.exitCode=1;}
-else console.log('\nthe weapons hit harder without getting louder');
+else console.log('\nthe weapons hit, and a shot costs one voice');
 await b.close();

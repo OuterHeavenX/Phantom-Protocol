@@ -32,7 +32,8 @@ const out=await p.evaluate(async()=>{
   res.channels=Object.keys(a.channels||{});
   res.weaponChannel=a.channel('weapon')===a.channels.playerWeapon;
   res.alertChannel=a.channel('hurt')===a.channels.alert;
-  // 3. Layer count: how many nodes does one shot create?
+  // 3. Layer count: synthesis layers per shot — zero once the rendered rounds
+  //    have decoded, since a shot is then one buffer (see weapon-punch.mjs).
   let made=0;
   const realTone=a.tone.bind(a),realNoise=a.noise.bind(a);
   a.tone=o=>{made++;return realTone(o)};

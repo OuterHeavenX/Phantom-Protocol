@@ -96,6 +96,22 @@ const WEAPON_PUNCH={
 // where it is very nearly inaudible.
 const MISSING_FUNDAMENTAL={mult:2.02,gain:.42,duration:.72};
 
+// Rendered weapon reports.
+//
+// The live synthesis below is a sketch of a gunshot: five clean layers, no
+// saturation, no resonance, and every layer a voice. The owner's word for it
+// was "peashooter". Each family now ships three rounds rendered offline by
+// tools/sfx/weapons.py — the same crack/body/sub/mech/tail vocabulary, but
+// with the summed stack driven into saturation and the body given a pitch by
+// resonators, which is most of what makes a report sound like one. A shot is
+// then one voice instead of six, and the synthesis stays as the fallback for
+// the moment before the files decode or when they never arrive.
+const WEAPON_SAMPLE_BASE='assets/audio/sfx/weapons/';
+const WEAPON_SAMPLE_ROUNDS=3;
+// Incoming fire from a rendered round: slower, darker, softer. The same
+// shade INCOMING applies to the synth, expressed for a buffer.
+const SAMPLE_INCOMING={rate:.94,lowpass:2400,gain:.6};
+
 const WEAPON_VOICES={
   // Compact, sharp, quick to get out of the way.
   pistol:{crack:[2600,700,.26,.05],body:[340,120,.17,.07],press:[95,60,.12,.08],
@@ -241,6 +257,75 @@ export class AudioEngine{
     this.lastPlayed=new Map();
     this.voices=0;
     this.maxVoices=24;
+    // family -> AudioBuffer[] once decoded; a family absent here plays the
+    // synthesis. `sampleRound` cycles the rounds so a burst never repeats
+    // one file back to back.
+    this.samples=new Map();
+    this.sampleRound=new Map();
+    this.sampleStatus='idle';
+  }
+
+  // Fetch and decode the rendered weapon rounds. Called once the context
+  // exists; nothing waits on it. Failure is per file and quiet — a family
+  // that never decodes keeps the synthesis.
+  loadWeaponSamples(base=WEAPON_SAMPLE_BASE){
+    if(!this.ctx||this.sampleStatus!=='idle')return Promise.resolve();
+    this.sampleStatus='loading';
+    const families=Object.keys(WEAPON_VOICES);
+    const jobs=[];
+    for(const family of families){
+      for(let i=1;i<=WEAPON_SAMPLE_ROUNDS;i++){
+        const url=`${base}${family}-${i}.ogg`;
+        jobs.push(fetch(url).then(r=>{if(!r.ok)throw new Error(r.status);return r.arrayBuffer()})
+          .then(data=>this.ctx.decodeAudioData(data))
+          .then(buffer=>{
+            const list=this.samples.get(family)||[];
+            list[i-1]=buffer;
+            this.samples.set(family,list);
+          })
+          .catch(()=>{}));
+      }
+    }
+    return Promise.all(jobs).then(()=>{
+      // A family counts as loaded only when every round decoded; a partial
+      // set would make the round-robin skip.
+      for(const family of families){
+        const list=this.samples.get(family);
+        if(!list||list.length<WEAPON_SAMPLE_ROUNDS||list.some(b=>!b))this.samples.delete(family);
+      }
+      this.sampleStatus=this.samples.size?'ready':'failed';
+    });
+  }
+
+  // The next rendered round for a family, or null to use the synthesis.
+  weaponSample(family){
+    const list=this.samples.get(family);
+    if(!list)return null;
+    const i=(this.sampleRound.get(family)||0)%list.length;
+    this.sampleRound.set(family,i+1);
+    return list[i];
+  }
+
+  // Play a decoded buffer through the current bus. One voice.
+  sample(buffer,{gain=1,rate=1,delay=0,lowpass=null,bus=null}={}){
+    const ctx=this.ctx,t=ctx.currentTime+delay;
+    const src=ctx.createBufferSource();
+    src.buffer=buffer;
+    src.playbackRate.value=rate;
+    const env=ctx.createGain();
+    env.gain.value=gain;
+    let head=src;
+    if(lowpass){
+      const lp=ctx.createBiquadFilter();
+      lp.type='lowpass';lp.frequency.value=lowpass;lp.Q.value=.7;
+      src.connect(lp);head=lp;
+    }
+    head.connect(env);
+    env.connect(bus||this.currentBus||this.sfxBus);
+    src.start(t);
+    const duration=buffer.duration/rate;
+    this.track(src,duration+delay);
+    return src;
   }
 
   // Browsers require a user gesture; call this from the first click/keypress.
@@ -298,6 +383,8 @@ export class AudioEngine{
     this.weaponPunch.release.value=.11;
     this.channels.playerWeapon.connect(this.weaponPunch);
     this.weaponPunch.connect(this.sfxBus);
+
+    this.loadWeaponSamples();
 
     // A limiter stops dense firefights from clipping. It used to sit at -14dB
     // with an 8:1 ratio, which is not gentle: in a real firefight the bus is
@@ -663,6 +750,28 @@ export class AudioEngine{
     // step with the first.
     const far=options.incoming?INCOMING:null;
     let tail=(v.tail||.15)*(options.tail??1)*(far?far.tail:1);
+
+    const round=this.weaponSample(WEAPON_VOICES[voice]?voice:'rifle');
+    if(round){
+      // The round carries its own crack, body, pressure, action and a short
+      // tail. Round-to-round variation is the file plus a small rate wobble;
+      // the incoming shade is rate, a lowpass and level.
+      this.sample(round,{
+        gain:volume*(far?SAMPLE_INCOMING.gain:1),
+        rate:wobble*(far?SAMPLE_INCOMING.rate:1),
+        lowpass:far?SAMPLE_INCOMING.lowpass:null
+      });
+      // Open ground still gets the long synthetic air when there is no room
+      // to answer — the file's tail is cut for a corridor. In a convolved
+      // theatre the room does this and the layer stays out.
+      const roomed=this.reverbProfile?.wet>0;
+      if(!roomed&&tail>.2){
+        const [,,cg]=v.crack;
+        this.noise({duration:tail,gain:cg*volume*.22*(far?far.crackGain:1),
+          freq:600,endFreq:160,filter:'lowpass',delay:.03});
+      }
+      return;
+    }
 
     const punch=(WEAPON_PUNCH[voice]??1)*(far?.55:1);
 
