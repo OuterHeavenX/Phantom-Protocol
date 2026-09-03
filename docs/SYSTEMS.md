@@ -362,6 +362,56 @@ as the fallback.
 
 Details, measurements and modelling lessons in `tools/blender/README.md`.
 
+## Stage collision — COMPLETE
+
+The owner reported that "some stages' collision is very confusing and many
+doesn't make sense". The collision code was not the cause. Every theatre was
+rendered with `?collisiondebug=1` over its art, and the confusion came from
+eight places where what stopped the operative and what the operative could
+see were different things:
+
+- **Hazards were placed inside geometry.** The placement clearance relaxed to
+  18% of the radius as attempts ran out, so drifts crossed ridge walls, spore
+  blooms sat half under a parapet and slicks sat inside sealed vaults. A zone
+  that slows or burns while mostly buried reads as the geometry misbehaving.
+  Clearance now holds at 55% and the hazard is dropped instead; centres also
+  stay 70% of their combined radii apart, so two zones do not read as one with
+  the wrong radius.
+- **Aircraft wings and tails had no collider.** The airframe is drawn 108
+  units out from the fuselage each side and only the fuselage stopped anyone.
+  Boxes now lie along each swept panel; they block movement, not sight.
+- **Conifers had no collider at all.** The trunk has one now, 30% of the drawn
+  size; the canopy is overhead and is still walked under.
+- **Bridge wrecks had a random collider under fixed art.** A box 84–132 wide
+  under a 108-unit vehicle left invisible wall past one bumper and let the
+  operative into the other, and a yaw of up to 14° turned the art away from
+  the box. The collider is the art's footprint and the yaw is under 7°.
+- **The ridge crest was drawn 25 units past its wall.** The wall now spans the
+  crest.
+- **The Proving Ground ring stopped the operative fifty units early on the
+  diagonals.** Forty-four long axis-aligned slabs became 128 small blocks; the
+  wander is 14 units, measured by ray-marching the ring.
+- **Pillars were drawn round on square colliders.** Eight units of invisible
+  wall at every corner of dozens of pillars per interior sector. The column
+  now stands on a square base plate, which is also what the GL renderer
+  already drew.
+- **The 2D renderer never drew the perimeter.** The sector ended at a dashed
+  line with darkened floor continuing past it — an invisible wall on every
+  edge, while the GL renderer stood a solid one there. It is drawn now, except
+  where it lies out in a theatre's water.
+- **Passive slow zones were drawn at 16% alpha** and could not be seen over a
+  dark floor, so the drag they apply read as the ground catching. They are
+  filled at 26% with a firm edge and an inner ring.
+
+Two things were seen and deliberately left: boulders keep an axis-aligned
+collider under rotated art (the mismatch is a few units at the corners), and
+the landmark theatres still receive the generic crate and container scatter
+from `coverDensity`, which is thematically odd but collides exactly as drawn.
+
+Covered by `tools/stage-collision.mjs`, which asserts each of the nine points
+above across every theatre and three seeds. All ten mutations that reintroduce
+a defect are caught; the restored state passes.
+
 ## Command Centre presentation polish — PLANNED
 
 The ladder works; its presentation has not been reworked.

@@ -31,7 +31,7 @@ import {
 // lighting pass and no culling.
 
 // Cover whose visible form is an authored landmark rather than a generic box.
-const LANDMARK_COLLIDERS=new Set(['fuselage','trunk','boulder','wreck']);
+const LANDMARK_COLLIDERS=new Set(['fuselage','wing','trunk','boulder','wreck','conifer']);
 
 // ?collisiondebug=1 draws every gameplay shape in the sector over the top of
 // whichever renderer is running. Developer tooling: it is off unless asked
@@ -156,10 +156,11 @@ export class Renderer{
 
     this.drawFloor(ctx);
     this.drawDecals(ctx);
-    this.drawLandmarks(ctx);
+    this.drawLandmarks(ctx,'under');
     this.drawHazards(ctx);
     this.drawGroundEffects(ctx);
     this.drawGeometry(ctx);
+    this.drawLandmarks(ctx,'over');
     this.drawEntities(ctx);
     this.drawProjectiles(ctx);
     this.drawBeams(ctx);
@@ -274,12 +275,19 @@ export class Renderer{
   }
 
   // Authored theatre furniture: towers, wrecks, trees, airframes.
-  drawLandmarks(ctx){
+  //
+  // `layer` splits the pass around the geometry: 'under' is everything that
+  // sits on the floor, 'over' is the ridge crest, which is drawn on top of
+  // its wall now that the wall spans the crest (it used to poke out past a
+  // shallower wall). Omitted, both are drawn — the GL path composites this
+  // layer over its lit geometry already.
+  drawLandmarks(ctx,layer=null){
     const world=this.engine.world;
     if(!world.landmarks?.length)return;
     const camera=this.engine.camera;
     const time=this.engine.elapsed;
     for(const item of world.landmarks){
+      if(layer&&(item.kind==='ridge')!==(layer==='over'))continue;
       if(!camera.isVisible(item.x,item.y,item.span||item.r||item.size||260))continue;
       drawLandmark(ctx,item,world.palette,time);
     }
@@ -395,13 +403,22 @@ export class Renderer{
       if(!camera.isVisible(hazard.x,hazard.y,hazard.radius))continue;
 
       if(hazard.passive){
-        ctx.globalAlpha=.16+Math.sin(time*1.6+hazard.phase)*.04;
+        // A drift, sinkhole or slick is felt as drag on the operative, and at
+        // sixteen percent over a dark floor it could not be seen, so the drag
+        // read as the ground catching. Fill, a firm edge, and a second ring
+        // at the inner radius so the zone has visible depth.
+        ctx.globalAlpha=.26+Math.sin(time*1.6+hazard.phase)*.05;
         ctx.fillStyle=hazard.color;
         ctx.beginPath();ctx.arc(hazard.x,hazard.y,hazard.radius,0,TAU);ctx.fill();
-        ctx.globalAlpha=.3;
+        ctx.globalAlpha=.55;
         ctx.strokeStyle=hazard.color;
-        ctx.lineWidth=1.5;
+        ctx.lineWidth=2.5;
         ctx.stroke();
+        ctx.globalAlpha=.22;
+        ctx.lineWidth=1.5;
+        ctx.setLineDash([9,7]);
+        ctx.beginPath();ctx.arc(hazard.x,hazard.y,hazard.radius*.62,0,TAU);ctx.stroke();
+        ctx.setLineDash([]);
         continue;
       }
 
@@ -442,8 +459,16 @@ export class Renderer{
     const palette=this.engine.world.palette;
     ctx.save();
 
+    // The perimeter is drawn like any other wall. It was skipped here, so on
+    // this renderer the sector ended at a dashed line with floor continuing
+    // past it — an invisible wall at every edge, while the GL renderer stood a
+    // solid one there.
+    const water=this.engine.world.water;
     for(const wall of this.engine.world.walls){
-      if(wall.type==='perimeter')continue;
+      // A perimeter run that lies out in a theatre's water is unreachable
+      // (the parapets are the real edge) and would draw as a wall standing
+      // in the sea.
+      if(wall.type==='perimeter'&&water&&(wall.y<water.y1||wall.y>water.y2))continue;
       if(!camera.isVisible(wall.x,wall.y,Math.max(wall.hw,wall.hh)))continue;
       // Faux height: a dark base offset down, then the lit top face. A pack
       // that bakes its own shadows switches this off in its manifest so the
@@ -648,11 +673,19 @@ export class Renderer{
         ctx.restore();
         break;
       case 'pillar':
+        // A square base plate under the round column. The collider is the
+        // square; a bare circle left eight units of invisible wall at each
+        // corner, and there are dozens of pillars in every interior sector.
+        ctx.fillStyle=shade(palette.wall,-.22);
+        ctx.strokeStyle=withAlpha(palette.wallEdge,.7);
+        ctx.lineWidth=1.2;
+        ctx.fillRect(x,y,cover.w,cover.h);
+        ctx.strokeRect(x,y,cover.w,cover.h);
         ctx.fillStyle=palette.wall;
         ctx.strokeStyle=palette.wallEdge;
         ctx.lineWidth=1.6;
         ctx.beginPath();
-        ctx.arc(cover.x,cover.y,cover.hw,0,TAU);
+        ctx.arc(cover.x,cover.y,cover.hw*.82,0,TAU);
         ctx.fill();ctx.stroke();
         break;
       case 'machinery':

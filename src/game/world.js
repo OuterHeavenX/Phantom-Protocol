@@ -21,6 +21,43 @@ const REACH_CELL=32;
 // resolves every corner geometry the generators produce; the loop exits early
 // the moment a pass moves nothing, which is the common case.
 const DEPENETRATION_PASSES=3;
+// A hazard keeps at least this fraction of its radius clear of solid
+// geometry, vaults and water, and hazard centres stay this fraction of their
+// combined radii apart.
+const HAZARD_CLEARANCE=.55;
+// Bridge wreck footprint: drawVehicle's body plus wheels. Yaw in radians.
+const WRECK_W=112,WRECK_H=58,WRECK_YAW=.12;
+// Ridge wall depth and how far its centre shifts toward the valley, matching
+// drawRidge's crest (36 behind the line, 60 in front).
+const RIDGE_DEPTH=96,RIDGE_CREST_SHIFT=12;
+// Conifer trunk collider as a fraction of the drawn size.
+const CONIFER_TRUNK=.3;
+// Aircraft panel colliders: boxes laid along the centreline of each swept
+// wing and the tail, in drawAircraft's unscaled model units. The wing root is
+// at (25,14) and the tip at (-20,106); the tail root at (-90,-9) and its tip
+// at (-125,-71).
+const WING_BOX=34;
+// Proving Ground chamber wall: square blocks around the ring, overlapping.
+const ARENA_SEGMENTS=128,ARENA_BLOCK=36;
+const WING_LINE=[[25,14],[-20,106]];
+const TAIL_LINE=[[-90,-9],[-125,-71]];
+function alongLine([[x0,y0],[x1,y1]],ts){
+  return ts.map(t=>[x0+(x1-x0)*t,y0+(y1-y0)*t]);
+}
+function aircraftPanelBoxes(scale,facing,wingBroken,tailBroken){
+  const boxes=[];
+  // A sheared wing keeps its root panel only.
+  const wingTs=wingBroken?[.17]:[.17,.5,.83];
+  for(const [px,py] of alongLine(WING_LINE,wingTs)){
+    boxes.push([px,py]);
+    boxes.push([px,-py]);
+  }
+  if(!tailBroken)for(const p of alongLine(TAIL_LINE,[.3,.75]))boxes.push(p);
+  // facing is 0 or PI: a rotation by PI is a mirror through the origin.
+  const flip=Math.cos(facing)<0?-1:1;
+  return boxes.map(([px,py])=>[px*scale*flip,py*scale*flip]);
+}
+const HAZARD_SEPARATION=.7;
 
 // Procedural sector generation. The world is a finite, fully-authored bounded
 // arena built from rooms and corridors rather than the previous build's
@@ -532,9 +569,14 @@ export class World{
       const x=rng.range(160,this.width-160);
       const y=midY+rng.range(-deckHalf*.72,deckHalf*.72);
       if(this.overlapsSolid(x,y,90))continue;
-      this.addCover(x,y,{type:'wreck',w:rng.range(84,132),h:rng.range(42,56),
+      // The vehicle is drawn at a fixed 108x44 with wheels to 64 tall, so the
+      // collider is that footprint. A random 84-132 wide box under fixed art
+      // left up to twelve units of invisible wall past one bumper and let the
+      // operative into the other. The yaw is kept small for the same reason:
+      // the collider cannot turn with the art.
+      this.addCover(x,y,{type:'wreck',w:WRECK_W,h:WRECK_H,
         hp:210,blocksSight:true,destructible:true});
-      this.landmarks.push({kind:'vehicle',x,y,burnt:rng.bool(.4),rotation:rng.range(-.25,.25)});
+      this.landmarks.push({kind:'vehicle',x,y,burnt:rng.bool(.4),rotation:rng.range(-WRECK_YAW,WRECK_YAW)});
     }
   }
 
@@ -550,7 +592,11 @@ export class World{
       while(x<this.width-60){
         const w=rng.range(180,420);
         if(rng.bool(.78)){
-          this.addWall(x+w/2,baseY,w,70,{type:'ridge'});
+          // drawRidge puts a snow crest from 36 units behind the ridge line to
+          // 60 units in front of it, on the valley side. The wall spans the
+          // same 96 units, so the operative stops at the crest, not 25 units
+          // into it.
+          this.addWall(x+w/2,baseY-side*RIDGE_CREST_SHIFT,w,RIDGE_DEPTH,{type:'ridge'});
           this.landmarks.push({kind:'ridge',x:x+w/2,y:baseY,w,side});
         }
         x+=w+rng.range(70,190);
@@ -567,13 +613,18 @@ export class World{
       this.addCover(x,y,{type:'boulder',w:r*2,h:r*1.7,hp:0,blocksSight:true,destructible:false});
       this.landmarks.push({kind:'boulder',x,y,r,rotation:rng.angle()});
     }
-    // A thin treeline: bare conifers, no collision beyond their trunks.
+    // A thin treeline: bare conifers. The canopy is overhead and is walked
+    // under; the trunk is not, and used to have no collider at all — the one
+    // upright thing in the valley the operative passed straight through.
     const trees=Math.round(this.width*this.height/90000);
     for(let i=0;i<trees;i++){
       const x=rng.range(90,this.width-90);
       const y=rng.range(ridge+80,this.height-ridge-80);
       if(this.overlapsSolid(x,y,44))continue;
-      this.landmarks.push({kind:'conifer',x,y,size:rng.range(30,58),rotation:rng.range(-.08,.08)});
+      const size=rng.range(30,58);
+      const trunk=Math.round(size*CONIFER_TRUNK);
+      this.addCover(x,y,{type:'conifer',w:trunk,h:trunk,hp:0,blocksSight:false,destructible:false});
+      this.landmarks.push({kind:'conifer',x,y,size,rotation:rng.range(-.08,.08)});
     }
   }
 
@@ -639,8 +690,17 @@ export class World{
         const wrecked=rng.bool(.45);
         this.addCover(x,y,{type:'fuselage',w:250*scale,h:56*scale,
           hp:0,blocksSight:true,destructible:false});
-        this.landmarks.push({kind:'aircraft',x,y,scale,rotation:facing,wrecked,
-          tailBroken:wrecked&&rng.bool(.6),wingBroken:wrecked&&rng.bool(.5)});
+        const tailBroken=wrecked&&rng.bool(.6),wingBroken=wrecked&&rng.bool(.5);
+        this.landmarks.push({kind:'aircraft',x,y,scale,rotation:facing,wrecked,tailBroken,wingBroken});
+        // The wings and tail are drawn 108 units out from the fuselage and
+        // had no collider, so the operative walked through two thirds of
+        // every airframe. They block movement now, in boxes laid along each
+        // swept panel; they still do not block sight, because the airframe's
+        // fuselage is the sightline cover and a wing is knee height.
+        for(const [px,py] of aircraftPanelBoxes(scale,facing,wingBroken,tailBroken)){
+          this.addCover(x+px,y+py,{type:'wing',w:WING_BOX*scale,h:WING_BOX*scale,
+            hp:0,blocksSight:false,destructible:false});
+        }
         this.rooms.push({x,y,w:300*scale,h:200*scale});
       }
     }
@@ -659,13 +719,17 @@ export class World{
   generateArena(){
     const radius=Math.min(this.width,this.height)*.42;
     const cx=this.width/2,cy=this.height/2;
-    const segments=44;
+    // Forty-four axis-aligned slabs each 18% of the radius long made a ring
+    // whose inner face wandered fifty units in and out around the circle: the
+    // operative was stopped a body-length short of the wall on the diagonals
+    // and touched it on the axes. Small square blocks, one every 30 units,
+    // keep that wander under fifteen (measured in tools/stage-collision.mjs).
+    const segments=ARENA_SEGMENTS;
     for(let i=0;i<segments;i++){
       const a=i/segments*Math.PI*2;
       const wx=cx+Math.cos(a)*radius;
       const wy=cy+Math.sin(a)*radius;
-      const horizontal=Math.abs(Math.cos(a))<Math.abs(Math.sin(a));
-      this.addWall(wx,wy,horizontal?radius*.18:44,horizontal?44:radius*.18,{type:'chamber'});
+      this.addWall(wx,wy,ARENA_BLOCK,ARENA_BLOCK,{type:'chamber'});
     }
     this.rooms.push({x:cx,y:cy,w:radius*1.5,h:radius*1.5,open:true});
     this.landmarks.push({kind:'arenaRing',x:cx,y:cy,r:radius});
@@ -718,12 +782,24 @@ export class World{
       // otherwise reject almost every candidate and leave theatres empty.
       for(let i=0;i<count;i++){
         let placed=null;
-        for(let attempt=0;attempt<30&&!placed;attempt++){
-          const clearance=Math.max(30,spec.radius*(attempt<10?.5:attempt<20?.3:.18));
+        for(let attempt=0;attempt<40&&!placed;attempt++){
+          // The clearance used to relax to 18% of the radius as attempts ran
+          // out, which put drifts across ridge walls, spore blooms half under
+          // a parapet and slicks inside sealed vaults: a zone that slows or
+          // burns the operative while most of it is buried in geometry reads
+          // as the geometry misbehaving. It now holds at just over half the
+          // radius and the hazard is dropped instead. Fewer, all of them on
+          // open ground.
+          const clearance=Math.max(30,spec.radius*HAZARD_CLEARANCE);
           const x=rng.range(180,this.width-180);
           const y=rng.range(180,this.height-180);
-          if(!this.overlapsSolid(x,y,clearance)&&!this.insideVault(x,y,20)&&
-             this.playable(x,y,90))placed={x,y};
+          if(this.overlapsSolid(x,y,clearance))continue;
+          if(this.insideVault(x,y,spec.radius*HAZARD_CLEARANCE))continue;
+          if(!this.playable(x,y,spec.radius*HAZARD_CLEARANCE))continue;
+          // Two zones stacked on one spot read as one zone with the wrong
+          // radius. Centres stay apart by most of the two radii.
+          if(this.hazards.some(h=>Math.hypot(h.x-x,h.y-y)<(h.radius+spec.radius)*HAZARD_SEPARATION))continue;
+          placed={x,y};
         }
         if(!placed)continue;
         this.hazards.push({

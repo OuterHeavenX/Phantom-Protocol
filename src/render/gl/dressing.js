@@ -61,7 +61,7 @@ export const LIGHT={
 // GL path leaves these to it rather than putting a box where a wrecked
 // airframe is: a generic quad in place of authored art is a downgrade, and the
 // landmark layer already draws over the lit scene.
-const LANDMARK_COVER=new Set(['fuselage','trunk','boulder','wreck']);
+const LANDMARK_COVER=new Set(['fuselage','wing','trunk','boulder','wreck','conifer']);
 
 // A tiny deterministic generator, so a theatre dresses identically everywhere.
 function rng(seed){
