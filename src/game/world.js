@@ -2,6 +2,7 @@ import {Rng} from '../core/rng.js';
 import {clamp,dist2,segmentIntersectsRect,resolveCircleRect,pointInRect,SpatialHash} from '../core/math.js';
 import {HAZARDS} from '../../data/maps.js';
 import {vaultKind,rollVaultKind} from '../../data/vaults.js';
+import {buildOpeningLevel,intersectsRoute} from './opening-levels.js';
 
 // Procedural sector generation. The world is a finite, fully-authored bounded
 // arena built from rooms and corridors rather than the previous build's
@@ -66,7 +67,7 @@ export class World{
 
     this.buildPerimeter();
 
-    switch(layout.type){
+    if(!buildOpeningLevel(this))switch(layout.type){
       case 'open':this.generateOpenField();break;
       case 'streets':this.generateStreets();break;
       case 'industrial':this.generateIndustrial();break;
@@ -119,6 +120,7 @@ export class World{
       .filter(room=>clearOfSpawn(room.x,room.y))
       .map(room=>({x:room.x,y:room.y,sort:rng.next()}))
       .sort((a,b)=>a.sort-b.sort);
+    if(this.vaultSites)seeds.unshift(...this.vaultSites.map(p=>({...p})));
 
     while(this.vaults.length<target&&attempts<attemptBudget){
       attempts++;
@@ -131,6 +133,7 @@ export class World{
       // shipping a sector with no vaults in it at all.
       const relief=attempts<attemptBudget*.4?40:attempts<attemptBudget*.75?18:2;
       if(!clearOfSpawn(x,y))continue;
+      if(this.architecture&&intersectsRoute(this,x,y,half+t+16,half+t+16))continue;
       if(!this.playable(x,y,half+t+40))continue;
       if(this.overlapsSolid(x,y,half+t+relief))continue;
       // Keep vaults apart so one scan never reveals two.
@@ -579,7 +582,7 @@ export class World{
     const rng=this.rng;
     // A theatre that authors its own cover field (or deliberately has none)
     // must not have generic crates sprinkled over it.
-    if(!this.layout.coverDensity)return;
+    if(!this.layout.coverDensity||this.architecture)return;
     const target=Math.round(this.width*this.height/26000*this.layout.coverDensity);
     let placed=0,attempts=0;
     while(placed<target&&attempts<target*14){
@@ -661,8 +664,8 @@ export class World{
 
   rebuildHash(){
     this.obstacleHash.clear();
-    for(const wall of this.walls)this.obstacleHash.insert(wall);
-    for(const cover of this.cover)if(!cover.broken)this.obstacleHash.insert(cover);
+    for(const wall of this.walls)this.obstacleHash.insertBounds(wall);
+    for(const cover of this.cover)if(!cover.broken)this.obstacleHash.insertBounds(cover);
   }
 
   // Ground the operative and hostiles can actually stand on. Most layouts use
@@ -670,6 +673,10 @@ export class World{
   // bridge's parapets — carve those out so nothing is placed where it would be
   // stranded or unreachable.
   playable(x,y,pad=0){
+    if(this.playBounds){
+      const b=this.playBounds;
+      if(x<b.minX+pad||x>b.maxX-pad||y<b.minY+pad||y>b.maxY-pad)return false;
+    }
     if(this.water){
       if(y<this.water.y1+pad||y>this.water.y2-pad)return false;
     }
@@ -773,6 +780,7 @@ export class World{
   // generation, before vaults and cover are placed, so both can be kept clear
   // of it — a vault built around the spawn would seal the operative in.
   computePlayerSpawn(){
+    if(this.authoredSpawn)return{...this.authoredSpawn};
     if(!this.rooms.length)return{x:this.width/2,y:this.height/2};
     let best=this.rooms[0],bestArea=0;
     for(const room of this.rooms){

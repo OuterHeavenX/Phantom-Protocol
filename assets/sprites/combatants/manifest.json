@@ -1,0 +1,333 @@
+{
+  "version": 1,
+  "generator": "Blender 5.2 / tools/build-blender-roster.py",
+  "frameSize": 128,
+  "directions": 8,
+  "poses": 4,
+  "actors": {
+    "op-vesper": {
+      "file": "op-vesper.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "RAVEN",
+      "kind": "operative"
+    },
+    "op-bastion": {
+      "file": "op-bastion.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "BASTION",
+      "kind": "operative"
+    },
+    "op-mirage": {
+      "file": "op-mirage.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "VIPER",
+      "kind": "operative"
+    },
+    "op-wraith": {
+      "file": "op-wraith.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "WRAITH",
+      "kind": "operative"
+    },
+    "op-oracle": {
+      "file": "op-oracle.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "RAPTOR",
+      "kind": "operative"
+    },
+    "op-ferrous": {
+      "file": "op-ferrous.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "HAVOC",
+      "kind": "operative"
+    },
+    "op-cipher": {
+      "file": "op-cipher.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "SPECTER",
+      "kind": "operative"
+    },
+    "op-requiem": {
+      "file": "op-requiem.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "REAPER",
+      "kind": "operative"
+    },
+    "enemy-scout": {
+      "file": "enemy-scout.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "Patrol Scout",
+      "kind": "soldier"
+    },
+    "enemy-rifle": {
+      "file": "enemy-rifle.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "Rifle Cell",
+      "kind": "soldier"
+    },
+    "enemy-shield": {
+      "file": "enemy-shield.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "Shield Trooper",
+      "kind": "shield"
+    },
+    "enemy-pursuit": {
+      "file": "enemy-pursuit.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "Pursuit Drone",
+      "kind": "drone"
+    },
+    "enemy-hunter": {
+      "file": "enemy-hunter.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "Hunter Drone",
+      "kind": "drone"
+    },
+    "enemy-sniper": {
+      "file": "enemy-sniper.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "Longshot Sniper",
+      "kind": "sniper"
+    },
+    "enemy-breacher": {
+      "file": "enemy-breacher.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "Breacher Heavy",
+      "kind": "heavy"
+    },
+    "enemy-jammer": {
+      "file": "enemy-jammer.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "Signal Jammer",
+      "kind": "jammer"
+    },
+    "enemy-crawler": {
+      "file": "enemy-crawler.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "Crawler Robot",
+      "kind": "crawler"
+    },
+    "enemy-veil": {
+      "file": "enemy-veil.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "Veil Operative",
+      "kind": "veil"
+    },
+    "enemy-marauder": {
+      "file": "enemy-marauder.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "Augment Marauder",
+      "kind": "augment"
+    },
+    "enemy-mortar": {
+      "file": "enemy-mortar.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "Mortar Team",
+      "kind": "mortar"
+    },
+    "enemy-sapper": {
+      "file": "enemy-sapper.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "Sapper Cell",
+      "kind": "sapper"
+    },
+    "enemy-warden": {
+      "file": "enemy-warden.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "Aegis Warden",
+      "kind": "warden"
+    },
+    "enemy-phantomcell": {
+      "file": "enemy-phantomcell.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "Phantom Cell",
+      "kind": "veil"
+    },
+    "enemy-chopper": {
+      "file": "enemy-chopper.webp",
+      "anchor": [
+        0.5,
+        0.5988333333333333
+      ],
+      "name": "Vulture Gunship",
+      "kind": "chopper"
+    },
+    "enemy-carrier": {
+      "file": "enemy-carrier.webp",
+      "anchor": [
+        0.5,
+        0.6200119047619047
+      ],
+      "name": "Drayman Carrier",
+      "kind": "apc"
+    },
+    "elite-nullhunter": {
+      "file": "elite-nullhunter.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "Null Hunter",
+      "kind": "drone"
+    },
+    "elite-ironvicar": {
+      "file": "elite-ironvicar.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "Iron Vicar",
+      "kind": "heavy"
+    },
+    "elite-signalwarden": {
+      "file": "elite-signalwarden.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "Signal Warden",
+      "kind": "jammer"
+    },
+    "elite-glasshound": {
+      "file": "elite-glasshound.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "Glass Hound",
+      "kind": "crawler"
+    },
+    "elite-redauditor": {
+      "file": "elite-redauditor.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "Red Auditor",
+      "kind": "sniper"
+    },
+    "elite-palewitness": {
+      "file": "elite-palewitness.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "Pale Witness",
+      "kind": "veil"
+    },
+    "boss-manticore": {
+      "file": "boss-manticore.webp",
+      "anchor": [
+        0.5,
+        0.6200119047619047
+      ],
+      "name": "MANTICORE SIEGE PLATFORM",
+      "kind": "manticore"
+    },
+    "boss-carrion": {
+      "file": "boss-carrion.webp",
+      "anchor": [
+        0.5,
+        0.6200119047619047
+      ],
+      "name": "CARRION ARRAY",
+      "kind": "carrion"
+    },
+    "boss-aegis": {
+      "file": "boss-aegis.webp",
+      "anchor": [
+        0.5,
+        0.6200119047619047
+      ],
+      "name": "AEGIS BREAKER",
+      "kind": "aegis"
+    },
+    "boss-arbiter": {
+      "file": "boss-arbiter.webp",
+      "anchor": [
+        0.5,
+        0.6362297297297297
+      ],
+      "name": "THE ARBITER",
+      "kind": "arbiter"
+    },
+    "boss-nemesis": {
+      "file": "boss-nemesis.webp",
+      "anchor": [
+        0.5,
+        0.6200119047619047
+      ],
+      "name": "NEMESIS",
+      "kind": "nemesis"
+    }
+  }
+}

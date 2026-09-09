@@ -4,3 +4,7 @@ Thumbs.db
 node_modules/
 package.json
 package-lock.json
+assets/models/renders/
+*.blend1
+tools/visual-qa-output/
+assets/sprites/architecture/*.png

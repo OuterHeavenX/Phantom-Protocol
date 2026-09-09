@@ -1,0 +1,268 @@
+[
+  {
+    "key": "op-vesper",
+    "id": "vesper",
+    "name": "RAVEN",
+    "kind": "operative",
+    "color": "#76e7d4",
+    "weapon": "needle"
+  },
+  {
+    "key": "op-bastion",
+    "id": "bastion",
+    "name": "BASTION",
+    "kind": "operative",
+    "color": "#ffb35c",
+    "weapon": "bulwark"
+  },
+  {
+    "key": "op-mirage",
+    "id": "mirage",
+    "name": "VIPER",
+    "kind": "operative",
+    "color": "#7db2ff",
+    "weapon": "kite"
+  },
+  {
+    "key": "op-wraith",
+    "id": "wraith",
+    "name": "WRAITH",
+    "kind": "operative",
+    "color": "#c79bff",
+    "weapon": "monofilament"
+  },
+  {
+    "key": "op-oracle",
+    "id": "oracle",
+    "name": "RAPTOR",
+    "kind": "operative",
+    "color": "#ff8d82",
+    "weapon": "specter"
+  },
+  {
+    "key": "op-ferrous",
+    "id": "ferrous",
+    "name": "HAVOC",
+    "kind": "operative",
+    "color": "#ff7068",
+    "weapon": "shard"
+  },
+  {
+    "key": "op-cipher",
+    "id": "cipher",
+    "name": "SPECTER",
+    "kind": "operative",
+    "color": "#9bffb8",
+    "weapon": "nanite"
+  },
+  {
+    "key": "op-requiem",
+    "id": "requiem",
+    "name": "REAPER",
+    "kind": "operative",
+    "color": "#e0e6ea",
+    "weapon": "revenant"
+  },
+  {
+    "key": "enemy-scout",
+    "id": "scout",
+    "name": "Patrol Scout",
+    "kind": "soldier",
+    "color": "#8fa79c"
+  },
+  {
+    "key": "enemy-rifle",
+    "id": "rifle",
+    "name": "Rifle Cell",
+    "kind": "soldier",
+    "color": "#a7b8b9"
+  },
+  {
+    "key": "enemy-shield",
+    "id": "shield",
+    "name": "Shield Trooper",
+    "kind": "shield",
+    "color": "#c7a977"
+  },
+  {
+    "key": "enemy-pursuit",
+    "id": "pursuit",
+    "name": "Pursuit Drone",
+    "kind": "drone",
+    "color": "#82d0d8"
+  },
+  {
+    "key": "enemy-hunter",
+    "id": "hunter",
+    "name": "Hunter Drone",
+    "kind": "drone",
+    "color": "#e2b26f"
+  },
+  {
+    "key": "enemy-sniper",
+    "id": "sniper",
+    "name": "Longshot Sniper",
+    "kind": "sniper",
+    "color": "#c58ea8"
+  },
+  {
+    "key": "enemy-breacher",
+    "id": "breacher",
+    "name": "Breacher Heavy",
+    "kind": "heavy",
+    "color": "#cb8d6c"
+  },
+  {
+    "key": "enemy-jammer",
+    "id": "jammer",
+    "name": "Signal Jammer",
+    "kind": "jammer",
+    "color": "#9d8bc8"
+  },
+  {
+    "key": "enemy-crawler",
+    "id": "crawler",
+    "name": "Crawler Robot",
+    "kind": "crawler",
+    "color": "#789ba3"
+  },
+  {
+    "key": "enemy-veil",
+    "id": "veil",
+    "name": "Veil Operative",
+    "kind": "veil",
+    "color": "#8799a6"
+  },
+  {
+    "key": "enemy-marauder",
+    "id": "marauder",
+    "name": "Augment Marauder",
+    "kind": "augment",
+    "color": "#d26e62"
+  },
+  {
+    "key": "enemy-mortar",
+    "id": "mortar",
+    "name": "Mortar Team",
+    "kind": "mortar",
+    "color": "#bfa672"
+  },
+  {
+    "key": "enemy-sapper",
+    "id": "sapper",
+    "name": "Sapper Cell",
+    "kind": "sapper",
+    "color": "#ffa14f"
+  },
+  {
+    "key": "enemy-warden",
+    "id": "warden",
+    "name": "Aegis Warden",
+    "kind": "warden",
+    "color": "#7fd8c4"
+  },
+  {
+    "key": "enemy-phantomcell",
+    "id": "phantomcell",
+    "name": "Phantom Cell",
+    "kind": "veil",
+    "color": "#b58cff"
+  },
+  {
+    "key": "enemy-chopper",
+    "id": "chopper",
+    "name": "Vulture Gunship",
+    "kind": "chopper",
+    "color": "#c8d2d6"
+  },
+  {
+    "key": "enemy-carrier",
+    "id": "carrier",
+    "name": "Drayman Carrier",
+    "kind": "apc",
+    "color": "#8d8468"
+  },
+  {
+    "key": "elite-nullhunter",
+    "id": "nullhunter",
+    "name": "Null Hunter",
+    "kind": "drone",
+    "color": "#ff6d65",
+    "elite": true
+  },
+  {
+    "key": "elite-ironvicar",
+    "id": "ironvicar",
+    "name": "Iron Vicar",
+    "kind": "heavy",
+    "color": "#ff8b68",
+    "elite": true
+  },
+  {
+    "key": "elite-signalwarden",
+    "id": "signalwarden",
+    "name": "Signal Warden",
+    "kind": "jammer",
+    "color": "#c895ff",
+    "elite": true
+  },
+  {
+    "key": "elite-glasshound",
+    "id": "glasshound",
+    "name": "Glass Hound",
+    "kind": "crawler",
+    "color": "#77e6ff",
+    "elite": true
+  },
+  {
+    "key": "elite-redauditor",
+    "id": "redauditor",
+    "name": "Red Auditor",
+    "kind": "sniper",
+    "color": "#ff535b",
+    "elite": true
+  },
+  {
+    "key": "elite-palewitness",
+    "id": "palewitness",
+    "name": "Pale Witness",
+    "kind": "veil",
+    "color": "#e6e0ff",
+    "elite": true
+  },
+  {
+    "key": "boss-manticore",
+    "id": "manticore",
+    "name": "MANTICORE SIEGE PLATFORM",
+    "kind": "manticore",
+    "color": "#ff665f"
+  },
+  {
+    "key": "boss-carrion",
+    "id": "carrion",
+    "name": "CARRION ARRAY",
+    "kind": "carrion",
+    "color": "#c895ff"
+  },
+  {
+    "key": "boss-aegis",
+    "id": "aegis",
+    "name": "AEGIS BREAKER",
+    "kind": "aegis",
+    "color": "#ffb35c"
+  },
+  {
+    "key": "boss-arbiter",
+    "id": "arbiter",
+    "name": "THE ARBITER",
+    "kind": "arbiter",
+    "color": "#e0e6ea"
+  },
+  {
+    "key": "boss-nemesis",
+    "id": "nemesis",
+    "name": "NEMESIS",
+    "kind": "nemesis",
+    "color": "#e0533f"
+  }
+]

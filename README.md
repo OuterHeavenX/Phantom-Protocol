@@ -172,12 +172,19 @@ sustain and surge states, deploys hostiles as coherent squads from one or two be
 schedules minibosses and set-piece events across the contract, and adjusts pressure based
 on how comfortable the player currently is.
 
-**Rendering.** A ten-stage layered pipeline (`src/render/renderer.js`): tiled floor,
+**Rendering.** Original Blender combatant models are baked into animated,
+eight-direction sprites for all operatives, hostiles, elites, vehicles and bosses.
+The editable Blender source, rebuild workflow and visual QA are documented in
+[`docs/visual-overhaul.md`](docs/visual-overhaul.md).
+The first three campaign levels also have rebuilt architecture, raised walls,
+Blender materials, and corrected full-wall collision; see
+[`docs/opening-levels.md`](docs/opening-levels.md).
+A ten-stage layered pipeline (`src/render/renderer.js`): tiled floor,
 persistent decals, hazards, geometry with height offsets, ground effects, y-sorted
 entities with shadows, projectiles, beams, pooled particles, an additive half-resolution
 lighting pass, then post (vignette, flash, minimap, off-screen threat markers). All
-sprites are drawn procedurally as animated vector figures — the repository ships no
-image assets.
+combatant sprites use the Blender atlases, with procedural vector fallbacks when
+an image cannot load. Effects and gameplay telegraphs remain live vector layers.
 
 **Audio.** Sound effects are fully synthesized at runtime from oscillators and shaped
 noise (`src/core/audio.js`) — a complete sound library with no samples.

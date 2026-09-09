@@ -23,7 +23,9 @@
 //   precision and the replay used the rounded copy, the two would diverge
 //   within seconds — so the rounding happens at capture, once, for both.
 
-export const REPLAY_VERSION=2;
+// Opening-level layouts and full-footprint wall collision change seeded runs.
+// Older recordings must use the existing outdated-replay guard, not desync.
+export const REPLAY_VERSION=3;
 
 // Settings that reach the simulation rather than only the presentation, and so
 // have to travel with a replay. `autoAim` decides whether a weapon adjusts onto

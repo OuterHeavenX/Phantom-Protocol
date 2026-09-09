@@ -5,7 +5,7 @@
 export const MAPS=[
   {
     id:'blacksite',name:'BLACKSITE ZERO',condition:'Subterranean research complex',
-    desc:'Tight interior grid. Heavy cover, short sightlines, close-quarters pressure.',
+    desc:'A fortified research complex. Nine linked chambers, illuminated bulkhead entrances and heavy equipment bays frame clear routes through the facility.',
     music:'blacksite',
     // Authored environment art. The pack directory is named rather than derived
     // from the id because the uploaded folder does not match it. Only the floor

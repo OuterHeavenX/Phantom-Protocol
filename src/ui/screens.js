@@ -231,6 +231,10 @@ export class Screens{
             <p>Every command directive on file has been satisfied.</p>
           </div>`}
 
+          <figure class="combat-team">
+            <img src="assets/images/combat-team.webp" alt="Wraith, Raven and Bastion in field armor" width="700" height="620"/>
+            <figcaption><span>STRIKE GROUP / 01</span><b>READY FOR INSERTION</b></figcaption>
+          </figure>
           <div class="completion-row">
             <div class="completion">
               <span>ACHIEVEMENTS</span>

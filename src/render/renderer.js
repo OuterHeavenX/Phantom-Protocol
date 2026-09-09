@@ -1,6 +1,9 @@
 import {clamp,TAU,dist,formatTime} from '../core/math.js';
 import {Weather} from './weather.js';
 import {profiler} from '../core/profiler.js';
+import {loadCombatants} from './combatants.js';
+import {buildSurface,wallMaterial} from './surface.js';
+import {Architecture} from './architecture.js';
 import {drawLandmark} from './landmarks.js';
 import {EnvironmentArt,drawSprite,drawSlicedWall} from './environment.js';
 import {EXTRACTION_RADIUS,EXTRACTION_HOLD} from '../game/engine.js';
@@ -37,6 +40,7 @@ export class Renderer{
     this.ctx=ctx;
     this.engine=engine;
     this.settings=engine.settings;
+    loadCombatants();
     this.quality=this.settings.particles||'high';
 
     // Offscreen buffer for the additive lighting pass.
@@ -64,8 +68,9 @@ export class Renderer{
     // branch. A frame is therefore either fully procedural or fully authored,
     // never half-dressed.
     this.artFloorPattern=null;
-    const pack=engine.map?.art===true?engine.map.id:(engine.map?.art||null);
+    const pack=engine.world.architecture?null:(engine.map?.art===true?engine.map.id:(engine.map?.art||null));
     this.art=new EnvironmentArt(pack);
+    this.architecture=new Architecture(engine.world,this.ctx);
     this.art.load().then(()=>{
       if(this.art.active)this.artFloorPattern=this.art.buildFloorPattern(this.ctx);
     });
@@ -83,40 +88,14 @@ export class Renderer{
   // Called when a session tears down, so an art pack still in flight cannot
   // build a pattern on a context that has already been released.
   destroy(){
+    this.architecture?.dispose();
     this.art?.dispose();
     this.artFloorPattern=null;
   }
 
   // A small tiling texture beats drawing thousands of grid lines each frame.
   buildFloorPattern(){
-    const palette=this.engine.world.palette;
-    const size=128;
-    const tile=document.createElement('canvas');
-    tile.width=tile.height=size;
-    const c=tile.getContext('2d');
-
-    c.fillStyle=palette.floor;
-    c.fillRect(0,0,size,size);
-
-    // Panel seams.
-    c.fillStyle=palette.floorAlt;
-    c.fillRect(0,0,size/2,size/2);
-    c.fillRect(size/2,size/2,size/2,size/2);
-
-    c.strokeStyle=palette.grid;
-    c.lineWidth=1;
-    c.strokeRect(.5,.5,size-1,size-1);
-    c.beginPath();
-    c.moveTo(size/2,0);c.lineTo(size/2,size);
-    c.moveTo(0,size/2);c.lineTo(size,size/2);
-    c.stroke();
-
-    // Surface noise so large floors do not read as flat colour.
-    c.fillStyle='rgba(255,255,255,.014)';
-    for(let i=0;i<70;i++){
-      c.fillRect(Math.random()*size,Math.random()*size,2,2);
-    }
-    this.floorPattern=this.ctx.createPattern(tile,'repeat');
+    this.floorPattern=buildSurface(this.ctx,this.engine.world.palette);
   }
 
   render(interpolation=0){
@@ -139,7 +118,7 @@ export class Renderer{
     this.drawLandmarks(ctx);
     this.drawHazards(ctx);
     this.drawGroundEffects(ctx);
-    this.drawGeometry(ctx);
+    if(!this.architecture.active)this.drawGeometry(ctx);
     this.drawEntities(ctx);
     this.drawProjectiles(ctx);
     this.drawBeams(ctx);
@@ -191,7 +170,9 @@ export class Renderer{
     const y=clamp(camera.y-halfH,-200,world.height+200);
 
     ctx.save();
-    if(this.artFloorPattern){
+    if(this.architecture.active&&this.architecture.floor){
+      ctx.fillStyle=this.architecture.floor;
+    }else if(this.artFloorPattern){
       // An authored tile is authored above world scale and resampled down, so
       // smoothing is set here rather than inherited from whichever block last
       // happened to touch it. The pattern is filled under the camera transform,
@@ -204,6 +185,7 @@ export class Renderer{
       ctx.fillStyle=this.floorPattern||world.palette.floor;
     }
     ctx.fillRect(x,y,halfW*2,halfH*2);
+    if(this.architecture.active)this.architecture.drawFloor(ctx,camera);
 
     // Out-of-bounds shading beyond the arena edge.
     ctx.fillStyle='rgba(0,0,0,.55)';
@@ -253,6 +235,7 @@ export class Renderer{
 
   // Authored theatre furniture: towers, wrecks, trees, airframes.
   drawLandmarks(ctx){
+    if(this.architecture.active)return;
     const world=this.engine.world;
     if(!world.landmarks?.length)return;
     const camera=this.engine.camera;
@@ -264,6 +247,7 @@ export class Renderer{
   }
 
   drawDecor(ctx){
+    if(this.architecture.active)return;
     const camera=this.engine.camera;
     const world=this.engine.world;
     ctx.save();
@@ -436,6 +420,7 @@ export class Renderer{
       ctx.strokeStyle=palette.wallEdge;
       ctx.lineWidth=1.4;
       ctx.strokeRect(wall.x-wall.hw,wall.y-wall.hh,wall.w,wall.h);
+      wallMaterial(ctx,wall,palette);
       // Panel detail on long spans.
       if(wall.w>60||wall.h>60){
         ctx.strokeStyle=withAlpha(palette.wallEdge,.25);
@@ -775,12 +760,17 @@ export class Renderer{
     if(engine.boss)sortable.push(engine.boss);
     for(const mate of engine.squad)sortable.push(mate);
     sortable.push(engine.player);
+    if(this.architecture.active){
+      for(const item of this.architecture.items)if(this.architecture.visible(item,camera))sortable.push(item);
+    }
 
     // Painter's algorithm on Y so nearer things overlap further ones.
-    sortable.sort((a,b)=>a.y-b.y);
+    sortable.sort((a,b)=>(a.architectureItem?a.depth:a.y)-(b.architectureItem?b.depth:b.y));
 
     for(const entity of sortable){
-      if(entity===engine.player){
+      if(entity.architectureItem){
+        this.architecture.drawItem(ctx,entity,engine.player);
+      }else if(entity===engine.player){
         drawPlayer(ctx,engine.player,engine.operative,time,engine.liveryBody?.(engine.primaryId));
       }else if(entity.codename!==undefined&&entity.operative!==undefined){
         drawSquadmate(ctx,entity,time);
@@ -1389,6 +1379,9 @@ export class Renderer{
 
     // Operative light.
     addLight(engine.player.x,engine.player.y,190,engine.operative.color,.6);
+    if(this.architecture.active){
+      for(const light of engine.world.structureLights)addLight(light.x,light.y,light.radius,light.color,.45);
+    }
 
     // Projectiles glow.
     for(const p of engine.projectiles)addLight(p.x,p.y,p.heavy?70:44,p.color||'#ffe08a',.7);

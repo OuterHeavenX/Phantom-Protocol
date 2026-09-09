@@ -1,9 +1,8 @@
 import {TAU} from '../core/math.js';
+import {drawCombatant} from './combatants.js';
 
-// Vector sprite library. Every character is drawn procedurally with animated
-// limbs, a directional weapon and a ground shadow — no image assets, which
-// keeps the project build-free while still reading as an actual soldier
-// rather than the flat arrow the previous build used.
+// Blender combatant sprites with vector effects and a complete procedural
+// fallback while images decode or when an asset cannot be loaded.
 
 // Shared helper: a walking figure with swinging legs and a shouldered weapon.
 function drawHumanoid(ctx,options){
@@ -180,11 +179,16 @@ export function drawSquadmate(ctx,mate,time){
     ctx.save();
     ctx.translate(mate.x,mate.y);
     ctx.globalAlpha=.85;
+    ctx.save();ctx.rotate(1.4);
+    const drawn=drawCombatant(ctx,`op-${mate.operative.id}`,{...mate,x:0,y:0,hitFlash:0},{scale:1.12});
+    ctx.restore();
+    if(!drawn){
     ctx.fillStyle='#1b2226';
     ctx.strokeStyle=mate.color;
     ctx.lineWidth=1.4;
     ctx.beginPath();ctx.ellipse(0,2,mate.radius*1.35,mate.radius*.72,.4,0,TAU);
     ctx.fill();ctx.stroke();
+    }
     // Revive ring: how much of the pickup is done.
     if(mate.reviveProgress>0){
       ctx.globalAlpha=1;
@@ -255,6 +259,11 @@ export function drawPlayer(ctx,player,operative,time,weaponTint){
     ctx.restore();
   }
 
+  // Return to world coordinates for the camera-facing Blender atlas.
+  ctx.restore();
+  ctx.save();
+  if(!drawCombatant(ctx,`op-${operative.id}`,player,{phase:player.walkPhase,moving:moving>.08,scale:1.12})){
+  ctx.translate(player.x,player.y);ctx.rotate(player.angle);
   drawHumanoid(ctx,{
     bodyColor:'#22484c',
     accentColor:operative.color,
@@ -269,6 +278,17 @@ export function drawPlayer(ctx,player,operative,time,weaponTint){
     flash:player.hitFlash>0,
     armor:1
   });
+  }else if(weaponTint){
+    // Livery remains visible on the rendered weapon's receiver. Use the
+    // atlas's snapped heading and orthographic projection for the accent.
+    const angle=Math.round(player.angle/(TAU/8))*(TAU/8);
+    const unit=player.radius*5.6*1.12/3.7;
+    ctx.strokeStyle=weaponTint;ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(player.x+Math.cos(angle)*.60*unit,player.y+(Math.sin(angle)*.60*.806-1.4*.593)*unit);
+    ctx.lineTo(player.x+Math.cos(angle)*.91*unit,player.y+(Math.sin(angle)*.91*.806-1.4*.593)*unit);
+    ctx.stroke();
+  }
   ctx.restore();
 
   // Directional shield arc.
@@ -323,16 +343,43 @@ export function drawEnemy(ctx,enemy,time,settings){
   if(enemy.flying)drawShadow(ctx,enemy.x+16,enemy.y+22,enemy.radius*.7,.34);
   else drawShadow(ctx,enemy.x,enemy.y,enemy.radius,cloaked?.1:.3);
 
+  const kind=enemy.render||'soldier';
+  const key=enemy.eliteDef?`elite-${enemy.eliteDef.id}`:`enemy-${enemy.archetype?.id||enemy.id}`;
+  if(!drawCombatant(ctx,key,enemy,{phase:enemy.flying?time*20:(enemy.walkPhase||0),moving:Math.hypot(enemy.vx||0,enemy.vy||0)>4||enemy.flying})){
   ctx.translate(enemy.x,enemy.y);
   ctx.rotate(enemy.angle);
-
-  const kind=enemy.render||'soldier';
   const renderer=ENEMY_RENDERERS[kind]||ENEMY_RENDERERS.soldier;
   renderer(ctx,enemy,scale,time);
+  }else{
+    drawCombatantSignals(ctx,enemy,time);
+  }
 
   ctx.restore();
 
   if(!cloaked)drawEnemyOverlays(ctx,enemy,time,settings);
+}
+
+// Keep state-dependent visual tells above the baked armor, including the
+// carrier's deployment ramp and the sapper's live fuse.
+function drawCombatantSignals(ctx,enemy,time){
+  ctx.save();ctx.translate(enemy.x,enemy.y);
+  const pulse=(time*.8)%1;
+  if(enemy.render==='jammer'||enemy.render==='warden'||enemy.enraged||enemy.render==='veil'){
+    const color=enemy.enraged?'#ff633e':enemy.color;
+    ctx.strokeStyle=withAlpha(color,(1-pulse)*.55);ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.ellipse(0,0,enemy.radius+5+pulse*18,(enemy.radius+5+pulse*18)*.62,0,0,TAU);ctx.stroke();
+  }
+  if(enemy.render==='sapper'&&enemy.windup>0){
+    ctx.fillStyle=withAlpha('#ff462f',.5+Math.sin(time*26)*.4);
+    ctx.beginPath();ctx.arc(0,-enemy.radius,4,0,TAU);ctx.fill();
+  }
+  if(enemy.render==='apc'&&enemy.rampTimer>0){
+    ctx.rotate(enemy.angle);ctx.fillStyle='#aa955f';
+    const drop=Math.min(1,enemy.rampTimer/.9);
+    ctx.fillRect(-enemy.radius*2.1,-enemy.radius*.45,enemy.radius*.8*drop,enemy.radius*.9);
+    ctx.fillStyle='#e7bd70';ctx.fillRect(-enemy.radius*1.35,-enemy.radius*.4,2,enemy.radius*.8);
+  }
+  ctx.restore();
 }
 
 // Rotary gunship, drawn nose-forward along its facing.
@@ -818,12 +865,13 @@ function drawEnemyOverlays(ctx,enemy,time,settings){
 export function drawBoss(ctx,boss,time){
   drawShadow(ctx,boss.x,boss.y,boss.radius,.45);
   ctx.save();
+  if(!drawCombatant(ctx,`boss-${boss.def.id}`,boss,{phase:time*5,moving:Math.hypot(boss.vx,boss.vy)>4,scale:.82})){
   ctx.translate(boss.x,boss.y);
-
   const flash=boss.hitFlash>0;
   const body=flash?'#ffffff':'#2a1418';
   const renderer=BOSS_RENDERERS[boss.def.render]||BOSS_RENDERERS.manticore;
   renderer(ctx,boss,time,body);
+  }
 
   ctx.restore();
 
@@ -1094,6 +1142,8 @@ export function drawPhantom(ctx,phantom,time){
   ctx.save();
   ctx.globalAlpha=.55+Math.sin(time*6+phantom.age*3)*.12;
   drawShadow(ctx,phantom.x,phantom.y,phantom.radius,.18);
+  const kind=PHANTOM_MODELS[phantom.render]||'op-requiem';
+  if(!drawCombatant(ctx,kind,phantom,{phase:phantom.age*9,moving:true})){
   ctx.translate(phantom.x,phantom.y);
   ctx.rotate(phantom.angle);
   drawHumanoid(ctx,{
@@ -1101,8 +1151,14 @@ export function drawPhantom(ctx,phantom,time){
     outline:'rgba(224,230,234,.6)',
     scale:1,phase:phantom.age*9,moving:1,weapon:'smg',weaponColor:'#e0e6ea'
   });
+  }
   ctx.restore();
 }
+
+const PHANTOM_MODELS={soldier:'enemy-rifle',drone:'enemy-pursuit',crawler:'enemy-crawler',
+  heavy:'enemy-breacher',jammer:'enemy-jammer',warden:'enemy-warden',veil:'enemy-veil',
+  sniper:'enemy-sniper',shield:'enemy-shield',augment:'enemy-marauder',mortar:'enemy-mortar',
+  sapper:'enemy-sapper',chopper:'enemy-chopper',apc:'enemy-carrier'};
 
 export function drawTurret(ctx,turret,time){
   drawShadow(ctx,turret.x,turret.y,10,.28);

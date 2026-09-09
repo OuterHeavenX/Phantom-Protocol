@@ -1,0 +1,39 @@
+/* Field equipment: graphite housings, warm signal marks, quiet typography. */
+:root{
+  --bg:#090e12;--bg-deep:#05090c;--panel:rgba(13,21,26,.96);
+  --panel-solid:#10191f;--line:rgba(163,188,190,.18);
+  --line-strong:rgba(157,208,202,.46);--ink:#e2e9e7;
+  --ink-dim:#a0b3b6;--muted:#81999e;--accent:#94d9cd;
+}
+.menu-screen{background:radial-gradient(ellipse at 72% 35%,rgba(50,80,88,.24),transparent 56%)}
+.menu-shell{position:relative;z-index:1}
+.brand-head h1{font-family:var(--font);font-weight:800;letter-spacing:-.06em;text-shadow:0 8px 35px #000}
+.brand .eyebrow{color:#b6c3bb;letter-spacing:.2em}
+.brand .tagline{max-width:390px;color:#a7b8bb;line-height:1.8}
+.nav-item{background:linear-gradient(90deg,rgba(21,33,39,.92),rgba(13,22,28,.68));border-color:rgba(156,184,186,.2);transition:background .18s,border-color .18s,transform .18s}
+.nav-item:hover,.nav-item:focus-visible{background:linear-gradient(90deg,rgba(54,78,78,.97),rgba(20,36,43,.88));border-color:#91d6ca;transform:translateX(3px)}
+.nav-item:first-child{border-left:3px solid #ddac66}
+.nav-hint{color:#8da4a8}
+.operator-card,.next-directive,.statbox{background:rgba(12,22,28,.88);border-color:rgba(157,183,189,.2)}
+.intel-panel{backdrop-filter:blur(8px)}
+.combat-team{position:relative;flex:1;min-height:220px;margin:0;display:flex;align-items:center;justify-content:center;overflow:hidden;background:radial-gradient(ellipse at 50% 65%,#40677330,transparent 65%)}
+.combat-team::before{content:"";position:absolute;left:15%;right:15%;bottom:24px;height:32px;border:1px solid #8ecdc22b;border-radius:50%;background:#10272b55}
+.combat-team img{position:relative;width:100%;height:260px;object-fit:contain;filter:drop-shadow(8px 18px 12px #0008)}
+.combat-team figcaption{position:absolute;left:0;bottom:6px;display:flex;flex-direction:column;gap:6px;font-size:8px;letter-spacing:.16em;color:#809a9f}
+.combat-team figcaption b{color:#b1cec8;font-size:9px}
+.panel{background:linear-gradient(145deg,rgba(23,35,43,.98),rgba(8,16,22,.98));box-shadow:0 24px 90px #0009;border-color:rgba(175,198,198,.23)}
+.panel-head{border-bottom-color:rgba(179,199,198,.2);background:rgba(3,10,14,.3)}
+.panel-head h2{font-family:var(--font);font-weight:800;letter-spacing:-.04em}
+.btn.primary{background:linear-gradient(135deg,#b3ded1,#79aaa7);border-color:#b3ded1;color:#0b2025;font-weight:800}
+.hud-panel{background:linear-gradient(135deg,rgba(17,29,36,.94),rgba(5,13,19,.86));border:1px solid rgba(177,204,205,.22);box-shadow:inset 0 1px #dfefef0a,0 5px 20px #0005;backdrop-filter:blur(8px)}
+.vitals{border-left:3px solid var(--op,#94d9cd)}
+.mission{border-top:2px solid #c5a36c}
+.bar.hp{height:8px;background:#050b0f;box-shadow:inset 0 1px 3px #000}
+.bar.hp>i{background:linear-gradient(90deg,#c77e62,#edc08e)}
+.op-tag{border:0;padding:0;font-weight:700;letter-spacing:.16em}
+.scanlines::after{opacity:.18}
+@media(max-width:760px){
+  .combat-team{min-height:220px}
+  .nav-item:hover,.nav-item:focus-visible{transform:none}
+}
+@media(prefers-reduced-motion:reduce){.nav-item{transition:none}}

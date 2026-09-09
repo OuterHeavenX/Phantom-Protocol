@@ -17,6 +17,10 @@ import {FocusNav} from './ui/focusnav.js';
 import {audio} from './core/audio.js';
 import {profiler} from './core/profiler.js';
 import {resolveBuild} from './game/gunsmith.js';
+import {loadCombatants} from './render/combatants.js';
+
+// Decode the roster while the command screen is open, before deployment.
+loadCombatants();
 
 // Application entry point. Owns the top-level state machine (menu ⇄ run),
 // the render loop and the wiring between the simulation, the renderer and

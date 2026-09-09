@@ -73,9 +73,9 @@ export function segmentIntersectsRect(x1,y1,x2,y2,rx,ry,hw,hh){
 // Uniform grid used for broad-phase neighbour queries. Rebuilt each frame;
 // far cheaper than the O(n^2) sweeps the previous build ran on every enemy.
 export class SpatialHash{
-  constructor(cellSize=96){this.cellSize=cellSize;this.cells=new Map()}
+  constructor(cellSize=96){this.cellSize=cellSize;this.cells=new Map();this.hasBounds=false;this.querySeen=new Set()}
 
-  clear(){this.cells.clear()}
+  clear(){this.cells.clear();this.hasBounds=false}
 
   key(cx,cy){return cx*73856093^cy*19349663}
 
@@ -88,6 +88,21 @@ export class SpatialHash{
     bucket.push(item);
   }
 
+  // Static structures must occupy every cell touched by their footprint.
+  // Center-only indexing lets an actor walk through the far end of a wall.
+  insertBounds(item){
+    this.hasBounds=true;
+    const c=this.cellSize,hw=item.hw||0,hh=item.hh||0;
+    for(let x=Math.floor((item.x-hw)/c);x<=Math.floor((item.x+hw)/c);x++){
+      for(let y=Math.floor((item.y-hh)/c);y<=Math.floor((item.y+hh)/c);y++){
+        const key=this.key(x,y);
+        let bucket=this.cells.get(key);
+        if(!bucket){bucket=[];this.cells.set(key,bucket)}
+        bucket.push(item);
+      }
+    }
+  }
+
   rebuild(items){
     this.clear();
     for(const item of items)this.insert(item);
@@ -97,12 +112,19 @@ export class SpatialHash{
   // so callers still filter by exact distance).
   query(x,y,radius,out=[]){
     out.length=0;
+    if(this.hasBounds)this.querySeen.clear();
     const c=this.cellSize;
     const minX=Math.floor((x-radius)/c),maxX=Math.floor((x+radius)/c);
     const minY=Math.floor((y-radius)/c),maxY=Math.floor((y+radius)/c);
     for(let cx=minX;cx<=maxX;cx++)for(let cy=minY;cy<=maxY;cy++){
       const bucket=this.cells.get(this.key(cx,cy));
-      if(bucket)for(const item of bucket)out.push(item);
+      if(bucket)for(const item of bucket){
+        if(this.hasBounds){
+          if(this.querySeen.has(item))continue;
+          this.querySeen.add(item);
+        }
+        out.push(item);
+      }
     }
     return out;
   }
