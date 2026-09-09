@@ -20,6 +20,9 @@ for i,r in enumerate(roster):
                 assert frame.size==(128,128),file
                 assert frame.getchannel('A').getbbox(),f'Empty render: {file}'
                 atlas.paste(frame,(direction*128,pose*128))
+    if r['kind']=='operative':
+        poses={atlas.crop((0,p*128,128,(p+1)*128)).tobytes() for p in range(4)}
+        assert len(poses)>=3,f'Frozen walk cycle: {r["key"]}'
     atlas.save(out/f'{r["key"]}.webp',lossless=True,method=6)
     ortho=5.1 if r['kind']=='chopper' else 4.2 if r['kind'] in ('apc','manticore','aegis','nemesis','carrion') else 3.7
     manifest['actors'][r['key']]={'file':r['key']+'.webp','anchor':[.5,.5+.85*.593/ortho],'name':r['name'],'kind':r['kind']}

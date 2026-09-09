@@ -256,9 +256,11 @@ for index,r in enumerate(roster):
     camera.data.ortho_scale=5.1 if r['kind']=='chopper' else 4.2 if r['kind'] in ('apc','manticore','aegis','nemesis','carrion') else 3.7
     # Blender +X is game right; clockwise screen headings rotate about -Z.
     for pose in range(4):
+        # Evaluate each pose at its own frame; render otherwise reapplies frame 1.
+        scene.frame_set(pose+1)
         for leg,side in legs:
-            leg.location.x=math.sin(pose*math.pi/2)*side*.20
-            leg.location.z=max(0,math.sin(pose*math.pi/2)*side)*.07
+            leg.location.x=math.sin(pose*math.pi/2)*side*.34
+            leg.location.z=max(0,math.sin(pose*math.pi/2)*side)*.13
             leg.keyframe_insert('location',frame=pose+1)
         for obj in members:
             if obj.name.startswith(('Rotor | blade','Gunship | main rotor')):

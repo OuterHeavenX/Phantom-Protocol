@@ -1501,7 +1501,7 @@ export class Renderer{
     // here, where a cap would have to be repeated in both renderers.
     for(const f of engine.fx.activeMuzzleLights(this.muzzleScratch)){
       addLight(f.x,f.y,f.radius,
-        `rgb(${Math.round(f.r*255)},${Math.round(f.g*255)},${Math.round(f.b*255)})`,
+        '#'+[f.r,f.g,f.b].map(v=>Math.round(clamp(v,0,1)*255).toString(16).padStart(2,'0')).join(''),
         f.intensity);
     }
 
