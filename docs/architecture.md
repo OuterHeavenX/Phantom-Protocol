@@ -26,9 +26,22 @@ src/main.js  application state machine and render loop
 ## Simulation model
 
 The engine runs a **fixed timestep** of 1/60s driven by an accumulator, capped at five
-steps per frame to avoid a death spiral on a slow frame. Rendering interpolates nothing —
-it draws the latest simulated state — but because the step is fixed, gameplay is identical
+steps per frame to avoid a death spiral on a slow frame. Gameplay is therefore identical
 across refresh rates.
+
+The display, however, is not on that clock. Drawing the latest simulated state means that
+on anything other than exactly 60 Hz the world advances zero pixels on one frame and a
+whole step on the next — 4.9 px of judder per frame on a 120 Hz panel, measured. So the
+render **interpolates**: `Engine.step` records where each actor stood before the step, and
+after the step loop `Engine.applyInterpolation` moves them to
+`lerp(previous, current, accumulator / FIXED_STEP)`. The positions are swapped in place, so
+every draw site — sprites, lights, minimap, HUD markers, and the camera that damps toward
+the operative — smooths without knowing this exists. `Engine.restoreInterpolation` puts the
+true coordinates back before the next step, so the simulation never sees an interpolated
+value and replays stay bit-identical. The cost is that the picture trails the simulation by
+up to one step, which is the price of never drawing a position the simulation has not
+produced. `settings.renderInterpolation = false` turns it off, which is how
+`tools/smooth.mjs` measures the difference.
 
 Broad-phase queries go through a uniform `SpatialHash` rebuilt once per step. Every
 system that needs neighbours (AI separation, weapon targeting, explosions, beams,
@@ -134,13 +147,32 @@ imported by production code except a single dynamic `import()` in `src/main.js`
 behind a URL flag, so with the flag absent none of it is fetched.
 
 `src/experiments/visual-test/` — **BLACKSITE VISUAL TEST**, reached at
-`?visualtest=1`. An experimental WebGL2 renderer over the real simulation,
-built to find out how far the presentation can be pushed and whether a GPU path
-is worth having. `?visualtest=1&renderer=2d` runs the same level through the
-production Canvas 2D renderer as a control. See that directory's README for the
-pipeline and for how to run the benchmark on your own hardware.
+`?visualtest=1`. A benchmark harness: an enemy-count sweep over the real
+simulation, with per-pass timings, feature switches and a supersampling control.
 
-The production BLACKSITE ZERO is untouched by any of it.
+It began as the isolated experiment the deferred renderer was built in. Now that
+the renderer has shipped, the harness drives the shipping classes rather than a
+copy of them — `?visualtest=1` runs `DeferredRenderer`, `?visualtest=1&renderer=2d`
+runs the production Canvas 2D renderer as the control, and `?visualtest=1&theatre=<id>`
+picks any of the ten. A number measured there is therefore a number about the game.
+See that directory's README.
+
+## Movement and collision
+
+One path: `World.moveEntity(entity,dx,dy,radius)`. It substeps by the entity's
+own radius so no substep is longer than the entity is wide, which makes
+tunnelling impossible by construction rather than by tuning. The operative,
+hostiles and deployables all go through it; flying units bypass geometry
+entirely and are only clamped to the arena.
+
+`World.resolveCollision` is still the depenetration primitive underneath, but
+nothing should call it directly to move something — that was the arrangement
+that let a dash finish on the far side of a wall.
+
+Projectiles do not use it at all. They sweep: `raycastObstacle` against
+geometry, which also reports the entry point so the impact lands on the
+surface, and `segmentHitsCircle` against hostiles, because at 1500 units per
+second a step is wider than most targets.
 
 ## Static checks
 
@@ -191,10 +223,32 @@ through walls. Heavy attacks run through a windup with a visible telegraph.
 
 ## Rendering
 
-Ten stages, back to front, described in `src/render/renderer.js`. Entities are sorted by
-world Y each frame so overlap reads correctly. The lighting pass renders additive radial
-gradients into a half-resolution offscreen canvas which is composited with
-`globalCompositeOperation = 'lighter'`; it is skipped entirely in performance mode.
+Two renderers with the same public surface — construct, `resize`, `render`, `destroy`.
+`createRenderer` in `src/main.js` is the only code that knows there is a choice, and it
+is called before anything touches the canvas: a canvas is bound to its context for life,
+so taking a 2D context to check something first permanently forecloses WebGL2 on it.
+
+**Canvas 2D** (`src/render/renderer.js`) is ten stages, back to front. Entities are
+sorted by world Y each frame so overlap reads correctly. The lighting pass renders
+additive radial gradients into a half-resolution offscreen canvas which is composited
+with `globalCompositeOperation = 'lighter'`; it is skipped entirely in performance mode.
+
+Neither renderer may influence the simulation. That is checked rather than
+assumed — see `docs/collision-integrity.md` and `tools/parity.mjs`, which runs
+the same seed and the same scripted input under both and compares simulation
+state. Two things used to violate it and no longer do: hostile deployment
+distance was read from the camera's pixel dimensions, and pointer aim conflated
+CSS pixels with drawing-buffer pixels.
+
+**Deferred WebGL2** (`src/render/gl/`) replaces the floor, geometry, lighting and post
+with an instanced G-buffer, instanced light volumes, a bloom chain and a filmic
+composite, and calls back into the 2D renderer for everything else through two entry
+points it owns: `drawWorldLayer` for world-space sprites and markers, `drawScreenLayer`
+for weather and the readouts. Neither is used by the 2D path, so that class behaves
+identically whether or not a GL renderer exists. Per-theatre scene dressing lives in
+`src/render/gl/dressing.js`. The capability probe is split into
+`src/render/gl/support.js` so the settings screen can ask whether WebGL2 is usable
+without importing a renderer to find out. See `docs/deferred-renderer.md`.
 
 All sprites are procedural vector drawings (`src/render/sprites.js`) with animated limbs
 and directional weapons. Operative portraits are the same idea in SVG for the DOM UI

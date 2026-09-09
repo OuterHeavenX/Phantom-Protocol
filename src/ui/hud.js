@@ -7,6 +7,11 @@ import {PASSIVES_BY_ID} from '../../data/passives.js';
 
 // The engine is a parameter, not a closure: this is a module-level function
 // and the run it is describing does not exist until the Hud is constructed.
+// Seconds the field-objective checklist stays open after one of its counts
+// moves. Long enough to read the row that changed, short enough that it is not
+// sitting over the sector for the rest of the contract.
+const OBJECTIVES_DWELL=4.5;
+
 const template=(operative,ability,engine)=>`
 <canvas id="gameCanvas"></canvas>
 <div class="hud" id="hud">
@@ -60,8 +65,16 @@ const template=(operative,ability,engine)=>`
       <b class="mission-objective-value" id="missionObjectiveValue">—</b>
     </div>
 
+    <!-- Collapsed to its header most of the time. The checklist is reference,
+         not moment-to-moment: it opened to three full rows and held them there
+         for the whole contract, which on a phone is a tenth of the screen spent
+         on text that changes once a minute. It opens itself whenever a count
+         moves and closes again a few seconds later. -->
     <div class="hud-panel objectives" id="objectivePanel">
-      <span class="objectives-head">FIELD OBJECTIVES <b id="objectivesCleared">0</b></span>
+      <span class="objectives-head">FIELD OBJECTIVES
+        <b id="objectivesCleared">0/0</b>
+        <i class="objectives-bar"><u id="objectivesFill"></u></i>
+      </span>
       <ul class="objective-list" id="objectiveList"></ul>
     </div>
     </div>
@@ -79,12 +92,13 @@ const template=(operative,ability,engine)=>`
         <p class="codec-text" id="codecText"></p>
       </div>
     </div>
+
+    <div class="boss-bar" id="bossBar" hidden>
+      <div class="boss-name"><span id="bossName"></span><em id="bossPhase"></em></div>
+      <div class="bar boss"><i id="bossHp"></i></div>
+    </div>
   </div>
 
-  <div class="boss-bar" id="bossBar" hidden>
-    <div class="boss-name"><span id="bossName"></span><em id="bossPhase"></em></div>
-    <div class="bar boss"><i id="bossHp"></i></div>
-  </div>
 
   <div class="hud-bottom">
     <div class="loadout" id="loadoutStrip"></div>
@@ -140,6 +154,7 @@ export class Hud{
       mapName:$('mapName'),timerValue:$('timerValue'),extractionTimer:$('extractionTimer'),phaseValue:$('phaseValue'),
       missionBar:$('missionBar'),
       objectiveList:$('objectiveList'),objectivesCleared:$('objectivesCleared'),
+      objectivePanel:$('objectivePanel'),objectivesFill:$('objectivesFill'),
       missionObjective:$('missionObjective'),missionObjectiveLabel:$('missionObjectiveLabel'),
       missionObjectiveValue:$('missionObjectiveValue'),
       killsValue:$('killsValue'),creditsValue:$('creditsValue'),jpValue:$('jpValue'),
@@ -355,14 +370,46 @@ export class Hud{
   }
 
   // The checklist only redraws when a tracked count actually ticks over,
-  // which the objective set flags for us.
+  // which the objective set flags for us. That same signal opens the panel:
+  // something changed, so it is worth a look, and a few seconds later it is
+  // not any more.
   updateObjectives(){
     const objectives=this.engine.objectives;
+    const panel=this.el.objectivePanel;
+    // Closing is checked before anything else, and unconditionally. It used to
+    // live inside the "nothing changed" branch, which meant a contract carrying
+    // a timed objective — one whose count moves every single second — never
+    // reached it, and the panel that was supposed to collapse stayed open for
+    // the whole run.
+    if(this.objectivesOpenUntil&&this.engine.elapsed>this.objectivesOpenUntil){
+      this.objectivesOpenUntil=0;
+      panel.classList.remove('open');
+    }
     if(!objectives?.dirty)return;
     objectives.dirty=false;
 
-    this.set('objCleared',this.el.objectivesCleared,String(objectives.completed));
-    this.el.objectiveList.innerHTML=objectives.list().map(entry=>{
+    const entries=objectives.list();
+    // Opening on any change was wrong: a timed objective ticks every second, so
+    // the panel reopened continuously and never actually collapsed. It opens on
+    // the thing worth interrupting for — an objective coming off the board —
+    // and on the first draw, so the set is read once at deployment. Progress in
+    // between is carried by the header's bar, which is always live.
+    const cleared=objectives.completed;
+    if(this.clearedSeen===undefined||cleared>this.clearedSeen){
+      this.objectivesOpenUntil=this.engine.elapsed+OBJECTIVES_DWELL;
+      panel.classList.add('open');
+    }
+    this.clearedSeen=cleared;
+    this.set('objCleared',this.el.objectivesCleared,
+      `${cleared}/${entries.length}`);
+    // The collapsed state still has to say how far along the set is, so the
+    // header carries the whole set's progress rather than only its count.
+    const progress=entries.length
+      ?entries.reduce((sum,e)=>sum+clamp(e.value/e.target,0,1),0)/entries.length
+      :0;
+    this.el.objectivesFill.style.width=`${progress*100}%`;
+    panel.classList.toggle('all-done',cleared>=entries.length&&entries.length>0);
+    this.el.objectiveList.innerHTML=entries.map(entry=>{
       const pct=clamp(entry.value/entry.target,0,1)*100;
       const value=entry.unit==='s'?Math.floor(entry.value):Math.floor(entry.value);
       return `<li class="objective${entry.done?' done':''}">

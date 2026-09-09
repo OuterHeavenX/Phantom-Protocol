@@ -12,7 +12,7 @@ export const WEAPONS=[
     behavior:'projectile',targeting:'nearest',
     desc:'Suppressed marksman pistol. Fires fast, accurate single rounds at the nearest contact.',
     damage:12,cooldown:.62,speed:640,pierce:0,count:1,spread:.03,knockback:60,range:520,
-    sound:'shoot',
+    voice:'suppressed',sound:'shoot',
     scaling:{damage:4.2,cooldown:-.028,count:[0,0,1,0,0,1,0,0],pierce:[0,0,0,1,0,0,0,1],speed:14},
     levelText:l=>['+4 damage','+fire rate','+1 round','+1 pierce','+4 damage','+1 round','+fire rate','+1 pierce'][l-1]
   },
@@ -21,7 +21,7 @@ export const WEAPONS=[
     behavior:'burst',targeting:'nearest',
     desc:'Service assault rifle. Three-round bursts with meaningful stopping power.',
     damage:9,cooldown:1.05,speed:560,pierce:0,count:3,burstDelay:.075,spread:.07,knockback:90,range:480,
-    sound:'shoot',
+    voice:'rifle',sound:'shoot',
     scaling:{damage:3.4,cooldown:-.05,count:[0,0,1,0,1,0,0,1],spread:-.004},
     levelText:l=>['+3 damage','+fire rate','+1 round','+3 damage','+1 round','tighter spread','+fire rate','+1 round'][l-1]
   },
@@ -30,7 +30,7 @@ export const WEAPONS=[
     behavior:'orbit',targeting:'orbit',
     desc:'Escort drones orbit the operative and shred anything that closes in.',
     damage:11,cooldown:0,count:2,orbitRadius:78,orbitSpeed:2.4,hitInterval:.42,knockback:40,
-    sound:'tech',
+    voice:'tech',sound:'tech',
     scaling:{damage:3.6,count:[0,1,0,1,0,1,0,1],orbitRadius:6,orbitSpeed:.16},
     levelText:l=>['+4 damage','+1 drone','+radius','+1 drone','+4 damage','+1 drone','+speed','+1 drone'][l-1]
   },
@@ -39,7 +39,7 @@ export const WEAPONS=[
     behavior:'arc',targeting:'facing',
     desc:'A whipping filament blade that carves a wide arc through everything in front of you.',
     damage:22,cooldown:.95,arc:2.1,reach:96,knockback:190,
-    sound:'laser',
+    voice:'beam',sound:'laser',
     scaling:{damage:7.5,cooldown:-.055,arc:.16,reach:9},
     levelText:l=>['+8 damage','+reach','+arc width','+8 damage','+swing rate','+arc width','+8 damage','+reach'][l-1]
   },
@@ -48,6 +48,7 @@ export const WEAPONS=[
     behavior:'railshot',targeting:'strongest',
     desc:'Anti-materiel rifle. Slow, deliberate shots that punch through a whole column of hostiles.',
     damage:46,cooldown:1.85,speed:1150,pierce:4,count:1,knockback:210,range:900,critBonus:.15,
+    voice:'sniper',
     sound:'shootHeavy',
     scaling:{damage:16,cooldown:-.11,pierce:[0,1,0,1,0,1,0,2],critBonus:.03},
     levelText:l=>['+16 damage','+1 pierce','+fire rate','+1 pierce','+16 damage','+1 pierce','+crit','+2 pierce'][l-1]
@@ -57,6 +58,7 @@ export const WEAPONS=[
     behavior:'shotgun',targeting:'nearest',
     desc:'Breaching shotgun. A close-range cone of pellets that flattens crowds.',
     damage:8,cooldown:1.15,speed:520,count:7,spread:.62,knockback:150,range:280,falloff:true,
+    voice:'shotgun',
     sound:'shootHeavy',
     scaling:{damage:2.8,cooldown:-.06,count:[0,1,1,0,1,1,0,2],knockback:14},
     levelText:l=>['+3 damage','+1 pellet','+1 pellet','+fire rate','+1 pellet','+1 pellet','+3 damage','+2 pellets'][l-1]
@@ -66,7 +68,7 @@ export const WEAPONS=[
     behavior:'projectile',targeting:'nearest',
     desc:'High cyclic-rate submachine gun. Low per-shot damage, relentless uptime.',
     damage:6,cooldown:.2,speed:600,count:1,spread:.14,knockback:24,range:400,
-    sound:'shoot',
+    voice:'smg',sound:'shoot',
     scaling:{damage:2.1,cooldown:-.012,count:[0,0,1,0,0,1,0,1],spread:-.008},
     levelText:l=>['+2 damage','+fire rate','+1 round','tighter spread','+2 damage','+1 round','+fire rate','+1 round'][l-1]
   },
@@ -75,7 +77,7 @@ export const WEAPONS=[
     behavior:'lobbed',targeting:'random',
     desc:'Bouncing fragmentation charges that detonate into a wide shrapnel burst.',
     damage:34,cooldown:1.75,speed:330,count:1,blastRadius:88,fuse:.9,knockback:230,
-    sound:'explode',
+    voice:'heavy',sound:'explode',
     scaling:{damage:11,cooldown:-.1,count:[0,1,0,1,0,1,0,1],blastRadius:8},
     levelText:l=>['+11 damage','+1 charge','+blast radius','+1 charge','+11 damage','+1 charge','+fire rate','+1 charge'][l-1]
   },
@@ -84,7 +86,7 @@ export const WEAPONS=[
     behavior:'mine',targeting:'ground',
     desc:'Proximity charges seeded around the operative. Anything that walks in does not walk out.',
     damage:52,cooldown:2.4,count:1,blastRadius:76,armTime:.5,lifetime:22,maxActive:6,knockback:200,
-    sound:'explode',
+    voice:'tech',sound:'explode',
     scaling:{damage:16,cooldown:-.14,count:[0,1,0,1,0,1,0,1],blastRadius:6,maxActive:[0,1,1,1,1,1,1,2]},
     levelText:l=>['+16 damage','+1 mine','+field cap','+1 mine','+16 damage','+blast radius','+1 mine','+2 field cap'][l-1]
   },
@@ -93,7 +95,7 @@ export const WEAPONS=[
     behavior:'aura',targeting:'self',
     desc:'A sustained directed-energy field that cooks everything standing too close.',
     damage:9,cooldown:0,radius:104,tickInterval:.3,statusEffect:'burn',statusChance:.35,
-    sound:'tech',
+    voice:'beam',sound:'tech',
     scaling:{damage:3.2,radius:11,tickInterval:-.016,statusChance:.04},
     levelText:l=>['+3 damage','+radius','+tick rate','+3 damage','+radius','+burn chance','+tick rate','+radius'][l-1]
   },
@@ -102,7 +104,7 @@ export const WEAPONS=[
     behavior:'pulse',targeting:'self',
     desc:'Expanding electromagnetic shockwave. Stuns machines and staggers everything else.',
     damage:26,cooldown:3.2,radius:190,statusEffect:'shock',statusChance:.85,knockback:280,
-    sound:'scramble',
+    voice:'corrupted',sound:'scramble',
     scaling:{damage:9,cooldown:-.2,radius:22},
     levelText:l=>['+9 damage','+radius','+fire rate','+9 damage','+radius','+fire rate','+9 damage','+radius'][l-1]
   },
@@ -111,7 +113,7 @@ export const WEAPONS=[
     behavior:'turret',targeting:'deploy',
     desc:'Deployable autoturrets that hold an area and fire independently of the operative.',
     damage:10,cooldown:6.5,count:1,turretLife:16,turretFireRate:.45,turretRange:290,maxActive:2,speed:600,
-    sound:'tech',
+    voice:'tech',sound:'tech',
     scaling:{damage:3.4,cooldown:-.4,count:[0,0,1,0,0,1,0,0],maxActive:[0,1,0,1,0,1,0,1],turretLife:1.5},
     levelText:l=>['+3 damage','+1 active turret','+1 per deploy','+1 active turret','+3 damage','+1 per deploy','+turret life','+1 active turret'][l-1]
   },
@@ -120,7 +122,7 @@ export const WEAPONS=[
     behavior:'homing',targeting:'random',
     desc:'A salvo of seeking micro-missiles that chase down scattered targets.',
     damage:19,cooldown:1.6,speed:290,count:3,turnRate:4.2,blastRadius:44,range:640,
-    sound:'shoot',
+    voice:'heavy',sound:'shoot',
     scaling:{damage:6.4,cooldown:-.09,count:[0,1,0,1,1,0,1,1],turnRate:.24},
     levelText:l=>['+6 damage','+1 missile','+tracking','+1 missile','+1 missile','+6 damage','+1 missile','+1 missile'][l-1]
   },
@@ -129,7 +131,7 @@ export const WEAPONS=[
     behavior:'beam',targeting:'strongest',
     desc:'Charged rail beam. Holds a lance of light across the battlefield, hitting everything on the line.',
     damage:20,cooldown:2.6,beamDuration:.55,beamWidth:16,range:1000,tickInterval:.09,knockback:40,
-    sound:'laser',
+    voice:'marksman',sound:'laser',
     scaling:{damage:7,cooldown:-.15,beamWidth:2.5,beamDuration:.05},
     levelText:l=>['+7 damage','+beam width','+fire rate','+duration','+7 damage','+beam width','+fire rate','+duration'][l-1]
   },
@@ -138,7 +140,7 @@ export const WEAPONS=[
     behavior:'chain',targeting:'nearest',
     desc:'Self-replicating nanites that arc from body to body, spreading corrosion as they go.',
     damage:16,cooldown:1.4,chains:3,chainRange:160,range:340,statusEffect:'corrode',statusChance:.6,falloffPerChain:.12,
-    sound:'tech',
+    voice:'corrupted',sound:'tech',
     scaling:{damage:5.4,cooldown:-.08,chains:[0,1,0,1,1,0,1,1],chainRange:12},
     levelText:l=>['+5 damage','+1 chain','+chain range','+1 chain','+1 chain','+5 damage','+1 chain','+1 chain'][l-1]
   },
@@ -147,7 +149,7 @@ export const WEAPONS=[
     behavior:'piercebolt',targeting:'facing',
     desc:'Forward particle bolt that pierces the entire enemy line and leaves a burning trail.',
     damage:38,cooldown:1.5,speed:760,pierce:99,count:1,knockback:120,range:800,statusEffect:'burn',statusChance:.4,trail:true,
-    sound:'laser',
+    voice:'beam',sound:'laser',
     scaling:{damage:13,cooldown:-.08,count:[0,0,1,0,0,1,0,1],speed:24},
     levelText:l=>['+13 damage','+velocity','+1 bolt','+13 damage','+fire rate','+1 bolt','+13 damage','+1 bolt'][l-1]
   },
@@ -156,7 +158,7 @@ export const WEAPONS=[
     behavior:'orbital',targeting:'zone',
     desc:'Paints ground targets for off-map fire. Marked zones are erased seconds later.',
     damage:96,cooldown:4.6,count:1,blastRadius:118,delay:1.3,knockback:320,
-    sound:'explode',
+    voice:'heavy',sound:'explode',
     scaling:{damage:32,cooldown:-.28,count:[0,1,0,1,0,1,0,1],blastRadius:9},
     levelText:l=>['+32 damage','+1 strike','+blast radius','+1 strike','+32 damage','+1 strike','+call rate','+1 strike'][l-1]
   },
@@ -165,7 +167,7 @@ export const WEAPONS=[
     behavior:'summon',targeting:'deploy',
     desc:'Reanimates fallen hostiles as short-lived phantom escorts that fight alongside you.',
     damage:24,cooldown:5,count:1,minionLife:14,maxActive:3,minionSpeed:190,minionHp:60,
-    sound:'tech',
+    voice:'corrupted',sound:'tech',
     scaling:{damage:8,cooldown:-.3,maxActive:[0,1,0,1,0,1,0,1],minionLife:1.4},
     levelText:l=>['+8 damage','+1 phantom','+phantom life','+1 phantom','+8 damage','+1 phantom','+call rate','+1 phantom'][l-1]
   }
@@ -272,6 +274,19 @@ export const EVOLUTIONS=[
 export const WEAPONS_BY_ID=Object.fromEntries(WEAPONS.map(w=>[w.id,w]));
 export const EVOLUTIONS_BY_ID=Object.fromEntries(EVOLUTIONS.map(e=>[e.id,e]));
 export const ALL_WEAPON_FORMS=Object.fromEntries([...WEAPONS,...EVOLUTIONS].map(w=>[w.id,w]));
+
+// Which ballistic family a weapon speaks with.
+//
+// An evolution inherits its base weapon's voice rather than declaring one:
+// Horizon Driver is what happens to a Specter Rifle, so it should sound like an
+// escalated anti-materiel rifle and not like a new gun. That also means adding
+// an evolution needs no audio decision at all.
+export function weaponVoice(def){
+  if(!def)return 'rifle';
+  if(def.voice)return def.voice;
+  const base=def.base?WEAPONS_BY_ID[def.base]:null;
+  return base?.voice||'rifle';
+}
 
 export function evolutionFor(weaponId){
   return EVOLUTIONS.find(e=>e.base===weaponId)||null;

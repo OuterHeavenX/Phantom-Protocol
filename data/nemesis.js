@@ -70,6 +70,10 @@ export const NEMESIS_CHASSIS={
   title:'Bipedal hunter-killer // commissioned against one operator',
   hp:2200,radius:54,speed:46,armor:16,xp:520,credits:640,jp:44,
   color:'#e0533f',accent:'#ffb35c',
+  // The walker draws its own legs — they are its chassis rather than something
+  // bolted underneath — but the gait itself runs on the simulation's clock
+  // like every other signature's, and is what makes it audible.
+  gait:{legs:2,span:1,cadence:1.5,topSpeed:60,volume:1.2},
   nemesis:true
 };
 

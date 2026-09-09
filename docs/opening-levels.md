@@ -71,3 +71,6 @@ Screenshots and results are under the ignored `tools/visual-qa-output/` director
 
 Also run ESLint over `src data` and
 `python -X utf8 tools/construction-order.py src data`.
+
+The opening three maps select the Canvas renderer for raised architecture and
+depth sorting even when WebGL2 is selected. Other maps keep the renderer setting.

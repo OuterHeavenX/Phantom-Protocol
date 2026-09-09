@@ -4,6 +4,9 @@ import {PASSIVES,MAX_PASSIVE_LEVEL} from '../../data/passives.js';
 import {MAPS,DURATIONS,DIFFICULTIES,DIFFICULTIES_BY_ID} from '../../data/maps.js';
 import {ENEMIES,ELITES} from '../../data/enemies.js';
 import {BOSSES_BY_ID} from '../../data/bosses.js';
+import {presetForSettings} from '../render/gl/presets.js';
+import {sectionState,refreshAvailability,newBySection,acknowledgeSection,
+        isDeclassified} from '../save/unlocks.js';
 import {
   DEV_TREE,DOCTRINE_BRANCH,devNodeCost,devRequirementsMet,devBonuses,accountLevel,
   ACHIEVEMENTS,ACHIEVEMENT_CATEGORIES,MILESTONES,INTEL_FILES
@@ -15,6 +18,7 @@ import {
 } from '../save/progression.js';
 import {portraitSvg,portraitMarkup,dossierCardMarkup} from '../render/portraits.js';
 import {Typewriter} from './typewriter.js';
+import {probeWebGL2} from '../render/gl/support.js';
 import {storeReplay,deleteReplay,MAX_REPLAYS} from '../save/storage.js';
 import {packLog,unpackLog,REPLAY_VERSION} from '../game/replay.js';
 import {CAMPAIGN,ACTS,OBJECTIVE_TYPES,nextOperation,campaignProgress,operationUnlocked,
@@ -32,6 +36,7 @@ import {
   makePreset,storePreset,deletePreset,applyPreset,MAX_PRESETS
 } from '../game/gunsmith.js';
 import {saveGame,exportSave,importSave,resetSave,defaultSettings} from '../save/storage.js';
+import {COLORBLIND_MODES,setColorblindMode} from '../../data/colorblind.js';
 import {formatDuration,formatNumber,formatTime,clamp} from '../core/math.js';
 import {MenuBackground} from './menuBackground.js';
 
@@ -163,6 +168,11 @@ export class Screens{
     const nextMilestone=MILESTONES.find(m=>!save.milestones[m.id]);
     const nextProgress=nextMilestone?milestoneProgress(save,nextMilestone):null;
 
+    // Anything that could have changed while the operator was in the field is
+    // reconciled on the way back in, so the badges below describe now.
+    if(refreshAvailability(save))this.persist();
+    const flags=newBySection(save);
+
     const nav=[
       ['CAMPAIGN','Story operations and recovered documents','campaign'],
       ['CONTRACTS','Rotating daily and weekly assignments','contracts'],
@@ -184,16 +194,43 @@ export class Screens{
             <span class="eyebrow">STRATEGIC CONFLICT DIVISION // ACCESS GRANTED</span>
             <h1>RED<br>STATIC</h1>
             <p class="tagline">Enter manufactured conflict zones. Survive the response. Recover intelligence. Determine who is writing the war.</p>
+            <div class="public-alpha-status" role="status" aria-label="RED STATIC public alpha notice">
+              <strong>PUBLIC ALPHA v0.3.1</strong>
+              <span>Unfinished test build. Features, balance, and saved progress may change.</span>
+            </div>
           </div>
           <nav class="nav">
-            ${nav.map(([label,hint,route],i)=>`
-              <button class="nav-item" data-route="${route}" data-index="${i}">
-                <span class="nav-label">${label}</span>
+            ${nav.map(([label,hint,route],i)=>{
+              const {granted,need}=sectionState(save,route);
+              // A classified section still occupies its place in the list. The
+              // operator is meant to see that the division has more rooms than
+              // they have been cleared for, and what clears each one.
+              if(!granted)return `
+              <button class="nav-item classified" data-locked="${route}" data-index="${i}"
+                      aria-disabled="true">
+                <span class="nav-label">CLASSIFIED</span>
+                <span class="nav-hint">${escape(need)}</span>
+              </button>`;
+              return `
+              <button class="nav-item${flags[route]?' has-new':''}" data-route="${route}" data-index="${i}">
+                <span class="nav-label">${label}${flags[route]?'<em class="new-flag">NEW</em>':''}</span>
                 <span class="nav-hint">${hint}</span>
-              </button>`).join('')}
+              </button>`;
+            }).join('')}
           </nav>
           <div class="brand-foot">
-            <span class="eyebrow">BUILD v0.3.0 // FIELD REBUILD</span>
+            <span class="eyebrow">BUILD v0.3.1 // PUBLIC ALPHA</span>
+            <a class="btn ghost alpha-feedback"
+               href="https://forms.gle/1p1d7s9SJvMZ2Uw48"
+               target="_blank"
+               rel="noopener noreferrer"
+               aria-label="Report a RED STATIC public alpha issue">REPORT ISSUE</a>
+            <a class="btn ghost support-development"
+               href="https://buymeacoffee.com/redstaticgame"
+               target="_blank"
+               rel="noopener noreferrer"
+               aria-label="Support RED STATIC development on Buy Me a Coffee">☕ SUPPORT DEVELOPMENT</a>
+            <span class="copyright">© 2026 JIMMY FLETE. ALL RIGHTS RESERVED.</span>
           </div>
         </section>
 
@@ -261,6 +298,20 @@ export class Screens{
         this.route(button.dataset.route);
       });
     });
+    // A classified section says what it wants rather than doing nothing, which
+    // is the difference between a locked door and a broken button.
+    root().querySelectorAll('[data-locked]').forEach(button=>{
+      button.addEventListener('click',()=>{
+        this.audio?.play('deny');
+        const {need}=sectionState(this.save,button.dataset.locked);
+        const hint=button.querySelector('.nav-hint');
+        if(!hint)return;
+        hint.classList.remove('flash');
+        void hint.offsetWidth;
+        hint.classList.add('flash');
+        hint.textContent=need;
+      });
+    });
   }
 
   route(name){
@@ -273,6 +324,14 @@ export class Screens{
       directives:()=>this.directives(),intel:()=>this.intel(),
       stats:()=>this.stats(),settings:()=>this.settings()
     };
+    // The gate is enforced here as well as in the markup. The buttons are the
+    // polite version; this is the one that holds when a route is reached any
+    // other way — a keyboard shortcut, a stale screen, a restored session.
+    const {granted}=sectionState(this.save,name);
+    if(!granted){this.audio?.play('deny');return this.menu()}
+    // Opening a section is the acknowledgement. Anything that was new in it is
+    // not new any more.
+    if(acknowledgeSection(this.save,name))this.persist();
     (routes[name]||(()=>this.menu()))();
   }
 
@@ -1360,6 +1419,9 @@ export class Screens{
 
   development(){
     const save=this.save;
+    // Points may have arrived since this screen was last drawn, and a purchase
+    // can put the next node in reach. Reconciled before anything is rendered.
+    if(refreshAvailability(save)|acknowledgeSection(save,'development'))this.persist();
     const ranks=save.dev||{};
     const bonuses=devBonuses(ranks);
     const tiers=[1,2,3,4,5];
@@ -1392,6 +1454,25 @@ export class Screens{
               const available=devRequirementsMet(node,ranks,devRating);
               const cost=devNodeCost(node,rank);
               const affordable=save.profile.jp>=cost;
+              // Until the operator can actually pay for it, a node is
+              // classified rather than greyed: the cost is on the card and
+              // nothing else is. Showing fifty upgrades that cannot be bought
+              // is not a progression system, it is a price list. Once it has
+              // been affordable once it stays readable for good — spending the
+              // points must not hide what was just revealed.
+              if(!isDeclassified(save,node.id)){
+                return `<button class="dev-node classified branch-${node.branch}"
+                          data-node-locked="${node.id}" disabled aria-disabled="true">
+                  <span class="node-branch">${branches[node.branch]}</span>
+                  <h4>CLASSIFIED</h4>
+                  <div class="pips">${Array.from({length:node.max},()=>
+                    '<i></i>').join('')}</div>
+                  <p class="muted">Clearance withheld. Accrue the job points and
+                     this file opens.</p>
+                  <div class="node-effect">—</div>
+                  <span class="node-cost">${cost} JP TO DECLASSIFY</span>
+                </button>`;
+              }
               const state=maxed?'maxed':!available?'blocked':affordable?'ready':'poor';
               return `<button class="dev-node ${state} branch-${node.branch}"
                         data-node="${node.id}" ${maxed||!available?'disabled':''}>
@@ -1773,6 +1854,10 @@ export class Screens{
 
         <section class="settings-block">
           <h3 class="section-title">PRESENTATION</h3>
+          ${select('renderer','Renderer',settings.renderer||'auto',
+            [['auto','AUTOMATIC'],['gl','DEFERRED (WEBGL2)'],['2d','CANVAS 2D']])}
+          <p class="muted small" id="rendererNote">${rendererNote(settings.renderer||'auto')}</p>
+          <p class="muted small" id="rendererLive">${rendererLive(settings)}</p>
           ${select('particles','Effect density',settings.particles,[['low','LOW'],['medium','MEDIUM'],['high','HIGH']])}
           ${slider('screenShake','Screen shake',settings.screenShake,0,1.5,.1)}
           ${toggle('damageNumbers','Damage numbers',settings.damageNumbers)}
@@ -1786,6 +1871,8 @@ export class Screens{
         <section class="settings-block">
           <h3 class="section-title">ACCESSIBILITY</h3>
           ${toggle('reducedFlashing','Reduce flashing',settings.reducedFlashing,'Dampens screen flashes and low-health pulse')}
+          ${select('colorblind','Colour vision',settings.colorblind||'none',COLORBLIND_MODES)}
+          <p class="muted small">Recolours incoming fire, telegraphs and objectives, and outlines hostile rounds so they read by contrast rather than by hue.</p>
           ${toggle('performanceMode','Performance mode',settings.performanceMode,'Fewer hostiles, no lighting pass')}
           ${slider('uiScale','Interface scale',settings.uiScale,.8,1.4,.05,'x')}
         </section>
@@ -1866,6 +1953,30 @@ export class Screens{
     document.getElementById('particles')?.addEventListener('change',event=>{
       settings.particles=event.target.value;
       commit();
+    });
+
+    // Takes effect immediately rather than at the next deployment: it is a
+    // display preference, not a renderer choice, and somebody turning it on is
+    // trying to find out whether it helps.
+    document.getElementById('colorblind')?.addEventListener('change',event=>{
+      settings.colorblind=event.target.value;
+      setColorblindMode(settings.colorblind);
+      commit();
+    });
+
+    // A canvas is bound to its context for life, so the renderer cannot change
+    // under a contract already in progress. The choice takes effect at the
+    // next deployment, and the note under the control says so rather than
+    // leaving the player to wonder why nothing happened.
+    document.getElementById('renderer')?.addEventListener('change',event=>{
+      settings.renderer=event.target.value;
+      commit();
+      const note=document.getElementById('rendererNote');
+      // innerHTML rather than textContent: the note is already escaped, and the
+      // initial render puts it in through the same path.
+      if(note)note.innerHTML=rendererNote(settings.renderer);
+      const live=document.getElementById('rendererLive');
+      if(live)live.innerHTML=rendererLive(settings);
     });
 
     document.getElementById('exportBtn')?.addEventListener('click',()=>{
@@ -2057,6 +2168,65 @@ export class Screens{
       this.startGame(config);
     });
   }
+}
+
+// What the renderer choice will actually do on this machine, said plainly.
+// AUTOMATIC is the only setting whose outcome the player cannot predict, so it
+// is the only one that reports what it found.
+// What is actually running, as opposed to what was asked for.
+//
+// The note above this one describes the *request* and what the hardware can
+// support. Neither answers the question a player actually has when something
+// looks wrong, which is "what am I looking at right now, and what has been
+// turned off?" A settings screen that advertises features the active renderer
+// is not drawing is worse than one that says nothing.
+function rendererLive(settings){
+  const session=window.__pp;
+  const preset=presetForSettings(settings);
+  const tier=settings.performanceMode?'LOW'
+    :(settings.particles==='low'?'LOW':settings.particles==='medium'?'MEDIUM':'HIGH');
+  const off=RENDER_FEATURES.filter(([key])=>preset[key]===false).map(([,label])=>label);
+
+  if(!session||!session.renderer){
+    return `Quality ${escape(tier)}. Nothing deployed — the active renderer is `+
+           `decided when a contract starts.`;
+  }
+  const active=session.renderer.constructor.name==='DeferredRenderer'
+    ?'Deferred WebGL2':'Canvas 2D';
+  const info=session.renderer.describe?.();
+  const hardware=info?.hardware?` on ${escape(info.hardware)}`:'';
+  const soft=info?.software?' <b>(software rasteriser)</b>':'';
+  const disabled=off.length
+    ?` Not drawn at this quality: ${escape(off.join(', '))}.`
+    :' Every feature at this quality is being drawn.';
+  return `Running now: <b>${active}</b>${hardware}${soft}. Quality ${escape(tier)}.${disabled}`;
+}
+
+// Feature switches the presets can turn off, with the words a player would use.
+const RENDER_FEATURES=[
+  ['lighting','dynamic lighting'],['shadows','contact shadows'],
+  ['sceneLights','scene lights'],['combatLights','combat lights'],
+  ['bloom','bloom'],['particles','GPU particles'],
+  ['engineParticles','2D particles'],['atmosphere','steam and dust'],
+  ['materialDetail','material detail'],['decals','decals'],
+  ['grain','film grain'],['scanline','scanlines'],['vignette','vignette']
+];
+
+function rendererNote(choice){
+  const cap=probeWebGL2();
+  // The driver string and the failure reason come from the browser, not from
+  // the player, but they still go into markup, so they still get escaped.
+  const gpu=escape(cap.renderer||'unknown');
+  const why=escape(cap.reason||'unavailable');
+  if(choice==='2d')return 'Canvas 2D. The original renderer, and the one every theatre was authored against.';
+  if(choice==='gl'){
+    if(!cap.ok)return `Deferred WebGL2 is not available here (${why}). Contracts will run on Canvas 2D.`;
+    if(cap.software)return 'Forced on. This browser reports a software rasteriser, which will be much slower than Canvas 2D.';
+    return `Deferred WebGL2 on ${gpu}. Per-pixel lighting, contact shadows and bloom. Takes effect at the next deployment.`;
+  }
+  if(!cap.ok)return `No WebGL2 here (${why}), so contracts run on Canvas 2D.`;
+  if(cap.software)return 'WebGL2 here is a software rasteriser, so contracts run on Canvas 2D.';
+  return `Deferred WebGL2 on ${gpu}. Takes effect at the next deployment.`;
 }
 
 function statBar(label,value,max){

@@ -1,8 +1,64 @@
 import {Rng} from '../core/rng.js';
-import {clamp,dist2,segmentIntersectsRect,resolveCircleRect,pointInRect,SpatialHash} from '../core/math.js';
+import {clamp,dist2,TAU,segmentIntersectsRect,segmentRectEntry,resolveCircleRect,pointInRect,SpatialHash} from '../core/math.js';
 import {HAZARDS} from '../../data/maps.js';
 import {vaultKind,rollVaultKind} from '../../data/vaults.js';
 import {buildOpeningLevel,intersectsRoute} from './opening-levels.js';
+
+// Ceiling on how finely one frame's movement is chopped up for collision. A
+// normal step needs one; a dash needs three. The cap exists so a velocity
+// nothing in the game should ever produce cannot turn a frame into hundreds of
+// obstacle queries.
+const MAX_MOVE_SUBSTEPS=8;
+
+// Clearance the operative's start needs. Comfortably more than the 12-unit
+// body, so a spawn is in open ground rather than wedged against a crate.
+const PLAYER_SPAWN_CLEARANCE=34;
+
+// Grid pitch of the reachability map. Coarse on purpose: it answers "which
+// side of the geometry is this" and nothing finer.
+const REACH_CELL=32;
+
+// How many times depenetration is allowed to iterate before giving up. Three
+// resolves every corner geometry the generators produce; the loop exits early
+// the moment a pass moves nothing, which is the common case.
+const DEPENETRATION_PASSES=3;
+// A hazard keeps at least this fraction of its radius clear of solid
+// geometry, vaults and water, and hazard centres stay this fraction of their
+// combined radii apart.
+const HAZARD_CLEARANCE=.55;
+// Bridge wreck footprint: drawVehicle's body plus wheels. Yaw in radians.
+const WRECK_W=112,WRECK_H=58,WRECK_YAW=.12;
+// Ridge wall depth and how far its centre shifts toward the valley, matching
+// drawRidge's crest (36 behind the line, 60 in front).
+const RIDGE_DEPTH=96,RIDGE_CREST_SHIFT=12;
+// Conifer trunk collider as a fraction of the drawn size.
+const CONIFER_TRUNK=.3;
+// Aircraft panel colliders: boxes laid along the centreline of each swept
+// wing and the tail, in drawAircraft's unscaled model units. The wing root is
+// at (25,14) and the tip at (-20,106); the tail root at (-90,-9) and its tip
+// at (-125,-71).
+const WING_BOX=34;
+// Proving Ground chamber wall: square blocks around the ring, overlapping.
+const ARENA_SEGMENTS=128,ARENA_BLOCK=36;
+const WING_LINE=[[25,14],[-20,106]];
+const TAIL_LINE=[[-90,-9],[-125,-71]];
+function alongLine([[x0,y0],[x1,y1]],ts){
+  return ts.map(t=>[x0+(x1-x0)*t,y0+(y1-y0)*t]);
+}
+function aircraftPanelBoxes(scale,facing,wingBroken,tailBroken){
+  const boxes=[];
+  // A sheared wing keeps its root panel only.
+  const wingTs=wingBroken?[.17]:[.17,.5,.83];
+  for(const [px,py] of alongLine(WING_LINE,wingTs)){
+    boxes.push([px,py]);
+    boxes.push([px,-py]);
+  }
+  if(!tailBroken)for(const p of alongLine(TAIL_LINE,[.3,.75]))boxes.push(p);
+  // facing is 0 or PI: a rotation by PI is a mirror through the origin.
+  const flip=Math.cos(facing)<0?-1:1;
+  return boxes.map(([px,py])=>[px*scale*flip,py*scale*flip]);
+}
+const HAZARD_SEPARATION=.7;
 
 // Procedural sector generation. The world is a finite, fully-authored bounded
 // arena built from rooms and corridors rather than the previous build's
@@ -92,6 +148,92 @@ export class World{
     this.scatterDecor();
     this.buildCoverPoints();
     this.rebuildHash();
+
+    // Re-check the start once every last piece of geometry exists.
+    // (buildReachability runs after this, since it fills from the start.) It is
+    // resolved early so vaults and cover can be kept off it, but "kept off"
+    // was an intention rather than a guarantee: across eighty generated
+    // sectors the operative began inside solid geometry in fourteen of them.
+    // This is the only point in generation where the question can actually be
+    // answered.
+    const start=this.spawnPoint;
+    if(this.overlapsSolid(start.x,start.y,PLAYER_SPAWN_CLEARANCE)||
+       !this.playable(start.x,start.y,60)){
+      const clear=this.openPointNear(start.x,start.y,PLAYER_SPAWN_CLEARANCE,
+        {avoidVaults:true,pad:60});
+      if(clear){this.spawnPoint=clear}
+      else{
+        // Nothing within reach has the clearance, so make some. Carving is
+        // preferable to starting the operative inside a wall.
+        this.carve({x:start.x,y:start.y,w:180,h:180});
+        this.cover=this.cover.filter(c=>
+          Math.abs(c.x-start.x)>c.hw+90||Math.abs(c.y-start.y)>c.hh+90);
+        this.buildCoverPoints();
+        this.rebuildHash();
+      }
+    }
+
+    this.buildReachability();
+  }
+
+  // A coarse map of the ground the operative can actually walk to, flood
+  // filled from their start.
+  //
+  // Deploying a hostile somewhere it cannot path out of is not a spawn that
+  // looks wrong, it is a spawn that quietly removes a hostile from the
+  // contract — and in a sector with a sealed pocket it happens repeatedly.
+  // Generation leaves small enclosed pockets in a couple of theatres, so the
+  // spawn search now has to know which side of the geometry a candidate is on.
+  //
+  // One fill over a 32-unit grid at generation time, and a constant-time
+  // lookup per spawn afterwards.
+  buildReachability(){
+    const cell=REACH_CELL;
+    const cols=Math.ceil(this.width/cell),rows=Math.ceil(this.height/cell);
+    this.reachCols=cols;this.reachRows=rows;
+    const open=new Uint8Array(cols*rows);
+    for(let cx=0;cx<cols;cx++)for(let cy=0;cy<rows;cy++){
+      const x=cx*cell+cell/2,y=cy*cell+cell/2;
+      if(this.playable(x,y,16)&&!this.overlapsSolid(x,y,16))open[cx*rows+cy]=1;
+    }
+    const reach=new Uint8Array(cols*rows);
+    const start=this.playerSpawn();
+    const sx=clamp(Math.floor(start.x/cell),0,cols-1);
+    const sy=clamp(Math.floor(start.y/cell),0,rows-1);
+    const stack=[];
+    const seed=sx*rows+sy;
+    if(open[seed]){reach[seed]=1;stack.push(seed)}
+    while(stack.length){
+      const id=stack.pop();
+      const cx=(id/rows)|0,cy=id%rows;
+      for(let k=0;k<4;k++){
+        const nx=cx+(k===0?1:k===1?-1:0);
+        const ny=cy+(k===2?1:k===3?-1:0);
+        if(nx<0||ny<0||nx>=cols||ny>=rows)continue;
+        const nid=nx*rows+ny;
+        if(reach[nid]||!open[nid])continue;
+        reach[nid]=1;stack.push(nid);
+      }
+    }
+    this.reachGrid=reach;
+  }
+
+  // True when a point is on ground connected to the operative's own. Unknown
+  // points answer true: a coarse grid can miss a legitimately open spot, and
+  // refusing every spawn is worse than allowing a rare bad one.
+  reachable(x,y){
+    if(!this.reachGrid)return true;
+    const cx=clamp(Math.floor(x/REACH_CELL),0,this.reachCols-1);
+    const cy=clamp(Math.floor(y/REACH_CELL),0,this.reachRows-1);
+    if(this.reachGrid[cx*this.reachRows+cy])return true;
+    // The cell centre may be blocked while the point itself is fine, so a
+    // one-cell neighbourhood is consulted before refusing.
+    for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){
+      const nx=cx+dx,ny=cy+dy;
+      if(nx<0||ny<0||nx>=this.reachCols||ny>=this.reachRows)continue;
+      if(this.reachGrid[nx*this.reachRows+ny])return true;
+    }
+    return false;
   }
 
   // Sealed vaults. The chamber walls are ordinary geometry that reads as part
@@ -430,9 +572,14 @@ export class World{
       const x=rng.range(160,this.width-160);
       const y=midY+rng.range(-deckHalf*.72,deckHalf*.72);
       if(this.overlapsSolid(x,y,90))continue;
-      this.addCover(x,y,{type:'wreck',w:rng.range(84,132),h:rng.range(42,56),
+      // The vehicle is drawn at a fixed 108x44 with wheels to 64 tall, so the
+      // collider is that footprint. A random 84-132 wide box under fixed art
+      // left up to twelve units of invisible wall past one bumper and let the
+      // operative into the other. The yaw is kept small for the same reason:
+      // the collider cannot turn with the art.
+      this.addCover(x,y,{type:'wreck',w:WRECK_W,h:WRECK_H,
         hp:210,blocksSight:true,destructible:true});
-      this.landmarks.push({kind:'vehicle',x,y,burnt:rng.bool(.4),rotation:rng.range(-.25,.25)});
+      this.landmarks.push({kind:'vehicle',x,y,burnt:rng.bool(.4),rotation:rng.range(-WRECK_YAW,WRECK_YAW)});
     }
   }
 
@@ -448,7 +595,11 @@ export class World{
       while(x<this.width-60){
         const w=rng.range(180,420);
         if(rng.bool(.78)){
-          this.addWall(x+w/2,baseY,w,70,{type:'ridge'});
+          // drawRidge puts a snow crest from 36 units behind the ridge line to
+          // 60 units in front of it, on the valley side. The wall spans the
+          // same 96 units, so the operative stops at the crest, not 25 units
+          // into it.
+          this.addWall(x+w/2,baseY-side*RIDGE_CREST_SHIFT,w,RIDGE_DEPTH,{type:'ridge'});
           this.landmarks.push({kind:'ridge',x:x+w/2,y:baseY,w,side});
         }
         x+=w+rng.range(70,190);
@@ -465,13 +616,18 @@ export class World{
       this.addCover(x,y,{type:'boulder',w:r*2,h:r*1.7,hp:0,blocksSight:true,destructible:false});
       this.landmarks.push({kind:'boulder',x,y,r,rotation:rng.angle()});
     }
-    // A thin treeline: bare conifers, no collision beyond their trunks.
+    // A thin treeline: bare conifers. The canopy is overhead and is walked
+    // under; the trunk is not, and used to have no collider at all — the one
+    // upright thing in the valley the operative passed straight through.
     const trees=Math.round(this.width*this.height/90000);
     for(let i=0;i<trees;i++){
       const x=rng.range(90,this.width-90);
       const y=rng.range(ridge+80,this.height-ridge-80);
       if(this.overlapsSolid(x,y,44))continue;
-      this.landmarks.push({kind:'conifer',x,y,size:rng.range(30,58),rotation:rng.range(-.08,.08)});
+      const size=rng.range(30,58);
+      const trunk=Math.round(size*CONIFER_TRUNK);
+      this.addCover(x,y,{type:'conifer',w:trunk,h:trunk,hp:0,blocksSight:false,destructible:false});
+      this.landmarks.push({kind:'conifer',x,y,size,rotation:rng.range(-.08,.08)});
     }
   }
 
@@ -537,8 +693,17 @@ export class World{
         const wrecked=rng.bool(.45);
         this.addCover(x,y,{type:'fuselage',w:250*scale,h:56*scale,
           hp:0,blocksSight:true,destructible:false});
-        this.landmarks.push({kind:'aircraft',x,y,scale,rotation:facing,wrecked,
-          tailBroken:wrecked&&rng.bool(.6),wingBroken:wrecked&&rng.bool(.5)});
+        const tailBroken=wrecked&&rng.bool(.6),wingBroken=wrecked&&rng.bool(.5);
+        this.landmarks.push({kind:'aircraft',x,y,scale,rotation:facing,wrecked,tailBroken,wingBroken});
+        // The wings and tail are drawn 108 units out from the fuselage and
+        // had no collider, so the operative walked through two thirds of
+        // every airframe. They block movement now, in boxes laid along each
+        // swept panel; they still do not block sight, because the airframe's
+        // fuselage is the sightline cover and a wing is knee height.
+        for(const [px,py] of aircraftPanelBoxes(scale,facing,wingBroken,tailBroken)){
+          this.addCover(x+px,y+py,{type:'wing',w:WING_BOX*scale,h:WING_BOX*scale,
+            hp:0,blocksSight:false,destructible:false});
+        }
         this.rooms.push({x,y,w:300*scale,h:200*scale});
       }
     }
@@ -557,13 +722,17 @@ export class World{
   generateArena(){
     const radius=Math.min(this.width,this.height)*.42;
     const cx=this.width/2,cy=this.height/2;
-    const segments=44;
+    // Forty-four axis-aligned slabs each 18% of the radius long made a ring
+    // whose inner face wandered fifty units in and out around the circle: the
+    // operative was stopped a body-length short of the wall on the diagonals
+    // and touched it on the axes. Small square blocks, one every 30 units,
+    // keep that wander under fifteen (measured in tools/stage-collision.mjs).
+    const segments=ARENA_SEGMENTS;
     for(let i=0;i<segments;i++){
       const a=i/segments*Math.PI*2;
       const wx=cx+Math.cos(a)*radius;
       const wy=cy+Math.sin(a)*radius;
-      const horizontal=Math.abs(Math.cos(a))<Math.abs(Math.sin(a));
-      this.addWall(wx,wy,horizontal?radius*.18:44,horizontal?44:radius*.18,{type:'chamber'});
+      this.addWall(wx,wy,ARENA_BLOCK,ARENA_BLOCK,{type:'chamber'});
     }
     this.rooms.push({x:cx,y:cy,w:radius*1.5,h:radius*1.5,open:true});
     this.landmarks.push({kind:'arenaRing',x:cx,y:cy,r:radius});
@@ -594,6 +763,12 @@ export class World{
       if(this.overlapsSolid(x,y,Math.max(spec.w,spec.h)/2+34))continue;
       // Leave vault interiors clear so the payout has somewhere to land.
       if(this.insideVault(x,y,30))continue;
+      // And leave the operative's start clear. Cover is scattered after the
+      // start is chosen, so without this a crate can be dropped straight onto
+      // it and the contract opens with the operative inside solid geometry.
+      if(this.spawnPoint&&
+         Math.abs(x-this.spawnPoint.x)<spec.w/2+PLAYER_SPAWN_CLEARANCE+20&&
+         Math.abs(y-this.spawnPoint.y)<spec.h/2+PLAYER_SPAWN_CLEARANCE+20)continue;
       this.addCover(x,y,spec);
       placed++;
     }
@@ -610,12 +785,24 @@ export class World{
       // otherwise reject almost every candidate and leave theatres empty.
       for(let i=0;i<count;i++){
         let placed=null;
-        for(let attempt=0;attempt<30&&!placed;attempt++){
-          const clearance=Math.max(30,spec.radius*(attempt<10?.5:attempt<20?.3:.18));
+        for(let attempt=0;attempt<40&&!placed;attempt++){
+          // The clearance used to relax to 18% of the radius as attempts ran
+          // out, which put drifts across ridge walls, spore blooms half under
+          // a parapet and slicks inside sealed vaults: a zone that slows or
+          // burns the operative while most of it is buried in geometry reads
+          // as the geometry misbehaving. It now holds at just over half the
+          // radius and the hazard is dropped instead. Fewer, all of them on
+          // open ground.
+          const clearance=Math.max(30,spec.radius*HAZARD_CLEARANCE);
           const x=rng.range(180,this.width-180);
           const y=rng.range(180,this.height-180);
-          if(!this.overlapsSolid(x,y,clearance)&&!this.insideVault(x,y,20)&&
-             this.playable(x,y,90))placed={x,y};
+          if(this.overlapsSolid(x,y,clearance))continue;
+          if(this.insideVault(x,y,spec.radius*HAZARD_CLEARANCE))continue;
+          if(!this.playable(x,y,spec.radius*HAZARD_CLEARANCE))continue;
+          // Two zones stacked on one spot read as one zone with the wrong
+          // radius. Centres stay apart by most of the two radii.
+          if(this.hazards.some(h=>Math.hypot(h.x-x,h.y-y)<(h.radius+spec.radius)*HAZARD_SEPARATION))continue;
+          placed={x,y};
         }
         if(!placed)continue;
         this.hazards.push({
@@ -704,18 +891,67 @@ export class World{
     return false;
   }
 
+  // Move a circular entity by a displacement, resolving geometry on the way.
+  //
+  // Every mover in the game goes through this. The previous arrangement added
+  // the whole displacement and then called resolveCollision to push the entity
+  // back out of anything it had ended up inside, which only works while one
+  // step is shorter than the geometry it crosses. A dashing operative covers
+  // roughly 21 world units in a 1/60 step and the shallowest cover in the game
+  // is 24 units deep, so a dash into low cover could finish on the far side
+  // with nothing left overlapping to push it back — the wall-clipping the
+  // owner reported.
+  //
+  // Substepping by the entity's own radius makes that impossible by
+  // construction rather than by tuning: no substep is longer than the entity
+  // is wide, so it cannot step over a solid it would have had to pass through.
+  // Almost every call is a single substep, so the normal cost is one compare;
+  // the substep count is capped so a pathological velocity cannot turn one
+  // frame into a hundred collision queries.
+  moveEntity(entity,dx,dy,radius=entity.radius||12){
+    const distance=Math.hypot(dx,dy);
+    const limit=Math.max(4,radius*.75);
+    const steps=distance>limit?Math.min(MAX_MOVE_SUBSTEPS,Math.ceil(distance/limit)):1;
+    const stepX=dx/steps,stepY=dy/steps;
+    let corrected=false;
+    for(let i=0;i<steps;i++){
+      entity.x+=stepX;
+      entity.y+=stepY;
+      if(this.resolveCollision(entity,radius))corrected=true;
+    }
+    return corrected;
+  }
+
   // Push a circular entity out of every obstacle it is currently inside.
   // Returns true when a correction was applied.
   resolveCollision(entity,radius=entity.radius||12){
     let corrected=false;
-    const nearby=this.obstacleHash.query(entity.x,entity.y,radius+90,queryScratch);
-    for(const obstacle of nearby){
-      if(obstacle.broken)continue;
-      const push=resolveCircleRect(entity.x,entity.y,radius,obstacle.x,obstacle.y,obstacle.hw,obstacle.hh);
-      if(push){entity.x+=push.x;entity.y+=push.y;corrected=true}
+    // Arena bounds first, depenetration second. The clamp used to run last,
+    // which meant that for any solid sitting near the sector edge it could
+    // shove the entity back into the geometry depenetration had just pushed it
+    // out of, and the entity stayed buried. Whatever runs last wins, so the
+    // thing that must win runs last.
+    const clampedX=clamp(entity.x,radius+8,this.width-radius-8);
+    const clampedY=clamp(entity.y,radius+8,this.height-radius-8);
+    if(clampedX!==entity.x||clampedY!==entity.y){
+      entity.x=clampedX;entity.y=clampedY;corrected=true;
     }
-    entity.x=clamp(entity.x,radius+8,this.width-radius-8);
-    entity.y=clamp(entity.y,radius+8,this.height-radius-8);
+    const nearby=this.obstacleHash.query(entity.x,entity.y,radius+90,queryScratch);
+    // Several passes, because one is not enough in a corner: pushing out of
+    // the wall on the left can push straight into the crate below, and that
+    // crate has already been visited. A single pass left a body buried in
+    // roughly one squeeze in a hundred. Passes stop as soon as nothing moves,
+    // so open ground still costs exactly one.
+    for(let pass=0;pass<DEPENETRATION_PASSES;pass++){
+      let moved=false;
+      for(const obstacle of nearby){
+        if(obstacle.broken)continue;
+        const push=resolveCircleRect(entity.x,entity.y,radius,obstacle.x,obstacle.y,obstacle.hw,obstacle.hh);
+        if(push){entity.x+=push.x;entity.y+=push.y;moved=true}
+      }
+      if(!moved)break;
+      corrected=true;
+    }
     return corrected;
   }
 
@@ -736,14 +972,22 @@ export class World{
     const midX=(x1+x2)/2,midY=(y1+y2)/2;
     const radius=Math.hypot(x2-x1,y2-y1)/2+80;
     const nearby=this.obstacleHash.query(midX,midY,radius,queryScratch);
-    let closest=null,closestD=Infinity;
+    let closest=null,closestT=Infinity;
     for(const obstacle of nearby){
       if(obstacle.broken)continue;
       if(ignoreLowCover&&!obstacle.blocksSight)continue;
-      if(!segmentIntersectsRect(x1,y1,x2,y2,obstacle.x,obstacle.y,obstacle.hw,obstacle.hh))continue;
-      const d=dist2(x1,y1,obstacle.x,obstacle.y);
-      if(d<closestD){closestD=d;closest=obstacle}
+      const t=segmentRectEntry(x1,y1,x2,y2,obstacle.x,obstacle.y,obstacle.hw,obstacle.hh);
+      if(t===null)continue;
+      // Nearest along the ray, not nearest centre: a long thin pipe whose
+      // centre is far away can still be the first thing a shot meets.
+      if(t<closestT){closestT=t;closest=obstacle}
     }
+    // Where the shot actually met the surface, so the impact mark lands on the
+    // wall rather than at wherever the projectile had been integrated to. At
+    // 1500 units/second that was up to 25 units deep inside the geometry.
+    this.lastHitT=closest?closestT:0;
+    this.lastHitX=x1+(x2-x1)*this.lastHitT;
+    this.lastHitY=y1+(y2-y1)*this.lastHitT;
     return closest;
   }
 
@@ -761,33 +1005,100 @@ export class World{
   }
 
   // A valid open spawn position, biased away from the player.
-  findSpawn(rng,awayFrom,minDistance=520,maxDistance=1100){
-    for(let attempt=0;attempt<28;attempt++){
+  //
+  // `radius` is the entity that has to fit there. It used to be a fixed 26 for
+  // everything, so a carrier or a command signature — three times that across
+  // — was routinely deployed already overlapping a wall, and arrived shoved
+  // out of it by the depenetration pass or wedged against it.
+  findSpawn(rng,awayFrom,minDistance=520,maxDistance=1100,radius=26){
+    const fromX=awayFrom?.x??this.width/2;
+    const fromY=awayFrom?.y??this.height/2;
+    // Clearance relaxes as the attempts run out: a dense industrial floor has
+    // very few points with a carrier's full clearance, and refusing to deploy
+    // at all is worse than deploying somewhere merely tight.
+    for(let attempt=0;attempt<32;attempt++){
+      const ease=attempt/32;
+      const clearance=Math.max(20,radius*(1-ease*.55));
       const angle=rng.angle();
       const distance=rng.range(minDistance,maxDistance);
-      const x=clamp((awayFrom?.x??this.width/2)+Math.cos(angle)*distance,80,this.width-80);
-      const y=clamp((awayFrom?.y??this.height/2)+Math.sin(angle)*distance,80,this.height-80);
+      const x=clamp(fromX+Math.cos(angle)*distance,80,this.width-80);
+      const y=clamp(fromY+Math.sin(angle)*distance,80,this.height-80);
       // Never deploy hostiles into a sealed chamber they cannot leave, or
       // into a dead zone they cannot path out of.
-      if(!this.overlapsSolid(x,y,26)&&!this.insideVault(x,y,24)&&
-         this.playable(x,y,70))return{x,y};
+      if(!this.overlapsSolid(x,y,clearance)&&!this.insideVault(x,y,24)&&
+         this.playable(x,y,70)&&this.reachable(x,y))return{x,y};
     }
-    // Fall back to the arena centre offset, which generation keeps clear.
-    return{x:clamp(this.width/2,80,this.width-80),y:clamp(this.height/2,80,this.height-80)};
+    return this.fallbackSpawn(radius);
+  }
+
+  // Open ground near a point, found by walking rings outwards from it.
+  //
+  // The one primitive both fallback paths need. It never consults
+  // `playerSpawn`, so the player's own start can be resolved with it without
+  // recursing.
+  openPointNear(x,y,radius=26,{avoidVaults=true,pad=70}={}){
+    if(!this.overlapsSolid(x,y,radius)&&
+       (!avoidVaults||!this.insideVault(x,y,24))&&
+       this.playable(x,y,pad))return{x,y};
+    for(let ring=1;ring<=14;ring++){
+      const distance=ring*90;
+      const steps=8+ring*2;
+      for(let i=0;i<steps;i++){
+        const angle=(i/steps)*TAU+ring*.37;
+        const px=clamp(x+Math.cos(angle)*distance,80,this.width-80);
+        const py=clamp(y+Math.sin(angle)*distance,80,this.height-80);
+        if(!this.overlapsSolid(px,py,radius)&&
+           (!avoidVaults||!this.insideVault(px,py,24))&&
+           this.playable(px,py,pad))return{x:px,y:py};
+      }
+    }
+    return null;
+  }
+
+  // Somewhere known to be open, for when the biased search has failed.
+  //
+  // This used to return the arena centre on the stated assumption that
+  // "generation keeps it clear". Three layouts put geometry there — the arena
+  // ring, the modular grid and the vault chamber — so the assumption was
+  // wrong and the failure mode was a hostile deployed inside a wall. The
+  // operative's own start is a point generation now guarantees, so a ring walk
+  // outwards from it is a fallback that has actually been checked.
+  fallbackSpawn(radius=26){
+    const start=this.playerSpawn();
+    return this.openPointNear(start.x,start.y,radius)||{x:start.x,y:start.y};
   }
 
   // Player start: the most open room we generated. Resolved once during
   // generation, before vaults and cover are placed, so both can be kept clear
   // of it — a vault built around the spawn would seal the operative in.
   computePlayerSpawn(){
-    if(this.authoredSpawn)return{...this.authoredSpawn};
-    if(!this.rooms.length)return{x:this.width/2,y:this.height/2};
-    let best=this.rooms[0],bestArea=0;
+    // Every candidate is validated before it is returned, and an unvalidated
+    // one is never returned at all. The previous version fell back to
+    // `rooms[0]` when no room had clearance, and to the bare arena centre when
+    // a layout produced no rooms; across eighty generated sectors that put the
+    // operative inside solid geometry in fourteen of them, which is the
+    // wall-clipping-at-spawn the owner hit.
+    const fits=(x,y)=>!this.overlapsSolid(x,y,PLAYER_SPAWN_CLEARANCE)&&
+                      this.playable(x,y,60);
+    if(this.authoredSpawn&&fits(this.authoredSpawn.x,this.authoredSpawn.y))return{...this.authoredSpawn};
+    let best=null,bestArea=-1;
     for(const room of this.rooms){
       const area=room.w*room.h;
-      if(area>bestArea&&!this.overlapsSolid(room.x,room.y,40)){bestArea=area;best=room}
+      if(area>bestArea&&fits(room.x,room.y)){bestArea=area;best=room}
     }
-    return{x:best.x,y:best.y};
+    if(best)return{x:best.x,y:best.y};
+    // No room had the clearance. Search outwards from the largest room we do
+    // have, or from the middle of the sector when there are no rooms at all.
+    const anchor=this.rooms.reduce((a,r)=>!a||r.w*r.h>a.w*a.h?r:a,null)
+      ||{x:this.width/2,y:this.height/2};
+    const open=this.openPointNear(anchor.x,anchor.y,PLAYER_SPAWN_CLEARANCE,
+      {avoidVaults:true,pad:60});
+    if(open)return open;
+    // Nothing in the sector has operative clearance. Generation should make
+    // this impossible; carving a hole is better than starting inside a wall.
+    this.carve({x:this.width/2,y:this.height/2,w:200,h:200});
+    this.rebuildHash();
+    return{x:this.width/2,y:this.height/2};
   }
 
   playerSpawn(){
@@ -823,11 +1134,15 @@ export class World{
 
   // A kill's worth of staining: a main pool with satellite spatter thrown
   // along the direction of the killing blow.
-  splatter(x,y,{radius=14,color='#4a1f22',alpha=.3,angle=null,intensity=1,kind='splat'}={}){
+  // `drops` scales the satellite count on its own, so a wetter kill can throw
+  // more spatter without also throwing it further — the two used to be the same
+  // number, which meant asking for more mess also asked for it across half the
+  // sector.
+  splatter(x,y,{radius=14,color='#4a1f22',alpha=.3,angle=null,intensity=1,drops=1,kind='splat'}={}){
     const rng=this.rng;
     this.addDecal(x,y,radius*rng.range(.9,1.25),color,alpha,kind);
-    const drops=Math.round(rng.range(3,6)*intensity);
-    for(let i=0;i<drops;i++){
+    const count=Math.round(rng.range(3,6)*intensity*drops);
+    for(let i=0;i<count;i++){
       // Spatter cones along the hit direction when there is one, and throws in
       // all directions when the kill had no clear vector.
       const a=angle!==null?angle+rng.range(-.7,.7):rng.angle();

@@ -46,6 +46,10 @@
 .vt-grid b{color:#eafffc;font-variant-numeric:tabular-nums}
 
 .vt-note{font-size:8.5px;line-height:1.5;color:#7d8f92;word-break:break-word}
+.vt-note code{color:#9fe8dc}
+/* The live internal resolution, beside the RENDER SCALE heading, so the
+   cost of a supersample factor is visible before it is chosen. */
+.vt-inline{float:right;color:#7d8f92;letter-spacing:.08em;text-transform:none}
 .vt-warn{color:#ff9d5c;display:block;margin-top:4px}
 
 .vt-row{display:flex;flex-wrap:wrap;gap:4px}

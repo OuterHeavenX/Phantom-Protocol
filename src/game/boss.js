@@ -1,4 +1,5 @@
 import {clamp,dist,normalize,damp,TAU} from '../core/math.js';
+import {weaponVoice} from '../../data/weapons.js';
 
 // Boss controller. A boss is a phase machine: each phase declares a weighted
 // set of attack patterns with independent cooldowns, and phases swap in at
@@ -57,6 +58,7 @@ export class Boss{
     this.updatePhase(engine);
     this.updateShield(dt);
     this.move(dt,engine);
+    this.updateGait(dt,engine);
 
     // Windup: telegraph is visible, then the pattern releases.
     if(this.windup>0){
@@ -107,9 +109,34 @@ export class Boss{
     // Phase transition clears the field of its own shots and announces itself.
     engine.clearEnemyProjectiles(.6);
     engine.onBossPhase?.(this,this.phase);
-    engine.camera.addShake(.5);
+    engine.camera.addShake(.5,'boss');
     engine.audio.play('boss',{volume:.8});
     this.globalCooldown=1.4;
+  }
+
+  // The walk cycle, and the footfalls that come out of it.
+  //
+  // This used to live in the renderer, which advanced `stridePhase` on a
+  // hardcoded sixteen milliseconds per call — so the gait ran at whatever
+  // frame rate the device managed, and the draw pass was writing simulation
+  // state, which is the one thing it is not allowed to do. Here it is on the
+  // fixed step like everything else, and a foot planting is an event the rest
+  // of the game can hear.
+  updateGait(dt,engine){
+    const gait=this.def.gait;
+    if(!gait)return;
+    const speed=Math.hypot(this.vx,this.vy);
+    // A machine this size never fully stops moving its legs; it idles.
+    const cadence=(.55+Math.min(1,speed/(gait.topSpeed||120))*2.4)*(gait.cadence||1);
+    const limp=this.strideLimp?.5:1;
+    const before=this.stridePhase||0;
+    this.stridePhase=before+cadence*limp*dt;
+    // One foot down per half cycle for a biped. A quadruped lands diagonal
+    // pairs, so it is the same count of impacts and half the weight in each.
+    const step=Math.PI;
+    if(Math.floor(this.stridePhase/step)>Math.floor(before/step)){
+      engine.mechFootfall?.(this);
+    }
   }
 
   updateShield(dt){
@@ -166,7 +193,7 @@ export class Boss{
       x:this.x,y:this.y,radius:220,damage:(this.chargeDamage||30)*.7*this.damageMult,
       knockback:420,color:this.def.accent,hostile:true
     });
-    engine.camera.addShake(.4);
+    engine.camera.addShake(.4,'boss');
     engine.audio.play('explode',{volume:1});
   }
 
@@ -213,8 +240,8 @@ const PATTERNS={
           radius:6,color:boss.def.color,life:5,fromBoss:true
         });
       }
-      engine.audio.play('shootHeavy',{volume:.8});
-      engine.camera.addShake(.12);
+      engine.audio.play('shootHeavy',{volume:.8,hostile:true});
+      engine.camera.addShake(.12,'boss');
     }
   },
 
@@ -241,7 +268,7 @@ const PATTERNS={
           }
         });
       }
-      engine.audio.play('tech',{volume:.7});
+      engine.audio.play('tech',{volume:.7,hostile:true});
     }
   },
 
@@ -268,8 +295,8 @@ const PATTERNS={
           color:boss.def.color
         });
       }
-      engine.audio.play('laser',{volume:1.1});
-      engine.camera.addShake(.2);
+      engine.audio.play('laser',{volume:1.1,hostile:true});
+      engine.camera.addShake(.2,'boss');
     }
   },
 
@@ -293,7 +320,7 @@ const PATTERNS={
           });
         });
       }
-      engine.audio.play('shootHeavy',{volume:.7});
+      engine.audio.play('shootHeavy',{volume:.7,hostile:true});
     }
   },
 
@@ -313,7 +340,7 @@ const PATTERNS={
       boss.chargeDamage=pattern.damage;
       boss.chargeShockwave=!!pattern.shockwave;
       engine.audio.play('dash',{volume:1.1});
-      engine.camera.addShake(.24);
+      engine.camera.addShake(.24,'boss');
     }
   },
 
@@ -328,7 +355,7 @@ const PATTERNS={
   droneCurtain:{
     fire(boss,pattern,engine){
       engine.spawnEscortSquad(pattern.unit||'pursuit',pattern.count||8,boss);
-      engine.audio.play('tech',{volume:.8});
+      engine.audio.play('tech',{volume:.8,hostile:true});
     }
   },
 
@@ -346,7 +373,7 @@ const PATTERNS={
         engine.spawnBlinkVfx(boss.x,boss.y,boss.radius,boss.def.color);
         boss.x=x;boss.y=y;
         engine.spawnBlinkVfx(x,y,boss.radius,boss.def.color);
-        engine.audio.play('tech',{volume:.9});
+        engine.audio.play('tech',{volume:.9,hostile:true});
         return;
       }
     }
@@ -383,7 +410,7 @@ const PATTERNS={
         duration:pattern.duration||4,damage:pattern.damage,
         tickInterval:.5,color:boss.def.accent,follow:boss
       });
-      engine.audio.play('scramble',{volume:.9});
+      engine.audio.play('scramble',{volume:.9,hostile:true});
     }
   },
 
@@ -415,7 +442,12 @@ const PATTERNS={
         });
       }
       engine.addFloatingText(boss.x,boss.y-boss.radius-20,weapon.name.toUpperCase(),'#e0e6ea');
-      engine.audio.play('shoot',{volume:1});
+      // THE ARBITER is firing the operative's own weapon back at them, so it
+      // fires with that weapon's voice — shaded as incoming, which is the whole
+      // joke: you recognise the gun and it is pointed the wrong way.
+      engine.audio.play('enemyWeapon',{
+        voice:weaponVoice(weapon),hostile:true,volume:.9
+      });
     }
   }
 };

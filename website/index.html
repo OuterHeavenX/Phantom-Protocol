@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#050505" />
+  <meta name="color-scheme" content="dark" />
+  <title>RED STATIC — The Signal Found You</title>
+  <meta name="description" content="Enter RED STATIC — a hostile roguelite survival operation where every deployment makes you stronger and every sector grows more hostile." />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#operation">Skip to content</a>
+
+  <div class="boot" data-boot aria-hidden="true">
+    <div class="boot__mark">RED STATIC</div>
+    <div class="boot__status" data-boot-status>INITIALIZING FIELD LINK</div>
+  </div>
+
+  <div class="signal-flash" data-signal-flash aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
+
+  <header class="site-header" data-header>
+    <a class="brand" href="#top" aria-label="RED STATIC home">RED STATIC</a>
+    <nav class="desktop-nav" aria-label="Primary">
+      <a href="#operation">GAME</a>
+      <a href="#operatives">OPERATIVES</a>
+      <a href="#armory">ARMORY</a>
+      <a href="#intelligence">INTELLIGENCE</a>
+      <a href="#media">MEDIA</a>
+      <a href="#devlog">DEVLOG</a>
+    </nav>
+    <a class="deploy-link" href="#deploy">PLAY NOW</a>
+    <button class="menu-button" type="button" data-menu-button aria-expanded="false" aria-controls="mobile-menu">COMMAND</button>
+  </header>
+
+  <div class="mobile-menu" id="mobile-menu" data-mobile-menu hidden>
+    <div class="mobile-menu__meta">OPEN CHANNEL // NAVIGATION</div>
+    <nav aria-label="Mobile primary">
+      <a href="#operation">GAME</a>
+      <a href="#operatives">OPERATIVES</a>
+      <a href="#armory">ARMORY</a>
+      <a href="#intelligence">INTELLIGENCE</a>
+      <a href="#media">MEDIA</a>
+      <a href="#devlog">DEVLOG</a>
+    </nav>
+    <a class="button button--primary" href="#deploy">DEPLOY NOW →</a>
+  </div>
+
+  <main id="top">
+    <section class="hero" aria-labelledby="hero-title" data-hero>
+      <div class="hero__environment" aria-hidden="true">
+        <img class="hero__art" src="./assets/observation-room.webp" alt="" fetchpriority="high" />
+        <div class="facility-light facility-light--left"></div>
+        <div class="facility-light facility-light--right"></div>
+        <div class="window-frame" data-depth="0.86">
+          <div class="window-frame__top"></div>
+          <div class="window-frame__side window-frame__side--left"></div>
+          <div class="window-frame__side window-frame__side--right"></div>
+          <div class="operative" data-depth="0.9">
+            <div class="operative__head"></div>
+            <div class="operative__body"></div>
+          </div>
+          <div class="unknown-figure" data-unknown-figure>
+            <div class="unknown-figure__head"></div>
+            <div class="unknown-figure__body"></div>
+          </div>
+          <div class="condensation"></div>
+        </div>
+      </div>
+
+      <div class="hero__tracking" data-tracking aria-hidden="true">
+        <span class="hero__tracking-box"></span>
+        <span class="hero__tracking-copy" data-tracking-copy>MOVEMENT DETECTED</span>
+      </div>
+
+      <div class="hero__content" data-depth="1.04">
+        <p class="eyebrow">OPEN CHANNEL // UNKNOWN SOURCE</p>
+        <h1 id="hero-title">THE SIGNAL<br /><span>FOUND YOU.</span></h1>
+        <p class="hero__lede">Enter RED STATIC — a relentless roguelite survival operation where every deployment makes you stronger, every sector grows more hostile, and death is only another transmission.</p>
+        <div class="hero__actions">
+          <a class="button button--primary" href="#deploy"><span>DEPLOY NOW</span><span aria-hidden="true">→</span></a>
+          <a class="button button--ghost" href="#media">WATCH FIELD FOOTAGE</a>
+        </div>
+        <div class="hero__meta">
+          <span>BUILD 0.3 // ACTIVE DEVELOPMENT</span>
+          <span data-signal-strength>SIGNAL STRENGTH 87%</span>
+        </div>
+      </div>
+
+      <div class="hero__coordinates" aria-hidden="true">34° 02' 18.4" N // 118° 14' 37.1" W</div>
+      <div class="hero__scroll-cue" aria-hidden="true"><span></span>DESCEND</div>
+    </section>
+
+    <section class="operation" id="operation">
+      <div class="section-label">01 // THE OPERATION</div>
+      <h2>EVERY DEPLOYMENT<br />GETS WORSE.</h2>
+      <p class="section-intro">You enter with a plan. The sector reacts. Build pressure, adapt your loadout, and survive long enough to bring something back.</p>
+
+      <div class="operation-steps">
+        <article class="operation-step" data-state="deploy">
+          <span class="operation-step__num">01</span>
+          <h3>DEPLOY</h3>
+          <p>Enter hostile sectors built to break routine.</p>
+        </article>
+        <article class="operation-step" data-state="adapt">
+          <span class="operation-step__num">02</span>
+          <h3>ADAPT</h3>
+          <p>Weapons, abilities, operatives and upgrades evolve inside the run.</p>
+        </article>
+        <article class="operation-step" data-state="survive">
+          <span class="operation-step__num">03</span>
+          <h3>SURVIVE</h3>
+          <p>Extract resources — or disappear with them.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="placeholder-section" id="media">
+      <div class="section-label">02 // SURVEILLANCE ARCHIVE</div>
+      <h2>FIELD FOOTAGE<br />RECOVERED.</h2>
+      <div class="archive-frame" data-archive>
+        <img class="archive-frame__image" data-archive-image src="./assets/footage-blacksite-zero.webp" alt="Recovered tactical footage from a wet corridor inside Blacksite Zero" loading="lazy" />
+        <div class="archive-frame__scan"></div>
+        <div class="archive-frame__meta">
+          <span data-archive-id>RECOVERED // BZ-043</span>
+          <span data-archive-location>BLACKSITE ZERO</span>
+          <span data-archive-status>OPERATIVE // UNKNOWN</span>
+        </div>
+        <button class="archive-frame__play" type="button" data-archive-play aria-pressed="false">PLAY RECOVERED SIGNAL</button>
+        <div class="archive-frame__time"><span data-archive-time>00:00:00</span><span>SOURCE DAMAGED</span></div>
+      </div>
+      <div class="archive-selector" aria-label="Recovered footage files">
+        <button class="archive-file is-active" type="button" data-archive-file data-src="./assets/footage-blacksite-zero.webp" data-id="RECOVERED // BZ-043" data-location="BLACKSITE ZERO" data-status="OPERATIVE // UNKNOWN" data-alt="Recovered tactical footage from a wet corridor inside Blacksite Zero"><span>01</span><strong>CORRIDOR 04</strong><small>03:17 // SIGNAL LOSS</small></button>
+        <button class="archive-file" type="button" data-archive-file data-src="./assets/footage-red-desert.webp" data-id="RECOVERED // RD-019" data-location="RED DESERT" data-status="THEATRE // UNVERIFIED" data-alt="Aerial reconnaissance footage of a relay compound in the Red Desert"><span>02</span><strong>RELAY COMPOUND</strong><small>01:42 // ANOMALY</small></button>
+      </div>
+    </section>
+
+    <section class="placeholder-section" id="operatives">
+      <div class="section-label">03 // OPERATIVES</div>
+      <h2>THEY WERE NOT<br />SUPPOSED TO SURVIVE.</h2>
+      <div class="operative-strip" aria-label="RED STATIC operatives">
+        <span>JIMMY</span><span>KOREY</span><span>KADE</span><span>MIGUEL</span><span>SARAH</span><span>MICHAEL</span><span>MICHELLE</span><span>VINCENT</span>
+      </div>
+    </section>
+
+    <section class="placeholder-section" id="armory">
+      <div class="section-label">04 // ADAPTATION SYSTEM</div>
+      <h2>NOTHING LEAVES<br />THE SAME.</h2>
+      <div class="weapon-schematic" aria-hidden="true">
+        <div class="weapon-schematic__barrel"></div>
+        <div class="weapon-schematic__body"></div>
+        <div class="weapon-schematic__stock"></div>
+      </div>
+      <p class="section-intro">Issued hardware does not stay issued. Every evolution trades control for output until the weapon stops resembling the thing you carried in.</p>
+    </section>
+
+    <section class="placeholder-section" id="intelligence">
+      <div class="section-label">05 // INTELLIGENCE ARCHIVE</div>
+      <h2>IT WASN'T<br />TRANSMITTING.</h2>
+      <div class="intel-fragment">
+        <span>SOURCE ███████████</span>
+        <span>RECOVERED 03:17:22</span>
+        <p>We thought it was a transmission.</p>
+        <p class="intel-fragment__final">It was listening.</p>
+      </div>
+    </section>
+
+    <section class="placeholder-section" id="devlog">
+      <div class="section-label">06 // ACTIVE DEVELOPMENT</div>
+      <h2>THE SIGNAL<br />IS STILL CHANGING.</h2>
+      <p class="section-intro">RED STATIC is in active development. Build notes, deployed systems and upcoming operations will live here without breaking the fiction of the site.</p>
+    </section>
+
+    <section class="final-cta" id="deploy">
+      <div class="terminal-cursor" aria-hidden="true"></div>
+      <p class="eyebrow">INCOMING TRANSMISSION</p>
+      <h2>READY TO DEPLOY?</h2>
+      <div class="waveform" aria-hidden="true"></div>
+      <div class="final-cta__actions">
+        <a class="button button--primary" href="../index.html">ENTER RED STATIC →</a>
+        <button class="button button--ghost abort-button" type="button" data-abort>ABORT</button>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <a class="brand" href="#top">RED STATIC</a>
+    <nav aria-label="Footer">
+      <a href="../index.html">PLAY</a>
+      <a href="#intelligence">INTELLIGENCE</a>
+      <a href="#devlog">DEVLOG</a>
+      <a href="https://github.com/OuterHeavenX/Phantom-Protocol">GITHUB</a>
+    </nav>
+    <span>SIGNAL LOST //</span>
+  </footer>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-import {ALL_WEAPON_FORMS,MAX_WEAPON_LEVEL,evolutionFor} from '../../data/weapons.js';
+import {ALL_WEAPON_FORMS,MAX_WEAPON_LEVEL,evolutionFor,weaponVoice} from '../../data/weapons.js';
 import {PASSIVES_BY_ID,MAX_PASSIVE_LEVEL} from '../../data/passives.js';
 import {clamp,dist,dist2,normalize,TAU} from '../core/math.js';
 import {applyMods} from './gunsmith.js';
@@ -229,8 +229,8 @@ const BEHAVIORS={
         weapon,color:tracer(weapon,engine,'#ffe08a'),trail:true
       });
     }
-    engine.muzzleFlash(baseAngle,count>2?1.3:1);
-    engine.audio.play(weapon.def.sound||'shoot',{volume:.9});
+    engine.muzzleFlash(baseAngle,count>2?1.3:1,weapon);
+    engine.audio.play('weapon',{voice:weaponVoice(weapon.def),volume:.9});
     return true;
   },
 
@@ -254,8 +254,11 @@ const BEHAVIORS={
           life:(weapon.stat('range',stats)||500)/speed,
           weapon,color:tracer(weapon,engine,'#ffd98a'),trail:true
         });
-        engine.muzzleFlash(angle,.8);
-        engine.audio.play('shoot',{volume:.7});
+        engine.muzzleFlash(angle,.8,weapon);
+        // A burst is one weapon speaking, so every round in it is the same
+        // voice — quieter after the first, which is how a burst actually
+        // arrives rather than as three identical shots.
+        engine.audio.play('weapon',{voice:weaponVoice(weapon.def),volume:.7,tail:.5});
       });
     }
     return true;
@@ -284,9 +287,9 @@ const BEHAVIORS={
         weapon,color:tracer(weapon,engine,'#ffc978')
       });
     }
-    engine.muzzleFlash(baseAngle,1.7);
+    engine.muzzleFlash(baseAngle,1.7,weapon);
     engine.camera.addShake(.09);
-    engine.audio.play(weapon.def.sound||'shootHeavy',{volume:1});
+    engine.audio.play('weapon',{voice:weaponVoice(weapon.def),volume:1});
     return true;
   },
 
@@ -312,9 +315,9 @@ const BEHAVIORS={
         weapon,color:tracer(weapon,engine,'#e8f6ff'),heavy:true,trail:true
       });
     }
-    engine.muzzleFlash(angle,2.1);
+    engine.muzzleFlash(angle,2.1,weapon);
     engine.camera.addShake(.14);
-    engine.audio.play(weapon.def.sound||'shootHeavy',{volume:1.1});
+    engine.audio.play('weapon',{voice:weaponVoice(weapon.def),volume:1.1});
     return true;
   },
 
@@ -338,8 +341,8 @@ const BEHAVIORS={
         weapon,color:tracer(weapon,engine,'#9be8ff'),beam:true,trail:true
       });
     }
-    engine.muzzleFlash(angle,1.6);
-    engine.audio.play(weapon.def.sound||'laser',{volume:.95});
+    engine.muzzleFlash(angle,1.6,weapon);
+    engine.audio.play('weapon',{voice:weaponVoice(weapon.def),volume:.95});
     return true;
   },
 
@@ -363,7 +366,7 @@ const BEHAVIORS={
         weapon
       });
     }
-    engine.audio.play('shoot',{volume:.6});
+    engine.audio.play('weapon',{voice:weaponVoice(weapon.def),volume:.6});
     return true;
   },
 
@@ -417,7 +420,7 @@ const BEHAVIORS={
       color:tracer(weapon,engine,'#8fd8ff'),weapon
     });
     engine.camera.addShake(.16);
-    engine.audio.play(weapon.def.sound||'scramble',{volume:.9});
+    engine.audio.play('weapon',{voice:weaponVoice(weapon.def),volume:.9});
     return true;
   },
 
@@ -434,7 +437,7 @@ const BEHAVIORS={
       knockback:weapon.stat('knockback',stats),
       weapon
     });
-    engine.audio.play(weapon.def.sound||'laser',{volume:.85});
+    engine.audio.play('weapon',{voice:weaponVoice(weapon.def),volume:.85});
     return true;
   },
 
@@ -456,7 +459,7 @@ const BEHAVIORS={
         weapon,color:tracer(weapon,engine,'#ffb35c'),trail:true,smoke:true
       });
     }
-    engine.audio.play('shoot',{volume:.7});
+    engine.audio.play('weapon',{voice:weaponVoice(weapon.def),volume:.7});
     return true;
   },
 
@@ -479,7 +482,7 @@ const BEHAVIORS={
       });
     }
     engine.camera.addShake(.1);
-    engine.audio.play(weapon.def.sound||'laser',{volume:1});
+    engine.audio.play('weapon',{voice:weaponVoice(weapon.def),volume:1});
     return true;
   },
 
@@ -514,7 +517,7 @@ const BEHAVIORS={
       current=next;
     }
     engine.spawnChainVfx(points,'#b6ff8a');
-    engine.audio.play(weapon.def.sound||'tech',{volume:.8});
+    engine.audio.play('weapon',{voice:weaponVoice(weapon.def),volume:.8});
     return true;
   },
 

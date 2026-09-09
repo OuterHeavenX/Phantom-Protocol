@@ -1,7 +1,7 @@
 import {Rng} from '../core/rng.js';
 import {profiler} from '../core/profiler.js';
 import {Camera} from '../core/camera.js';
-import {clamp,damp,dist,dist2,normalize,compact,approachAngle,SpatialHash,TAU} from '../core/math.js';
+import {clamp,damp,dist,dist2,normalize,compact,approachAngle,segmentHitsCircle,SpatialHash,TAU} from '../core/math.js';
 import {World} from './world.js';
 import {Director} from './director.js';
 import {EnemyBrain,AI_STATES} from './ai.js';
@@ -20,10 +20,11 @@ import {DEPLOY_KITS,deployKit} from '../../data/deploykits.js';
 import {vaultKind} from '../../data/vaults.js';
 import {captureStep,ReplayRecorder,ReplayPlayer,REPLAY_VERSION,SIM_SETTINGS} from './replay.js';
 import {ABILITIES,TRAITS,distanceToSegment} from './abilities.js';
-import {ENEMIES_BY_ID,STATUS_EFFECTS} from '../../data/enemies.js';
+import {ENEMIES_BY_ID,STATUS_EFFECTS,enemyVoice,enemyChassis} from '../../data/enemies.js';
+import {roleColor} from '../../data/colorblind.js';
 import {BOSSES_BY_ID,MINIBOSSES} from '../../data/bosses.js';
 import {baseStats} from '../../data/passives.js';
-import {WEAPONS_BY_ID} from '../../data/weapons.js';
+import {WEAPONS_BY_ID,weaponVoice} from '../../data/weapons.js';
 import {devBonuses} from '../../data/meta.js';
 import {masteryBonuses} from '../../data/operatives.js';
 
@@ -34,7 +35,18 @@ import {masteryBonuses} from '../../data/operatives.js';
 const FIXED_STEP=1/60;
 const MAX_STEPS=5;
 export const EXTRACTION_RADIUS=95;
+// Seconds remaining at which the extraction window calls out again.
+const EXTRACTION_CALLS=[30,15,5];
 export const EXTRACTION_HOLD=2.5;
+// How much the camera is pushed by firing, per weapon family. Deliberately
+// small numbers: this arrives many times a second, and anything that reads as
+// dramatic on one shot is unbearable over a magazine.
+const RECOIL={
+  suppressed:.008,pistol:.014,smg:.012,tech:.006,beam:.008,
+  rifle:.02,marksman:.038,corrupted:.026,lmg:.024,
+  shotgun:.05,sniper:.06,heavy:.075
+};
+
 // Movement bonus while the extraction window is open. Withdrawing across a
 // saturated sector on foot was reliably the deadliest part of a contract;
 // this makes the run for the beacon a sprint the operative can actually win.
@@ -141,6 +153,10 @@ export class Engine{
     this.fields=[];
     this.meleeArcs=[];
     this.decoys=[];
+    // Aircraft that have been destroyed but have not landed yet. A wreck is
+    // not a combatant — it does not shoot, cannot be shot, and gives no credit
+    // — so it is kept out of `enemies` rather than flagged inside it.
+    this.wrecks=[];
     this.scheduled=[];
     this.effects=new Map();
 
@@ -150,6 +166,8 @@ export class Engine{
     // ---- Run state --------------------------------------------------------
     this.elapsed=0;
     this.accumulator=0;
+    this.interpAlpha=0;
+    this._interpApplied=false;
     this.timeRemaining=config.duration*60;
     this.extraction=false;
     this.extractionTimer=25;
@@ -297,7 +315,7 @@ export class Engine{
     const spawn=this.world.findSpawn(this.rng,{
       x:this.player.x+Math.cos(angle)*70,
       y:this.player.y+Math.sin(angle)*70
-    },0,120);
+    },0,120,14);
     this.squad.push(new Squadmate(this,mate,spawn));
   }
 
@@ -408,20 +426,98 @@ export class Engine{
     trait?.[hook]?.(this,...args);
   }
 
-  resize(width,height){
-    this.camera.resize(width,height);
+  // Drawing-buffer size first, then the element's layout size. The second pair
+  // is what turns a pointer event into a world position; without it aim is
+  // wrong by the device pixel ratio. Both renderers call this with the same
+  // numbers, which is what keeps aim identical between them.
+  resize(width,height,cssWidth,cssHeight){
+    this.camera.resize(width,height,cssWidth,cssHeight);
   }
 
   // -------------------------------------------------------------------------
   // Main loop
   // -------------------------------------------------------------------------
 
+  // ---- Render interpolation ----------------------------------------------
+  // The simulation advances in whole 1/60 quanta, but the display does not.
+  // On a 120 Hz panel that means every other frame advances the world by zero
+  // and the one after it by a full step — the actors, and with them the camera
+  // that damps toward the operative, arrive in visible 4 px hops. Measured on
+  // the loop model: p95 judder 4.01 px at 120 Hz, 4.06 px at 144 Hz, and zero
+  // at exactly 60 Hz, which is why it only shows up on good hardware.
+  //
+  // The fix is to remember where each actor stood before the step and draw it
+  // partway between there and where it stands now, `alpha` being how much of
+  // the next step the accumulator is already holding. Positions are swapped in
+  // place rather than passed alongside, so every existing draw site — sprites,
+  // lights, minimap, HUD markers — smooths without knowing this exists. The
+  // swap is undone before the next step, so the simulation never sees an
+  // interpolated coordinate and replays stay bit-identical.
+  interpolatedGroups(){
+    return [this.enemies,this.pickups,this.turrets,this.phantoms,this.squad,
+      this.decoys,this.grenades,this.mines,
+      this.player?[this.player]:null,this.boss?[this.boss]:null];
+  }
+
+  captureInterpolation(){
+    for(const group of this.interpolatedGroups()){
+      if(!group)continue;
+      for(const e of group){if(e){e.rx=e.x;e.ry=e.y;}}
+    }
+  }
+
+  applyInterpolation(){
+    if(this._interpApplied)return;
+    // Note that alpha 0 means "draw the previous state", not "draw the current
+    // one": the display trails the simulation by up to one step, which is the
+    // price of never guessing at a position the simulation has not produced.
+    // Skipping the swap at alpha 0 was worse than no interpolation at all — on
+    // a 120 Hz panel it left every second frame fully advanced and every other
+    // one halfway back, so the operative shuffled forward and back by 4.9 px
+    // instead of gliding.
+    const alpha=this.interpAlpha;
+    this._interpApplied=true;
+    for(const group of this.interpolatedGroups()){
+      if(!group)continue;
+      for(const e of group){
+        // Entities spawned during the step have no previous position, so they
+        // appear where the simulation put them rather than sliding in from a
+        // coordinate they never occupied.
+        if(!e||e.rx===undefined)continue;
+        e._ix=e.x;e._iy=e.y;
+        e.x=e.rx+(e.x-e.rx)*alpha;
+        e.y=e.ry+(e.y-e.ry)*alpha;
+      }
+    }
+  }
+
+  restoreInterpolation(){
+    if(!this._interpApplied)return;
+    this._interpApplied=false;
+    for(const group of this.interpolatedGroups()){
+      if(!group)continue;
+      for(const e of group){
+        if(!e||e._ix===undefined)continue;
+        e.x=e._ix;e.y=e._iy;
+        e._ix=undefined;e._iy=undefined;
+      }
+    }
+  }
+
   // Fixed-timestep simulation with an accumulator, so behaviour is identical
   // at 30, 60 and 144 Hz. The previous build scaled everything by a variable
   // dt clamped to 33ms, which made high-refresh displays play differently.
   update(realDt,input){
     if(this.ended)return;
+    // A negative or non-finite delta must never reach the accumulator: it
+    // stalls the fixed step until the debt is paid off, and every downstream
+    // system that integrates on real time goes backwards with it.
+    realDt=Math.max(0,realDt)||0;
     this.frame++;
+    // Hit-stop and pause return early without stepping, and leave the actors
+    // where they were last drawn; only a frame that will actually advance the
+    // simulation needs the true coordinates back.
+    if(this.fx.hitStop<=0&&!this.paused&&this.pendingLevelUps===0)this.restoreInterpolation();
 
     if(this.fx.hitStop>0){
       this.fx.hitStop-=realDt;
@@ -453,6 +549,11 @@ export class Engine{
     }
     profiler.count_('steps',steps);
     profiler.mark('sim');
+    // Whatever the accumulator still holds is the fraction of the next step
+    // the display is already into. Everything below this line — the camera
+    // included — sees the smoothed positions.
+    this.interpAlpha=clamp(this.accumulator/FIXED_STEP,0,1);
+    if(this.settings.renderInterpolation!==false)this.applyInterpolation();
     profiler.peak('enemies',this.enemies.length);
     profiler.peak('particles',this.fx.stats?.particles||0);
 
@@ -461,9 +562,11 @@ export class Engine{
     this.camera.follow(this.player,this.aimLead,realDt);
     this.camera.update(realDt,this.settings.screenShake??1);
     this.audio.setIntensity(clamp(this.enemies.length/70+(this.boss?.4:0),0,1));
+    this.updateRotor();
   }
 
   step(dt,input){
+    this.captureInterpolation();
     this.elapsed+=dt;
     this.dt=dt;
     if(this.director.progress>=.5)this.codec.fire('halfway');
@@ -520,6 +623,30 @@ export class Engine{
     }else{
       this.extractionTimer-=dt;
       if(this.extractionTimer<=0)this.finish(false,'EXTRACTION WINDOW MISSED');
+      // The window announces itself once, and a single four-second banner is
+      // nothing at all against a command signature and a full screen of
+      // hostiles — which is exactly when the window opens on a long contract.
+      // Losing a twenty-minute run to a message you never saw is not a
+      // difficulty. It repeats while the operative is still away from the
+      // beacon, and gets more insistent as the window closes.
+      const point=this.extractionPoint;
+      const away=!point||dist(this.player.x,this.player.y,point.x,point.y)>EXTRACTION_RADIUS;
+      // Three moments, not a metronome. The window is already stated
+      // permanently by the HUD phase line, the countdown and the beacon arrow;
+      // this is the part that has to cut through a firefight, and a banner
+      // every few seconds stops being read at all.
+      // `_extractCalled` holds the lowest threshold already called, so each one
+      // fires exactly once as the clock passes it.
+      const seconds=Math.ceil(this.extractionTimer);
+      for(const at of EXTRACTION_CALLS){
+        if(seconds>at||at>=this._extractCalled)continue;
+        this._extractCalled=at;
+        if(away){
+          this.announce(`EXTRACTION // ${at}s LEFT`,at<=15?'#ff7068':'#f5d27a',2.4);
+          this.audio.play('alarm',{volume:at<=15?.7:.5});
+        }
+        break;
+      }
     }
 
     this.comboTimer-=dt;
@@ -685,9 +812,10 @@ export class Engine{
     }
 
     const previousX=player.x,previousY=player.y;
-    player.x+=player.vx*dt;
-    player.y+=player.vy*dt;
-    this.world.resolveCollision(player,player.radius);
+    // Swept rather than teleport-then-depenetrate. A dash covers more ground
+    // in one step than the shallowest cover is deep, and resolving only at the
+    // destination let it finish on the far side of a wall.
+    this.world.moveEntity(player,player.vx*dt,player.vy*dt,player.radius);
     this.telemetry.distance+=dist(previousX,previousY,player.x,player.y);
     player.walkPhase+=Math.hypot(player.vx,player.vy)*dt*.05;
 
@@ -702,7 +830,7 @@ export class Engine{
       player.invulnerable=2.4;
       this.fx.flash('#76e7d4',.5);
       this.fx.ring(player.x,player.y,20,320,.7,'#76e7d4',5);
-      this.camera.addShake(.45);
+      this.camera.addShake(.45,'explosion');
       this.audio.play('unlock',{volume:1});
       this.announce('EMERGENCY PROTOCOL ENGAGED','#76e7d4');
       // Clear immediate threats so the revive is not instantly wasted.
@@ -711,6 +839,59 @@ export class Engine{
     }
     player.alive=false;
     this.finish(false,'OPERATIVE SIGNAL LOST');
+  }
+
+  // How loud something is from where the operative is standing. Nothing in
+  // this game is panned — there is no stereo image to place a sound in from
+  // overhead — but distance alone is most of what sells a heavy machine, and
+  // without it a walker two sectors away stamps as loudly as one on top of you.
+  // A round striking the sector. The theatre says what it is built from, so a
+  // wall in the Arctic Relay throws snow and one in the Cinder Foundry throws
+  // sparks, from the same call site.
+  impactSurface(x,y,angle,weapon,intensity=1){
+    const surface=this.map.surface?.wall||'concrete';
+    this.fx.surfaceImpact(x,y,angle,
+      {surface,voice:weaponVoice(weapon?.def),intensity});
+  }
+
+  audibleAt(x,y,range=900){
+    const distance=dist(this.player.x,this.player.y,x,y);
+    if(distance>=range)return 0;
+    // Falls off with the square root rather than linearly, so a thing stays
+    // present across the middle of its range instead of only near the edge.
+    return Math.sqrt(1-distance/range);
+  }
+
+  // A boss putting a foot down. Weight comes off its own size, so the siege
+  // platform lands harder than the walker without either being given a number
+  // of its own to keep in step with its radius.
+  mechFootfall(boss){
+    const volume=this.audibleAt(boss.x,boss.y,1100)*(boss.def.gait?.volume??1);
+    if(volume<=.02)return;
+    this.audio.play('mechStep',{volume,weight:(boss.radius||34)/34});
+    // The ground answers a footfall it can feel.
+    if(volume>.45){
+      this.camera.addShake(clamp(volume*.16,0,.14),'environment');
+      this.fx.ring(boss.x,boss.y,boss.radius*.5,boss.radius*1.1,.26,
+        boss.def.accent||'#ffb35c',1.5);
+    }
+  }
+
+  // The rotor is a continuous voice, not an event, so it is driven every frame
+  // from whatever is actually airborne rather than started and forgotten.
+  updateRotor(){
+    let level=0;
+    for(const enemy of this.enemies){
+      if(enemy.dead||!enemy.flying)continue;
+      level=Math.max(level,this.audibleAt(enemy.x,enemy.y,1400));
+    }
+    // A wreck is still a helicopter until it hits the ground, and it is the one
+    // you most want to hear coming. Its blades are winding down, so it is
+    // quieter than a live one and gets quieter as it falls.
+    for(const wreck of this.wrecks){
+      level=Math.max(level,this.audibleAt(wreck.x,wreck.y,1400)*(.35+wreck.altitude*.45));
+    }
+    this.audio.setRotor?.(level);
   }
 
   damagePlayer(amount,options={}){
@@ -764,7 +945,7 @@ export class Engine{
     player.invulnerable=Math.max(player.invulnerable,.36);
     this.telemetry.damageTaken+=final;
 
-    this.camera.addShake(clamp(final/player.maxHp*1.6,.08,.5));
+    this.camera.addShake(clamp(final/player.maxHp*1.6,.08,.5),'impact');
     this.fx.flash('#ff4a4a',clamp(final/player.maxHp*1.2,.1,.5));
     this.fx.blood(player.x,player.y,'#ff6b6b',1);
     this.audio.play('hurt',{volume:clamp(final/30,.4,1)});
@@ -854,6 +1035,14 @@ export class Engine{
     EnemyBrain.init(enemy,archetype,this.rng);
     this.assignAggro(enemy);
     this.enemies.push(enemy);
+    // Arrival. Silent for infantry and swarms by design — the cue exists to
+    // announce something worth turning around for, and twenty riflemen
+    // announcing themselves at once is noise, not information. The chassis
+    // table decides, not this call site.
+    this.audio.play('enemySpawn',{
+      chassis:enemyChassis(enemy),
+      volume:this.audibleAt(x,y,1100)
+    });
     return enemy;
   }
 
@@ -903,7 +1092,7 @@ export class Engine{
     const point=this.world.findSpawn(this.rng,{
       x:this.player.x+Math.cos(angle)*600,
       y:this.player.y+Math.sin(angle)*600
-    },0,240);
+    },0,240,Math.round((elite.radius||16)*(spec.scale||1))+6);
     const enemy=this.spawnEliteEnemy(elite,point.x,point.y);
     if(!enemy)return null;
     enemy.hp*=spec.hpMult;enemy.maxHp*=spec.hpMult;
@@ -935,7 +1124,7 @@ export class Engine{
       const point=this.world.findSpawn(this.rng,{
         x:carrier.x+Math.cos(angle)*(carrier.radius+24),
         y:carrier.y+Math.sin(angle)*(carrier.radius+24)
-      },0,90);
+      },0,90,(archetype.radius||12)+4);
       const unit=this.spawnEnemy(archetype,point.x,point.y);
       if(!unit)continue;
       unit.awareness=1;
@@ -959,7 +1148,7 @@ export class Engine{
       const point=this.world.findSpawn(this.rng,{
         x:(origin?.x??this.player.x)+Math.cos(angle)*260,
         y:(origin?.y??this.player.y)+Math.sin(angle)*260
-      },0,160);
+      },0,160,(archetype.radius||12)+4);
       const enemy=this.spawnEnemy(archetype,point.x,point.y);
       if(enemy){
         enemy.awareness=1;
@@ -1007,6 +1196,27 @@ export class Engine{
         EnemyBrain.update(enemy,dt,context);
       }
 
+      // The moment it has you.
+      //
+      // Detected here rather than inside the brain: `ai.js` owns behaviour and
+      // knows nothing about the mixer, and awareness is raised from six other
+      // places besides its own line of sight — a squad sharing a contact, a
+      // director spawn arriving alert, a carrier unloading. Watching the value
+      // catches every one of them, where hooking the sight check would have
+      // caught one.
+      if(enemy.awareness>=1&&!enemy.alerted){
+        enemy.alerted=true;
+        this.audio.play('enemyAlert',{
+          chassis:enemyChassis(enemy),
+          volume:this.audibleAt(enemy.x,enemy.y,900)
+        });
+      }else if(enemy.alerted&&enemy.awareness<=0){
+        // Losing you re-arms it, so being hunted twice sounds like being hunted
+        // twice. Zero rather than a threshold: anything higher retriggers on
+        // the noise around the edge of detection.
+        enemy.alerted=false;
+      }
+
       // A tracked vehicle drives through light cover rather than around it.
       // Without this the carrier wedges itself on the first crate it meets and
       // never reaches its standoff — the AI steers locally and cannot path.
@@ -1014,17 +1224,19 @@ export class Engine{
         this.breakCoverAround(enemy);
       }
 
-      enemy.x+=enemy.vx*dt;
-      enemy.y+=enemy.vy*dt;
       // Aircraft are over the sector, not in it: geometry neither stops them
       // nor shelters the operative from them. They are still held inside the
       // arena bounds so they cannot drift out of the fight.
       if(enemy.flying){
+        enemy.x+=enemy.vx*dt;
+        enemy.y+=enemy.vy*dt;
         enemy.x=clamp(enemy.x,enemy.radius,this.world.width-enemy.radius);
         enemy.y=clamp(enemy.y,enemy.radius,this.world.height-enemy.radius);
         enemy.rotor=(enemy.rotor||0)+dt*26;
       }else{
-        const corrected=this.world.resolveCollision(enemy,enemy.radius);
+        // Charging archetypes are the fastest things on the ground and were
+        // the ones that walked through cover.
+        const corrected=this.world.moveEntity(enemy,enemy.vx*dt,enemy.vy*dt,enemy.radius);
         if(corrected&&enemy.chargeTimer>0)enemy.chargeTimer=0;
       }
       enemy.angle=Math.atan2(player.y-enemy.y,player.x-enemy.x);
@@ -1169,7 +1381,10 @@ export class Engine{
   }
 
   onEnemyWindup(enemy,action,duration){
-    const color=action==='shot'?'#ff5b5b':action==='detonate'?'#ffa14f':'#ffb35c';
+    // A telegraph and incoming fire mean different things and, for the most
+    // common colour deficiency, used to be the same colour.
+    const color=action==='shot'?roleColor('hostile')
+      :action==='detonate'?roleColor('warning'):roleColor('hazard');
     this.fx.ring(enemy.x,enemy.y,enemy.radius,enemy.radius*2.2,duration,color,2);
     if(action==='detonate')this.audio.play('alarm',{volume:.35});
   }
@@ -1192,11 +1407,19 @@ export class Engine{
       vy:Math.sin(angle)*(spec.speed||250),
       damage:(spec.damage??enemy.damage)*enemy.buffMult,
       radius:spec.tracer?4:3.4,
-      color:spec.tracer?'#ff5b5b':enemy.color||'#ffcf73',
+      color:spec.tracer?roleColor('hostile'):enemy.color||'#ffcf73',
       life:4,piercing:spec.piercing,source:enemy
     });
     this.fx.muzzle(enemy.x+Math.cos(angle)*enemy.radius,enemy.y+Math.sin(angle)*enemy.radius,angle,.6);
-    this.audio.play('shoot',{volume:.35});
+    // Every hostile in the game used to share one generic blip on the player's
+    // own weapon bus. It carries its own family now, shaded as incoming and
+    // attenuated by how far away it actually is, so a sniper across the sector
+    // and a crawler at your ankles are two different events.
+    this.audio.play('enemyWeapon',{
+      voice:enemyVoice(enemy),
+      hostile:true,
+      volume:.62*this.audibleAt(enemy.x,enemy.y,1100)
+    });
   }
 
   fireMortar(enemy,spec){
@@ -1234,6 +1457,110 @@ export class Engine{
       damage:enemy.damage*2,knockback:340,color:'#ffa14f',hostile:true
     });
     this.killEnemy(enemy,{silent:true,noDrops:true});
+  }
+
+  // -------------------------------------------------------------------------
+  // Wreckage
+  //
+  // A destroyed aircraft keeps its momentum, loses its tail rotor, and spins in
+  // to the deck. The fall is roughly a second and a half, which is long enough
+  // to be a warning: anything standing where it is going to land has time to
+  // not be there.
+  // -------------------------------------------------------------------------
+
+  spawnWreck(enemy,options={}){
+    const spin=this.rng.next()<.5?-1:1;
+    this.wrecks.push({
+      x:enemy.x,y:enemy.y,
+      // It keeps whatever it was doing, plus a shove from the killing blow.
+      vx:(enemy.vx||0)*.7+(options.direction!=null?Math.cos(options.direction)*70:0),
+      vy:(enemy.vy||0)*.7+(options.direction!=null?Math.sin(options.direction)*70:0),
+      angle:enemy.angle||0,
+      // Yaw. A helicopter that loses drive to the tail rotor turns against its
+      // own main rotor torque, which is why they come down rotating rather
+      // than gliding.
+      spin:spin*this.rng.range(1.6,2.8),
+      rotor:enemy.rotor||0,
+      altitude:1,fall:0,
+      radius:enemy.radius,color:enemy.color,render:enemy.render||'chopper',
+      blastRadius:enemy.blastRadius||150,
+      damage:enemy.damage||9,
+      flying:true,wreck:true,
+      trail:0,timer:0
+    });
+  }
+
+  updateWrecks(dt){
+    if(!this.wrecks.length)return;
+    for(const wreck of this.wrecks){
+      wreck.timer+=dt;
+      // The spin tightens all the way down: nothing is arresting it.
+      wreck.spin+=Math.sign(wreck.spin)*dt*4.5;
+      wreck.angle+=wreck.spin*dt;
+      // The main rotor winds down as the engine dies, so the disc thins out
+      // instead of holding a clean hover blur.
+      wreck.rotor+=dt*Math.max(3,26-wreck.timer*11);
+      // Momentum bleeds off, but it does not stop — it lands somewhere else.
+      const decay=1-Math.min(1,dt*.55);
+      wreck.vx*=decay;wreck.vy*=decay;
+      wreck.x=clamp(wreck.x+wreck.vx*dt,wreck.radius,this.world.width-wreck.radius);
+      wreck.y=clamp(wreck.y+wreck.vy*dt,wreck.radius,this.world.height-wreck.radius);
+      // Accelerating fall rather than a linear one, so it drops away at the end
+      // instead of settling. Altitude works out as 1 - 0.31t², which puts it on
+      // the deck at about 1.8 seconds — long enough to read as a descent and to
+      // give anything standing underneath time to move, short enough that the
+      // fight does not stop to watch it.
+      wreck.fall+=dt*.62;
+      wreck.altitude-=wreck.fall*dt;
+
+      wreck.trail-=dt;
+      if(wreck.trail<=0){
+        wreck.trail=.05;
+        this.fx.deathTrail(wreck.x,wreck.y,1+(1-wreck.altitude));
+      }
+
+      if(wreck.altitude<=0){
+        wreck.altitude=0;
+        this.crashWreck(wreck);
+        wreck.done=true;
+      }
+    }
+    compact(this.wrecks,w=>!w.done);
+  }
+
+  crashWreck(wreck){
+    // Hostile, so it hurts whatever is standing there — including the
+    // operative. The fall is the telegraph.
+    this.spawnExplosion({
+      x:wreck.x,y:wreck.y,
+      radius:wreck.blastRadius,
+      damage:wreck.damage*2.4,knockback:420,color:'#ffb35c',hostile:true
+    });
+    this.camera.addShake(.55,'explosion');
+    this.fx.freeze(.05);
+    this.audio.play('explode',{volume:1,hostile:true});
+
+    // Burning fuel across the impact, and the hull's own oil under it. This is
+    // the biggest single stain anything in the game leaves.
+    this.world.splatter(wreck.x,wreck.y,{
+      radius:wreck.radius*3.4,color:'#0b0b0d',alpha:.72,intensity:2.4,drops:2.6
+    });
+    this.world.splatter(wreck.x,wreck.y,{
+      radius:wreck.radius*5.2,color:GORE.machine.pool,alpha:.3,intensity:1.6,drops:1
+    });
+
+    // Debris thrown outward, heavier and slower than the fireball.
+    this.fx.burst(wreck.x,wreck.y,22,{
+      speed:340,life:.9,size:3.4,drag:.9,gravity:220,
+      color:[wreck.color||'#c8d2d6','#5a6a6c','#2b3338']
+    });
+    // A second, smaller flare a beat later — the fuel that did not go up with
+    // the first one.
+    this.scheduleAction(.42,()=>{
+      this.fx.explosion(wreck.x+this.rng.range(-18,18),wreck.y+this.rng.range(-18,18),
+        wreck.blastRadius*.5,'#ff8a4c');
+      this.camera.addShake(.18,'explosion');
+    });
   }
 
   blinkEnemy(enemy,range){
@@ -1340,7 +1667,16 @@ export class Engine{
       this.fx.text(target.x,target.y-target.radius-6,Math.round(applied),
         crit?'#ffd166':'#eaf6f4',{damage:true,crit,size:crit?15:11});
     }
-    this.fx.impact(target.x,target.y,options.angle??0,crit?'#ffd166':'#d5f0ef',crit?1.6:1);
+    // A machine spalls plate; anything else takes the generic hit spark and its
+    // own blood, which `killEnemy` and the status system already handle.
+    if(target.machine){
+      this.fx.surfaceImpact(target.x,target.y,options.angle??0,
+        {surface:'armour',voice:weaponVoice(options.weapon?.def),
+         intensity:crit?1.5:.9});
+    }else{
+      this.fx.impact(target.x,target.y,options.angle??0,
+        crit?'#ffd166':'#d5f0ef',crit?1.6:1);
+    }
     this.audio.play(crit?'crit':'hit',{volume:crit?.7:.4});
     if(crit)this.fx.freeze(.02);
 
@@ -1428,23 +1764,59 @@ export class Engine{
     if(options.ally)options.ally.kills++;
     enemy.squad?.remove(enemy);
 
+    // An aircraft does not stop existing the moment it is killed. It goes
+    // down, and where it lands is a second event the operative has to deal
+    // with. Credit, loot and the kill itself are all resolved here as normal —
+    // only the wreckage outlives this call.
+    if(enemy.flying)this.spawnWreck(enemy,options);
+
     this.fx.death(enemy.x,enemy.y,enemy.color,enemy.elite);
 
     // Machines leak oil, everything else bleeds. Both stain the floor for the
     // rest of the contract; the direction of the killing blow throws the
     // spatter, so a firefight leaves a readable record of where it happened.
-    const gore=enemy.machine
-      ? {color:'#07090b',alpha:.62,particle:'#12161a'}
-      : {color:'#57121a',alpha:.5,particle:'#7d1d24'};
+    //
+    // The two do not behave the same way on the floor, and that is the point of
+    // separating them rather than recolouring one effect. Blood sprays along
+    // the killing blow and stops. Oil keeps coming out of a hull long after
+    // whatever was inside it stopped, and being thinner it spreads further and
+    // pools — so a machine leaves a second, wider, darker stain that a body
+    // does not.
+    const gore=enemy.machine?GORE.machine:GORE.flesh;
     const scale=enemy.elite?2.1:1;
     this.world.splatter(enemy.x,enemy.y,{
-      radius:enemy.radius*1.5*scale,
-      color:gore.color,
+      radius:enemy.radius*gore.spread*scale,
+      color:gore.pool,
       alpha:gore.alpha,
       angle:options.direction??null,
-      intensity:scale
+      intensity:scale,
+      drops:gore.drops
     });
-    this.fx.blood(enemy.x,enemy.y,gore.particle,(enemy.elite?2.2:1.3));
+    if(gore.leak){
+      // The pool. No direction — it is not thrown anywhere, it just runs out.
+      this.world.splatter(enemy.x,enemy.y,{
+        radius:enemy.radius*gore.leak.radius*scale,
+        color:gore.pool,
+        alpha:gore.leak.alpha,
+        angle:null,
+        intensity:scale*.6,
+        drops:.5
+      });
+    }
+    this.fx.blood(enemy.x,enemy.y,gore.particle,(enemy.elite?3.4:2.1),
+      {mist:!enemy.machine});
+    // A machine additionally comes apart. The fluid says what it was made of;
+    // this says it was a machine.
+    if(enemy.machine){
+      this.fx.machineDeath(enemy.x,enemy.y,enemy.color,enemy.elite?1.6:1);
+    }
+    // `kill` is the operative's feedback that a thing died — it is about the
+    // player, and stays. This is the thing itself, which is about the sector,
+    // and until now twenty-three archetypes shared none.
+    this.audio.play('enemyDeath',{
+      chassis:enemyChassis(enemy),
+      volume:(enemy.elite?1:.7)*this.audibleAt(enemy.x,enemy.y,1000)
+    });
     this.audio.play('kill',{volume:enemy.elite?.8:.35});
     if(enemy.elite){this.camera.addShake(.16);this.fx.freeze(.035)}
 
@@ -1545,7 +1917,7 @@ export class Engine{
     const point=this.world.findSpawn(this.rng,{
       x:this.player.x+Math.cos(angle)*520,
       y:this.player.y+Math.sin(angle)*520
-    },0,260);
+    },0,260,(def.radius||34)+8);
     // Boss durability tracks how strong the operative can plausibly be by the
     // time it appears: a 30-minute contract hands the player an evolved
     // loadout at level 40+, which deleted the old flat-HP bosses in seconds.
@@ -1582,7 +1954,7 @@ export class Engine{
     const point=this.world.findSpawn(this.rng,{
       x:this.player.x+Math.cos(angle)*420,
       y:this.player.y+Math.sin(angle)*420
-    },0,240);
+    },0,240,42);
     this.boss=new Nemesis(record,point.x,point.y,nemesisScaling(record,this));
     // Held separately from `this.boss`, which is cleared the moment it dies or
     // walks out — the outcome still has to be readable at the end of the run.
@@ -1694,7 +2066,7 @@ export class Engine{
   spawnExplosion(spec){
     const radius=spec.radius*this.explosionSizeMult;
     this.fx.explosion(spec.x,spec.y,radius,spec.color||'#ffb35c');
-    this.camera.addShake(clamp(radius/700,.08,.4));
+    this.camera.addShake(clamp(radius/700,.08,.4),'explosion');
     this.audio.play('explode',{volume:clamp(radius/180,.4,1)});
     this.world.addDecal(spec.x,spec.y,radius*.6,'#1a1210',.32,'scorch');
 
@@ -1734,9 +2106,19 @@ export class Engine{
     this.fx.ring(x,y,radius*.3,radius*2.4,.28,color,2);
     this.fx.burst(x,y,10,{speed:180,life:.3,color,drag:.9});
   }
-  muzzleFlash(angle,scale){
+  muzzleFlash(angle,scale,weapon){
     const player=this.player;
-    this.fx.muzzle(player.x+Math.cos(angle)*18,player.y+Math.sin(angle)*18,angle,scale);
+    const voice=weaponVoice(weapon?.def);
+    const x=player.x+Math.cos(angle)*18;
+    const y=player.y+Math.sin(angle)*18;
+    this.fx.muzzle(x,y,angle,scale,voice);
+    this.fx.casing(x,y,angle,voice);
+    // Recoil. Its own camera layer, capped low and released fast, because it
+    // fires continuously — the point is that a heavy weapon is felt without a
+    // sustained burst pinning the camera at maximum. Scaled by family, so a
+    // suppressed pistol barely registers and a shoulder-fired heavy does.
+    const kick=RECOIL[voice];
+    if(kick)this.camera.addShake(kick*scale,'recoil');
   }
 
   interceptProjectilesNear(x,y,radius){
@@ -1803,22 +2185,39 @@ export class Engine{
           tickInterval:.4,color:'#ff8a4c',friendly:true});
       }
 
-      // Geometry.
+      // Geometry. The round is walked back to where it actually met the
+      // surface before it detonates, so the impact mark, the spark and any
+      // blast radius are on the wall rather than inside it.
       const obstacle=this.world.raycastObstacle(p.px,p.py,p.x,p.y,true);
       if(obstacle){
         if(obstacle.destructible)this.world.damageCover(obstacle,p.damage);
         if(!p.beam){
+          p.x=this.world.lastHitX;
+          p.y=this.world.lastHitY;
           this.hitProjectileTerminal(p);
           continue;
         }
       }
 
-      // Enemies.
-      const candidates=this.enemyHash.query(p.x,p.y,p.radius+40,neighbourScratch);
+      // Enemies. Swept along the step rather than tested at its end point: a
+      // round travelling 1500 units a second moves 25 world units per step,
+      // which is wider than most hostiles, so an end-point test let fast
+      // weapons shoot straight through a target that was squarely in the way.
+      // The query is centred on the middle of the step and widened to cover
+      // its whole length, or the broad phase would miss the same targets the
+      // narrow phase was about to catch.
+      const midX=(p.px+p.x)*.5,midY=(p.py+p.y)*.5;
+      const sweep=Math.hypot(p.x-p.px,p.y-p.py)*.5;
+      const candidates=this.enemyHash.query(midX,midY,sweep+p.radius+40,neighbourScratch);
       for(const enemy of candidates){
         if(enemy.dead)continue;
         if(p.hitSet?.has(enemy))continue;
-        if(dist2(p.x,p.y,enemy.x,enemy.y)>(p.radius+enemy.radius)**2)continue;
+        const hitT=segmentHitsCircle(p.px,p.py,p.x,p.y,enemy.x,enemy.y,p.radius+enemy.radius);
+        if(hitT===null)continue;
+        // Report the hit where the round met the hostile, so damage numbers
+        // and blood land on the target rather than behind it.
+        const hitX=p.px+(p.x-p.px)*hitT;
+        const hitY=p.py+(p.y-p.py)*hitT;
 
         let damage=p.damage;
         if(p.falloff)damage*=clamp(1-p.age*1.4,.35,1);
@@ -1828,13 +2227,14 @@ export class Engine{
           weapon:p.weapon,knockback:p.knockback,critBonus:p.critBonus,
           status:p.status,statusChance:p.statusChance,
           angle:Math.atan2(p.vy,p.vx),fromX:p.px,fromY:p.py,source:'projectile',
-          hitX:p.x,hitY:p.y
+          hitX,hitY
         });
 
         if(p.pierceLeft>0){
           p.pierceLeft--;
           (p.hitSet||(p.hitSet=new Set())).add(enemy);
         }else{
+          p.x=hitX;p.y=hitY;
           this.hitProjectileTerminal(p);
           break;
         }
@@ -1864,7 +2264,8 @@ export class Engine{
 
       if(this.world.raycastObstacle(p.px,p.py,p.x,p.y,true)&&!p.piercing){
         p.dead=true;
-        this.fx.impact(p.x,p.y,Math.atan2(p.vy,p.vx),p.color,.7);
+        this.impactSurface(this.world.lastHitX,this.world.lastHitY,
+          Math.atan2(p.vy,p.vx),p.weapon,.7);
         continue;
       }
 
@@ -2053,8 +2454,7 @@ export class Engine{
         p.vx=damp(p.vx,dir.x*p.speed*drive,5,dt);
         p.vy=damp(p.vy,dir.y*p.speed*drive,5,dt);
       }
-      p.x+=p.vx*dt;p.y+=p.vy*dt;
-      this.world.resolveCollision(p,p.radius);
+      this.world.moveEntity(p,p.vx*dt,p.vy*dt,p.radius);
     }
     compact(this.phantoms,p=>!p.dead);
 
@@ -2832,7 +3232,8 @@ export class Engine{
     this.extraction=true;
     this.extractionTimer=60;
     this.extractionPoint=this.world.extractionPoint(this.player);
-    this.announce('EXTRACTION WINDOW OPEN // REACH THE BEACON','#f5d27a',4);
+    this.announce('EXTRACTION OPEN // REACH THE BEACON','#f5d27a',4);
+    this._extractCalled=Infinity;
     this.codec.fire('extraction');
     this.announce('EXFIL PROTOCOL // MOVEMENT BOOSTED','#8bff9b',3);
     this.audio.play('alarm',{volume:.9});
@@ -2863,6 +3264,7 @@ export class Engine{
       }
     }
     compact(this.enemies,e=>!e.dead);
+    this.updateWrecks(this.dt);
   }
 
   finish(victory,reason){
@@ -2872,6 +3274,12 @@ export class Engine{
     this.endReason=reason;
     this.maxCombo=Math.max(this.maxCombo,this.combo);
     this.audio.stopMusic();
+    // A rotor is a running voice, and nothing else stops it — left alone it
+    // would carry on over the results screen.
+    this.audio.stopRotor?.();
+    // The theatre bed is the same: continuous, and stopped here or not at all.
+    this.audio.stopAmbience?.();
+    this.audio.setReverbProfile?.(null);
     // Nothing more comes over the channel once the contract closes, so a
     // callout cannot arrive over the results screen.
     this.codec.clear();
@@ -2927,8 +3335,20 @@ export class Engine{
   }
 
   announce(text,color='#76e7d4',duration=2.2){
+    // The same line arriving twice is one message that has not been dealt with
+    // yet, not two. It refreshes rather than stacking — a boss spawn used to
+    // print its own name under itself, and a repeating call would have piled
+    // up a column of identical banners.
+    const existing=this.announcements.find(a=>a.text===text);
+    if(existing){
+      existing.life=Math.max(existing.life,duration);
+      existing.maxLife=Math.max(existing.maxLife,duration);
+      existing.color=color;
+      return;
+    }
     this.announcements.push({text,color,life:duration,maxLife:duration});
-    if(this.announcements.length>4)this.announcements.shift();
+    // Three at once is already a wall of text on a phone.
+    if(this.announcements.length>3)this.announcements.shift();
   }
 
   addFloatingText(x,y,text,color){this.fx.text(x,y,text,color,{size:14,life:1.4})}
@@ -2949,12 +3369,26 @@ export class Engine{
   destroy(){
     this.fx.clear();
     this.enemies.length=0;
+    this.wrecks.length=0;
     this.projectiles.length=0;
     this.enemyProjectiles.length=0;
     this.scheduled.length=0;
     this.effects.clear();
   }
 }
+
+// What a body leaves behind.
+//
+// `spread` is how far the main stain reaches, `drops` how many satellites are
+// thrown, `alpha` how dark it sits on the floor. `leak` is the second stain a
+// machine puts down and a body does not: a wider, fainter pool with no
+// direction to it, because it is not thrown anywhere — it just runs out.
+const GORE={
+  machine:{pool:'#07090b',particle:'#12161a',alpha:.74,spread:2.6,drops:2.2,
+    leak:{radius:3.1,alpha:.36}},
+  flesh:{pool:'#57121a',particle:'#7d1d24',alpha:.6,spread:2.3,drops:2.1,
+    leak:null}
+};
 
 const neighbourScratch=[];
 const turretScratch=[];

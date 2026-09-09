@@ -168,6 +168,104 @@ export const ELITES=[
   }
 ];
 
+// Which weapon family each hostile fires.
+//
+// Every hostile in the game shared one generic blip while the player had twelve
+// distinct families, which meant a firefight carried no information: you could
+// not tell a sniper taking a shot from a crawler spitting at your ankles, and
+// you could not tell either of them from your own rifle.
+//
+// Listed per archetype rather than derived from `ai` or `tier`, because what a
+// unit sounds like is a design decision and not a consequence of its hit
+// points. Two units with the same behaviour can carry different weapons, and
+// the Shield Trooper proves it — it holds a line like a rifle cell and fires a
+// stubby close-quarters weapon.
+const ENEMY_VOICES={
+  scout:'smg',            // light patrol weapon, fired while moving
+  rifle:'rifle',          // the sound the sector is mostly made of
+  shield:'smg',           // one hand on the shield, so nothing long
+  pursuit:'tech',         // drones do not have an action to hear
+  hunter:'tech',
+  sniper:'sniper',        // the one shot that should stop you moving
+  breacher:'shotgun',     // door weapon, brought into the open
+  jammer:'tech',
+  crawler:'tech',         // small, fast, and mechanically nasty
+  veil:'suppressed',      // you hear the action and almost nothing else
+  marauder:'lmg',         // volume as a tactic
+  mortar:'heavy',         // the launch, not the impact
+  sapper:'smg',
+  warden:'beam',          // no pressure wave at all, which is the tell
+  phantomcell:'corrupted',// the signal is in the weapon
+  chopper:'lmg',          // door gun
+  carrier:'heavy',
+
+  // Elites are their own units, not louder copies of their base. The Red
+  // Auditor is built on a rifle cell and does not sound like one.
+  nullhunter:'tech',
+  ironvicar:'shotgun',
+  signalwarden:'corrupted',
+  glasshound:'tech',
+  redauditor:'sniper',
+  palewitness:'suppressed'
+};
+
+// The family a hostile fires, for the audio mixer.
+//
+// The fallback is deliberately a real family and never silence. An archetype
+// added later and forgotten here will sound generic and slightly wrong, which
+// somebody notices; it will not sound like nothing, which nobody does until
+// they wonder why the sector went quiet.
+export function enemyVoice(spec){
+  if(!spec)return 'rifle';
+  // An elite carries its own entry. The spawner builds it from the base
+  // archetype and spreads those fields, so `id` is the base's — the elite is
+  // only identifiable through the definition hung off it.
+  const id=spec.eliteDef?.id||spec.id;
+  if(ENEMY_VOICES[id])return ENEMY_VOICES[id];
+  if(spec.base&&ENEMY_VOICES[spec.base])return ENEMY_VOICES[spec.base];
+  return spec.machine?'tech':'rifle';
+}
+
+// What a hostile is built out of, for everything it does that is not shooting.
+//
+// Weapons are one axis and chassis is the other, and they are genuinely
+// independent: a Shield Trooper and a Breacher Heavy carry different weapons
+// and die the same way, while a Rifle Cell and a Longshot Sniper carry
+// different weapons and also die the same way. Collapsing the two would mean
+// twenty-three death sounds to write and maintain instead of seven.
+//
+// The seven are chosen by what the thing is physically made of, because that is
+// what the ear is actually identifying: meat and webbing, armour plate, a small
+// airframe, something with legs, something with a hull, something scuttling,
+// and something that was never quite there.
+const ENEMY_CHASSIS={
+  scout:'infantry', rifle:'infantry', sniper:'infantry',
+  mortar:'infantry', sapper:'infantry',
+  shield:'heavy', breacher:'heavy', marauder:'heavy',
+  pursuit:'drone', hunter:'drone', jammer:'drone',
+  crawler:'swarm',
+  warden:'walker',
+  veil:'synthetic', phantomcell:'synthetic',
+  chopper:'armour', carrier:'armour',
+
+  nullhunter:'drone', ironvicar:'heavy', signalwarden:'synthetic',
+  glasshound:'swarm', redauditor:'infantry', palewitness:'synthetic'
+};
+
+// The chassis a hostile is built on.
+//
+// Falls back by machine flag rather than to a fixed value, so an archetype
+// added later and forgotten here still dies as roughly the right kind of
+// thing — a new drone sounds like a drone rather than like a man.
+export function enemyChassis(spec){
+  if(!spec)return 'infantry';
+  const id=spec.eliteDef?.id||spec.id;
+  if(ENEMY_CHASSIS[id])return ENEMY_CHASSIS[id];
+  if(spec.base&&ENEMY_CHASSIS[spec.base])return ENEMY_CHASSIS[spec.base];
+  if(spec.flying)return 'drone';
+  return spec.machine?'walker':'infantry';
+}
+
 export const ENEMIES_BY_ID=Object.fromEntries(ENEMIES.map(e=>[e.id,e]));
 export const ELITES_BY_ID=Object.fromEntries(ELITES.map(e=>[e.id,e]));
 

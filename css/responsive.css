@@ -63,8 +63,13 @@
     padding-right:max(8px,env(safe-area-inset-right));
     padding-bottom:max(10px,env(safe-area-inset-bottom));
   }
-  .hud-top{grid-template-columns:minmax(0,1fr) auto;gap:6px}
-  .hud-panel{padding:7px 8px;font-size:10px}
+  /* Every gap and every pad in this region is paid for out of the sector the
+     game is played in. Measured on a 430x932 iPhone before this: the top block
+     was 309px of 932, a third of the screen, against 555px of play area. What
+     is trimmed here is space, not type — the type went up, not down. */
+  .hud-top{grid-template-columns:minmax(0,1fr) auto;gap:4px}
+  .hud-panel{padding:5px 8px;font-size:10px}
+  .hud-column{gap:4px}
 
   /* Four stacked rows: vitals beside the tally, then the timer, the radio
      traffic and the objective stack each across the full width. Three tracks
@@ -73,28 +78,34 @@
   .vitals{grid-area:1/1;max-width:none}
   .tally{grid-area:1/2}
   .mission{grid-area:2/1/auto/-1;min-width:0;margin:0}
-  .codec{grid-area:3/1/auto/-1}
-  .hud-top-left{grid-area:5/1/auto/-1;gap:6px}
-  .replay-badge{grid-area:4/1/auto/-1;justify-self:center}
+  /* The signature's health, as a row of the stack rather than a panel floating
+     at a fixed 104px — which on a phone landed directly on the mission panel,
+     so the contract name, the clock, the extraction countdown and the boss
+     name were all printed over each other. It is the one element in this
+     region that was not a real grid item, and it was the one that collided. */
+  .boss-bar{grid-area:3/1/auto/-1;width:auto;margin:0}
+  .codec{grid-area:4/1/auto/-1}
+  .replay-badge{grid-area:5/1/auto/-1;justify-self:center}
+  .hud-top-left{grid-area:6/1/auto/-1;gap:6px}
   .mission-head{font-size:9px}
   .mission-head #timerValue{font-size:14px}
   .phase{font-size:7.5px}
   .hp-text b{font-size:12px}
-  .xp-row{font-size:8.5px}
+  .xp-row{font-size:8.5px;margin-top:4px}
+  .mission-bar{margin-top:4px}
+  .mission-objective{padding:4px 9px}
 
-  .objectives{max-width:none;padding:6px 8px}
-  .objectives-head{font-size:7.5px;margin-bottom:4px}
-  .objective{font-size:8.5px;gap:5px;padding:2px 4px}
-  .objective-count{font-size:8px}
+  .objectives{max-width:none;padding:5px 8px}
+  .objectives-head{font-size:8px}
+  .objectives.open .objective-list{margin-top:5px}
+  .objective{font-size:9px;gap:5px;padding:2px 4px}
+  .objective-count{font-size:8.5px}
 
   .tally{min-width:auto;justify-self:end}
   .tally-row{gap:8px;font-size:9px}
   .combo{font-size:11px}
 
-  .boss-bar{
-    left:8px;right:8px;transform:none;width:auto;
-    top:max(104px,calc(env(safe-area-inset-top) + 96px));
-  }
+
 
   /* Collapse the loadout to fixed-size icon chips: four named weapon cards
      consumed the whole left half of a phone screen and buried the play area. */
@@ -142,10 +153,30 @@
 
 /* ---- Landscape phone: HUD must stay out of the play area ---------------- */
 @media(max-height:520px) and (orientation:landscape){
-  .hud-panel{padding:5px 7px;font-size:9px}
+  /* A phone on its side has 430px of height and the top block was taking 193
+     of them — 45% of the screen, against 38% of sector. The middle column
+     stacks the contract panel, the signature's health and the radio traffic on
+     top of each other, so every one of them has to be short here. */
+  .hud-panel{padding:4px 7px;font-size:9px}
   .mission{margin:0}
+  .hud-top{gap:4px}
+  .hud-column{gap:4px}
+  .vitals .xp-row{margin-top:3px}
+  .mission-bar{margin-top:3px}
+  /* The type stays legible — that was the complaint before this one — but the
+     panel is held to two lines and the portrait shrinks to pay for it. */
+  .codec-portrait{width:40px;height:40px}
+  .codec-body{padding:4px 9px;gap:1px}
+  .codec-head b{font-size:11px}
+  .codec-head span{font-size:8px}
+  .codec-text{
+    font-size:13px;line-height:1.3;
+    display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
+    line-clamp:2;overflow:hidden;
+  }
   /* Only the objective currently closest to done is worth the vertical space. */
   .objective-list{gap:3px}
+  .objectives.open .objective-list{max-height:64px;margin-top:4px}
   .objective:nth-child(n+3){display:none}
   .boss-bar{top:64px}
   .status-strip{bottom:64px}

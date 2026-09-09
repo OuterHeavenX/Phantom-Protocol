@@ -21,6 +21,20 @@ const READ_SPEED=17;         // characters per second
 const MIN_DWELL=2.2;
 const MAX_DWELL=6;
 const MAX_QUEUE=3;
+// How long the channel may stay open across one run of traffic before it is
+// closed regardless of what is still queued.
+//
+// No single line ever lasted more than six seconds, but three of them queued
+// back to back with a gap between each ran the panel for twenty-one seconds
+// without a break — and the panel is large, sits over the play area, and on a
+// phone is a real piece of the screen. Reported as the message not going away.
+// Twenty-five seconds is the ceiling on one continuous transmission; whatever
+// has not been said by then is dropped rather than held over, because a callout
+// that arrives half a minute after its moment is not worth the space.
+const MAX_CHANNEL_OPEN=25;
+// Quiet enforced after the channel has been open that long, so a burst is
+// followed by silence rather than by the next burst.
+const BURST_COOLDOWN=6;
 
 function dwellFor(text){
   return Math.min(MAX_DWELL,Math.max(MIN_DWELL,text.length/READ_SPEED));
@@ -113,11 +127,25 @@ export class CodecDirector{
       if(this.current||this.queue.length)this.clear();
       return;
     }
+    // How long the channel has been continuously occupied, counting the gaps
+    // between lines: one transmission, from the operator's point of view.
+    if(this.current||this.gap>0)this.openFor=(this.openFor||0)+dt;
+    else this.openFor=0;
+
     if(this.current){
       this.timer-=dt;
-      if(this.timer>0)return;
+      // Closed at the ceiling even mid-line. A line still on screen after
+      // twenty-five seconds of unbroken traffic has been read or it has not.
+      if(this.timer>0&&this.openFor<MAX_CHANNEL_OPEN)return;
       this.current=null;
       this.gap=GLOBAL_GAP;
+    }
+    if(this.openFor>=MAX_CHANNEL_OPEN){
+      this.queue.length=0;
+      this.gap=BURST_COOLDOWN;
+      this.openFor=0;
+      this.revision++;
+      return;
     }
     if(this.gap>0){this.gap-=dt;return}
     const next=this.queue.shift();
@@ -134,5 +162,6 @@ export class CodecDirector{
     this.queue.length=0;
     this.current=null;
     this.timer=0;
+    this.openFor=0;
   }
 }

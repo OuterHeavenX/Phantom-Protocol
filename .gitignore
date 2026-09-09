@@ -8,3 +8,4 @@ assets/models/renders/
 *.blend1
 tools/visual-qa-output/
 assets/sprites/architecture/*.png
+__pycache__/

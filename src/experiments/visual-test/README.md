@@ -1,20 +1,27 @@
 # BLACKSITE VISUAL TEST
 
-An isolated experiment to find out how far RED STATIC's presentation can be
-pushed in a browser before the frame rate gives out, and whether a GPU
-rendering path is worth having.
+A benchmark harness: an enemy-count sweep over the real simulation, with
+per-pass timings, feature switches and a supersampling control.
 
-**Nothing here ships.** No file in `src/experiments/` is imported by the
-production game except one dynamic `import()` in `src/main.js`, guarded by a
-URL flag. With the flag absent, not a byte of this is fetched.
+This began as an isolated experiment, built to find out how far RED STATIC's
+presentation could be pushed in a browser and whether a GPU rendering path was
+worth having. It was. **The deferred renderer shipped** — it lives in
+`src/render/gl/` and runs all ten theatres, and this harness now drives the
+shipping classes rather than a copy of them. A number measured here is a number
+about the game.
+
+The harness itself still ships nothing: no file in `src/experiments/` is
+imported by the production game except one dynamic `import()` in `src/main.js`
+behind a URL flag. With the flag absent, not a byte of it is fetched.
 
 ## Running it
 
 | URL | What it does |
 | --- | --- |
-| `?visualtest=1` | The experimental WebGL2 renderer, HIGH preset |
+| `?visualtest=1` | The shipping deferred WebGL2 renderer, HIGH preset |
 | `?visualtest=1&preset=ultra` | Start on a given preset (`low`/`medium`/`high`/`ultra`) |
 | `?visualtest=1&renderer=2d` | **The control.** Same level, same simulation, same harness, drawn by the production Canvas 2D renderer |
+| `?visualtest=1&theatre=mire` | Sweep any of the ten theatres (`blacksite` by default). Ids are in `data/maps.js` |
 | `?visualtest=1&enemies=200` | Start at a given hostile count |
 | `?visualtest=1&vtcapture=1` | Keep the drawing buffer readable so screenshot tools can see the frame. Costs a copy per frame — never benchmark with it |
 
@@ -28,16 +35,13 @@ in this repository's history — are not numbers from your phone.
 
 ## What is in the sector
 
-Everything is generated from a fixed seed and shaded procedurally. There is not
-one image file in this experiment, which keeps it original to RED STATIC and
-keeps the download at zero.
+Whatever the theatre's dressing profile puts there, generated from the contract
+seed and shaded procedurally — see `docs/deferred-renderer.md` for the profiles
+and `src/render/gl/dressing.js` for the code.
 
-The room is built **from the engine's own arena**: every wall and every piece of
-cover the operative can be stopped by gets a prop, so nothing visible is
+The sector is built **from the engine's own arena**: every wall and every piece
+of cover the operative can be stopped by gets a prop, so nothing visible is
 decoration floating over unrelated collision and nothing solid is invisible.
-Decoration — floor plating, grating, hazard paint, pipes, cabling, machinery,
-monitors, containment cylinders, signage, standing water — is placed on open
-ground around it.
 
 ## The pipeline
 
@@ -54,7 +58,7 @@ ground around it.
 6. **Composite** — tonemap, the Canvas 2D entity layer over the top, then
    vignette, grain and scanlines.
 
-### Entities are not reimplemented
+### Sprites are not reimplemented
 
 Hostiles, projectiles and pickups are drawn by the **production sprite code**
 onto an offscreen 2D canvas, which is uploaded as one texture per frame and
@@ -152,19 +156,58 @@ The negative rows are measurement noise on a 3 fps sample, not effects that
 make the frame faster. They are left in rather than tidied away because
 pretending a ±17 ms wobble at 316 ms is signal would be worse.
 
-### Readability regression at ULTRA
+### First real-hardware result — and why it is not a ceiling
 
-Worth stating because the brief was explicit that hostiles must stay readable
-under heavy combat, and at ULTRA they are **less** readable than in production,
-not more. Against a flat teal floor a grey hostile has high contrast. Against
-lit, grimy, seamed plating and a dark grating span it does not, even with the
-composite's guaranteed light floor.
+RTX 5080, Chrome 151, Windows, 2560×1305, dpr 1, ULTRA:
 
-This is a content problem rather than a renderer one — the entity layer is
-identical pixels in both — and the fix is a rim light or an outline on hostiles
-keyed to local scene brightness, which is not in this experiment. It is the
-single thing that would have to be solved before any of this went near a
-production level.
+| hostiles | fps | avg | p50 | p95 | p99 | worst |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 25 | 240 | 4.2 | 4.2 | 4.3 | 4.3 | 4.6 |
+| 50 | 240 | 4.2 | 4.2 | 4.3 | 4.3 | 4.4 |
+| 100 | 240 | 4.2 | 4.2 | 4.3 | 4.3 | 4.3 |
+| 150 | 240 | 4.2 | 4.2 | 4.3 | 4.3 | 4.4 |
+| 200 | 240 | 4.2 | 4.2 | 4.3 | 4.3 | 4.3 |
+
+Two things to take from this, one of which is a warning.
+
+**Confirmed on real hardware: the GL path's cost is independent of hostile
+count.** Two hundred hostiles cost the same as twenty-five, at ULTRA, with
+bloom, contact shadows and sixty-odd lights running. The software-rasterised
+run showed the same shape, so this is architectural, and it is the opposite of
+the Canvas 2D renderer, which loses a third of its frame rate over the same
+range.
+
+**But this run found the monitor, not the ceiling.** 4.2 ms is exactly 1000/240.
+Every percentile is pinned within 0.4 ms of the mean and no frame ever missed
+its deadline: that is vsync at 240 Hz with the GPU idle most of the time. It
+says the renderer is comfortably inside the budget on that card and nothing
+about how much room is left.
+
+The harness now carries the two tools for going past it — a **render scale**
+row for supersampling, since the pipeline is fill-bound and 2× is four times
+the pixels, and **GPU sync timing**, which times the whole frame including the
+GPU so the figure is directly comparable to the frame interval. A 4.2 ms
+interval containing 1 ms of work has four times the headroom, and looks
+identical to one containing 4 ms without it. The sweep flags any step whose
+frame times are pinned, so a capped run cannot be misread as a limit.
+
+### Readability regression at ULTRA — found here, fixed before shipping
+
+The brief was explicit that hostiles must stay readable under heavy combat, and
+at ULTRA they were **less** readable than in production, not more. Against a
+flat teal floor a grey hostile has high contrast. Against lit, grimy, seamed
+plating and a dark grating span it does not, even with the composite's
+guaranteed light floor.
+
+That was recorded here as the single thing that would have to be solved before
+any of this went near a production level, and it was: the composite now runs a
+**contrast-adaptive silhouette rim** over the sprite layer. It samples the four
+neighbouring pixels' coverage to find the outline of a solid sprite, then
+darkens it over a bright background and lightens it over a dark one, so a
+hostile is separated from whatever is behind it regardless of what the lighting
+is doing. Soft things — smoke, decals, particles — never reach the coverage
+threshold and are left alone, and world-space markers were moved off the sprite
+layer entirely so a reticle does not get fringed.
 
 ### Not measured
 

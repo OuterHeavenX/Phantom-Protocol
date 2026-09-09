@@ -7,6 +7,8 @@ const out=path.join(__dirname,'visual-qa-output');fs.mkdirSync(out,{recursive:tr
   const browser=await chromium.launch({headless:true,channel:'chrome'});
   const page=await browser.newPage({viewport:{width:1440,height:900}});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const seedProgress=()=>localStorage.setItem('red-static-save',JSON.stringify({version:3,campaign:{op1:{completed:true}},statistics:{missions:2}}));
+  await page.addInitScript(seedProgress);
   await page.goto('http://127.0.0.1:8080');
   await page.locator('.splash-hit[data-splash="start"]').click();
   await page.waitForTimeout(1200);
@@ -78,6 +80,7 @@ const out=path.join(__dirname,'visual-qa-output');fs.mkdirSync(out,{recursive:tr
   const fallback=await browser.newPage({viewport:{width:960,height:640}});
   fallback.on('pageerror',e=>errors.push(e.message));
   await fallback.route('**/assets/sprites/combatants/**',route=>route.abort());
+  await fallback.addInitScript(seedProgress);
   await fallback.goto('http://127.0.0.1:8080');
   await fallback.locator('.splash-hit[data-splash="start"]').click();
   await fallback.locator('[data-route="deploy"]').click();

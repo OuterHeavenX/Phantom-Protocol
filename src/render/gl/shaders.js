@@ -1,11 +1,16 @@
-// Shader sources for the visual test, kept apart from the plumbing so the
-// pipeline in renderer-gl.js stays readable.
+// Shader sources for the deferred renderer, kept apart from the plumbing so
+// the pipeline in deferred.js stays readable.
 //
-// Every surface here is procedural. There is not one image file in this
-// experiment: materials are generated from position and a handful of per-prop
+// Every surface here is procedural. There is not one image file in the GL
+// path: materials are generated from position and a handful of per-prop
 // parameters, which keeps it original to RED STATIC, keeps the download at
 // zero, and makes it trivial to see what each material costs by switching one
 // branch off.
+//
+// Materials 0-14 are the built interior set the Blacksite experiment started
+// from. 15-21 are the outdoor set the other nine theatres needed: ground,
+// water, foliage, roadway, rock, snow and molten slag. Which of them a
+// theatre uses is decided in dressing.js, not here.
 
 // ---------------------------------------------------------------------------
 // Shared noise. Cheap value noise — a hash and two mixes — rather than
@@ -49,6 +54,11 @@ layout(location=2) in vec4 aColor;     // rgb albedo, a roughness
 layout(location=3) in vec4 aParams;    // material, emissive, height, rotation
 layout(location=4) in vec2 aExtra;     // phase, animation flag
 uniform mat3 uView;
+// Instances below this index are skipped. It exists for one case: a theatre
+// with an authored floor blits that floor into the G-buffer instead, and its
+// procedural floor plates — which are always the first instances — must not
+// paint over it.
+uniform int uSkip;
 out vec2 vUv;
 out vec2 vWorld;
 out vec4 vColor;
@@ -56,6 +66,11 @@ out vec4 vParams;
 out vec2 vExtra;
 out vec2 vHalf;
 void main(){
+  if(gl_InstanceID<uSkip){
+    // Off-screen and degenerate: clipped before it costs a fragment.
+    gl_Position=vec4(2.0,2.0,2.0,1.0);
+    return;
+  }
   vUv=aCorner;
   vec2 local=(aCorner-0.5)*2.0*aRect.zw;
   float c=cos(aParams.w),s=sin(aParams.w);
@@ -214,6 +229,15 @@ void main(){
       rough=0.1;
       // Rim highlight where the glass turns away.
       albedo+=pow(1.0-dome,3.0)*0.5;
+      // A bolted metal collar. Without it the cylinder is a soft pale disc on
+      // the floor, which at gameplay zoom reads as a rendering artefact rather
+      // than as a piece of plant.
+      float collar=smoothstep(0.82,0.90,r);
+      float bolt=step(0.55,fract(atan(c.y,c.x)*2.55));
+      albedo=mix(albedo,vec3(0.15,0.16,0.18)*(0.8+bolt*1.0),collar);
+      emissive*=1.0-collar;
+      rough=mix(rough,0.55,collar);
+      height=mix(height,height*0.4+8.0,collar);
     }else if(mat==13){                            // light fixture
       float live=1.0;
       if(anim>0.5)live=0.55+0.45*sin(uTime*2.6+phase*3.0);
@@ -221,14 +245,116 @@ void main(){
       albedo=vColor.rgb*live;
       rough=0.3;
     }else if(mat==14){                            // standing water
+      // Broken edge, because a perfect ellipse of water on a floor reads as a
+      // decal someone forgot to mask.
       vec2 c=uv-0.5;
-      if(length(c)>0.5)discard;
+      if(length(c)+fbm(uv*6.0+phase)*0.22-0.14>0.5)discard;
       float ripple=fbm(world*0.09+vec2(uTime*0.15,uTime*0.11)+phase);
       albedo=vColor.rgb*(0.4+ripple*0.5);
       rough=0.03+ripple*0.06;
       // A wet surface reads by being smoother than everything around it and
       // by lifting a little, so the lighting pass finds a highlight on it.
       height=1.5+ripple*1.5;
+    }else if(mat==15){                            // open ground
+      // Soil, mud, gravel, snowpack — anything outdoors that is not built.
+      // No seams and no rivets: the whole read is broad low-frequency
+      // mottling plus a fine grain, which is what stops a five-hundred-metre
+      // valley floor from looking like one flat fill.
+      float broad=fbm(world*0.008+phase);
+      float mid=fbm(world*0.045+phase*1.7);
+      float grain=valueNoise(world*0.55);
+      albedo*=0.70+broad*0.55+mid*0.22;
+      albedo+=vec3(0.014,0.013,0.011)*grain;
+      rough=clamp(rough+mid*0.25-broad*0.12,0.2,1.0);
+      height+=(broad-0.5)*3.0;
+    }else if(mat==16){                            // sheet water
+      // Rectangular standing water: flooded street, tidal flat, marsh. Two
+      // ripple fields crossing at different speeds so the surface never
+      // resolves into a repeating pattern.
+      float a=fbm(world*0.055+vec2(uTime*0.13,uTime*0.09)+phase);
+      float b=fbm(world*0.021-vec2(uTime*0.07,uTime*0.05)+phase*2.0);
+      float surf=a*0.6+b*0.4;
+      albedo=vColor.rgb*(0.35+surf*0.75);
+      // The specular read is the whole point of water, so it stays very
+      // smooth and lifts slightly out of the ground plane.
+      rough=0.04+surf*0.07;
+      height=2.0+surf*2.5;
+      // Wind chop catching the light in lines.
+      float chop=smoothstep(0.72,0.85,fbm(world*0.14+vec2(uTime*0.4,0.0)));
+      albedo+=chop*0.10;
+      rough=mix(rough,0.02,chop);
+    }else if(mat==17){                            // foliage
+      // Canopy and scrub. A soft-edged clump rather than a box, because a
+      // rectangular bush is the single most obvious tell that a scene is
+      // instanced quads.
+      vec2 c=(uv-0.5)*2.0;
+      float edge=length(c)+fbm(uv*7.0+phase)*0.45-0.30;
+      if(edge>1.0)discard;
+      float dome=sqrt(max(0.0,1.0-clamp(edge,0.0,1.0)));
+      float leaf=fbm(world*0.32+phase);
+      float clump=fbm(world*0.09+phase*3.0);
+      albedo*=0.55+leaf*0.7+clump*0.35;
+      // Underside darkens, so a canopy reads as having volume under it.
+      albedo*=0.45+dome*0.85;
+      rough=0.92;
+      height=height*dome;
+    }else if(mat==18){                            // roadway deck
+      // Asphalt and poured concrete: the bridge, the hangar apron, platform
+      // decking. Expansion joints on a coarse grid and cracks between them.
+      vec2 j=fract(world*0.006+phase*0.01);
+      float joint=1.0-smoothstep(0.0,0.03,min(min(j.x,1.0-j.x),min(j.y,1.0-j.y)));
+      float wear=fbm(world*0.05+phase);
+      float crack=smoothstep(0.62,0.66,fbm(world*0.13+phase*2.0));
+      albedo*=0.78+wear*0.42;
+      albedo=mix(albedo,albedo*0.45,joint*0.8);
+      albedo=mix(albedo,albedo*0.35,crack*0.5);
+      rough=clamp(0.82+wear*0.18-crack*0.1,0.2,1.0);
+      height=mix(height,height-1.5,max(joint,crack));
+    }else if(mat==19){                            // rock
+      // Boulders, ridge stone, rubble. Domed with a faceted noise break-up so
+      // the silhouette is not a circle.
+      vec2 c=(uv-0.5)*2.0;
+      float r=length(c)*(0.82+fbm(uv*5.0+phase)*0.34);
+      if(r>1.0)discard;
+      float dome=sqrt(max(0.0,1.0-r*r));
+      float facet=fbm(world*0.11+phase);
+      float grit=valueNoise(world*0.7);
+      albedo*=0.6+facet*0.7;
+      albedo+=vec3(0.02)*grit;
+      albedo*=0.5+dome*0.8;
+      rough=clamp(0.75+grit*0.2,0.3,1.0);
+      height=height*dome;
+    }else if(mat==20){                            // snow and ice
+      // Bright, near-white, and the one material in the set that is mostly
+      // about the highlight: wind-packed drift with a specular sparkle and a
+      // few scoured patches showing what is underneath.
+      float drift=fbm(world*0.018+phase);
+      float ridge=fbm(world*0.07+phase*1.4);
+      float sparkle=step(0.985,hash21(floor(world*1.6)));
+      albedo*=0.88+drift*0.35;
+      albedo+=vec3(0.06,0.07,0.09)*ridge;
+      albedo+=sparkle*0.55;
+      // Scoured to the ground where the wind has run.
+      float scour=smoothstep(0.66,0.74,fbm(world*0.032-phase));
+      albedo=mix(albedo,albedo*0.5,scour*0.6);
+      rough=clamp(0.55-ridge*0.3+scour*0.35,0.05,1.0);
+      height+=drift*4.0-scour*2.0;
+    }else if(mat==21){                            // burning ground
+      // Round, with a broken edge, because it is drawn at the radius of a real
+      // hazard and the two footprints have to be the same shape as well as the
+      // same size.
+      vec2 mc=(uv-0.5)*2.0;
+      if(length(mc)+fbm(uv*5.0+phase)*0.30-0.17>1.0)discard;
+      // Flowing slag. Emissive is driven by the flow rather than constant, so
+      // the channel has hot and cooling stretches instead of glowing evenly.
+      float flow=fbm(world*0.03+vec2(uTime*0.22,uTime*0.05)+phase);
+      float crust=smoothstep(0.48,0.62,fbm(world*0.08-vec2(uTime*0.12,0.0)+phase));
+      vec3 hot=vColor.rgb*(1.1+flow*1.4);
+      vec3 cool=vColor.rgb*0.16;
+      albedo=mix(hot,cool,crust*0.85);
+      emissive=vParams.y*(1.0-crust*0.8)*(0.55+flow*1.1);
+      rough=mix(0.35,0.85,crust);
+      height=1.0+flow*2.0;
     }
   }
 
@@ -455,6 +581,11 @@ uniform float uGrain;
 uniform float uVignette;
 uniform float uScanline;
 uniform float uExposure;
+uniform vec2 uEntityTexel;
+uniform float uRim;
+uniform sampler2D uSurface;
+uniform vec2 uSurfaceTexel;
+uniform float uSolidEdge;
 out vec4 oColor;
 ${NOISE}
 
@@ -475,11 +606,87 @@ void main(){
   // Entities are drawn by the existing Canvas 2D sprite code and composited
   // here. They take the scene's light, but never less than a readable floor:
   // a hostile crossing an unlit corridor is a gameplay problem, not a mood.
-  vec4 ent=texture(uEntities,vUv);
+  // The sprite layer is a 2D canvas uploaded as a texture, and a canvas puts
+  // its top row at v=0 while this pass's vUv.y=1 is the top of the screen. It
+  // therefore has to be sampled upside down, exactly as the authored-ground
+  // blit already does.
+  //
+  // Without this every sprite in the game was mirrored about the horizontal
+  // centre of the screen. The operative sits near that centre so the operative
+  // looked correct, which is why it survived review; everything else — every
+  // hostile, every tracer, every muzzle flash, every decal and every hazard
+  // telegraph — was drawn nowhere near the collider it belonged to, and
+  // appeared to swing around the operative as the camera moved.
+  vec2 entUv=vec2(vUv.x,1.0-vUv.y);
+  vec4 ent=texture(uEntities,entUv);
+
+  // Contrast-adaptive silhouette rim, applied outside the sprite.
+  //
+  // This exists because of a measured regression, not for style. Against the
+  // flat floor of the Canvas 2D renderer a grey hostile has high contrast;
+  // against lit, grimy, seamed plating it does not, and the composite's light
+  // floor alone did not fix it. The rim samples the four neighbours' coverage,
+  // finds the pixels just outside a solid silhouette, and darkens them over a
+  // bright background or lightens them over a dark one. A hostile is therefore
+  // separated from whatever is behind it no matter what the lighting is doing.
+  if(uRim>0.0&&ent.a<0.85){
+    float n=texture(uEntities,entUv+vec2(0.0,-uEntityTexel.y)).a;
+    float s=texture(uEntities,entUv+vec2(0.0, uEntityTexel.y)).a;
+    float w=texture(uEntities,entUv+vec2(-uEntityTexel.x,0.0)).a;
+    float e=texture(uEntities,entUv+vec2( uEntityTexel.x,0.0)).a;
+    float around=max(max(n,s),max(w,e));
+    // Only solid things get an outline. Particles, smoke and decals are soft,
+    // their coverage never reaches this, and they are left alone.
+    float edge=clamp(around-ent.a,0.0,1.0)*smoothstep(0.55,0.85,around);
+    if(edge>0.0){
+      float bg=dot(c,vec3(0.2126,0.7152,0.0722));
+      vec3 rim=mix(vec3(0.86,0.90,0.95),vec3(0.015,0.02,0.03),smoothstep(0.18,0.42,bg));
+      c=mix(c,rim,edge*uRim);
+    }
+  }
+
   if(ent.a>0.001){
     float lightHere=clamp(dot(c,vec3(0.33)),0.0,1.0);
     vec3 entityLit=ent.rgb*(0.62+lightHere*0.75);
     c=mix(c,entityLit,ent.a);
+  }
+
+  // Ground the geometry.
+  //
+  // The height field already drives the lighting, but a top-down camera gives
+  // the eye almost nothing else to judge depth by, and the operative has to be
+  // able to tell at a glance what will stop them. This reads the height
+  // difference across a few pixels and draws the two cues a real object would
+  // give: a dark contact line on the floor at the foot of anything that stands
+  // up, and a lit edge along its top lip.
+  //
+  // It is derived from the same height the collision geometry produced, so it
+  // cannot disagree with what is solid — decoration is authored flat and gets
+  // no edge at all, which is the whole point.
+  if(uSolidEdge>0.0){
+    float h=texture(uSurface,vUv).b;
+    // A directional cast shadow, as if the key light were up and to the left.
+    // Marching a few taps out along one direction gives the shadow length and
+    // a soft edge; a symmetric halo just makes things glow darkly and still
+    // reads flat from directly above.
+    vec2 dir=uSurfaceTexel*vec2(-1.0,-1.0);
+    float shadow=0.0;
+    for(int i=1;i<=4;i++){
+      float above=texture(uSurface,vUv+dir*float(i)*2.6).b;
+      shadow=max(shadow,clamp((above-h)*6.0,0.0,1.0)*(1.0-float(i-1)*0.19));
+    }
+    // The lit lip along the top edge, on the side the light comes from.
+    float back=texture(uSurface,vUv-dir*2.0).b;
+    float lip=clamp((h-back)*8.0,0.0,1.0)*step(0.02,h);
+    // A tight contact line right where the object meets the floor, on every
+    // side, so nothing floats even where the cast shadow falls away.
+    float near=max(max(texture(uSurface,vUv-vec2(uSurfaceTexel.x,0.0)).b,
+                       texture(uSurface,vUv+vec2(uSurfaceTexel.x,0.0)).b),
+                   max(texture(uSurface,vUv-vec2(0.0,uSurfaceTexel.y)).b,
+                       texture(uSurface,vUv+vec2(0.0,uSurfaceTexel.y)).b));
+    float contact=clamp((near-h)*9.0,0.0,1.0);
+    c*=1.0-max(shadow*0.55,contact*0.62)*uSolidEdge;
+    c+=lip*0.30*uSolidEdge*(0.35+c);
   }
 
   if(uVignette>0.0){
@@ -496,4 +703,32 @@ void main(){
     c+=(n-0.5)*uGrain;
   }
   oColor=vec4(c,1.0);
+}`;
+
+// ---------------------------------------------------------------------------
+// Authored-ground blit.
+//
+// A theatre that ships painted floor art has that art drawn by the Canvas 2D
+// renderer and laid into the G-buffer here, as albedo, before anything else.
+// The lighting pass then treats it exactly like a procedural surface: the
+// painted floor gets per-pixel falloff, contact shadows and every muzzle flash
+// that lands on it, which is strictly more than it got under Canvas 2D.
+// ---------------------------------------------------------------------------
+export const GROUND_FS=`#version 300 es
+precision highp float;
+in vec2 vUv;
+uniform sampler2D uGround;
+uniform float uRoughness;
+uniform float uGain;
+layout(location=0) out vec4 oAlbedo;
+layout(location=1) out vec4 oSurface;
+void main(){
+  vec4 g=texture(uGround,vec2(vUv.x,1.0-vUv.y));
+  // Painted art is authored as a finished pixel under flat light. Taken as
+  // albedo it would come out doubled once the lighting pass multiplies it, so
+  // it is scaled back to a reflectance the fixtures then light.
+  oAlbedo=vec4(g.rgb*g.a*uGain,uRoughness);
+  // Flat, unlit, ground level: the floor is a plane, and the props drawn over
+  // it carry all the height in the scene.
+  oSurface=vec4(0.5,0.5,0.0,0.0);
 }`;

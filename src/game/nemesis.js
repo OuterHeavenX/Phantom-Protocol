@@ -76,6 +76,9 @@ export class Nemesis extends Boss{
     if(this.dead)return;
     if(this.withdrawing){
       this.updateWithdraw(dt,engine);
+      // It is walking out, not gliding out: the legs and the footfalls carry
+      // on all the way to the edge of the sector.
+      this.updateGait(dt,engine);
       return;
     }
     // Below its threshold it stops fighting and starts leaving, unless this is

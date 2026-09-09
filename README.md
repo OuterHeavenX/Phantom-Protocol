@@ -172,19 +172,62 @@ sustain and surge states, deploys hostiles as coherent squads from one or two be
 schedules minibosses and set-piece events across the contract, and adjusts pressure based
 on how comfortable the player currently is.
 
-**Rendering.** Original Blender combatant models are baked into animated,
+**Blender art and opening campaign.** Original Blender combatant models are baked into animated,
 eight-direction sprites for all operatives, hostiles, elites, vehicles and bosses.
 The editable Blender source, rebuild workflow and visual QA are documented in
 [`docs/visual-overhaul.md`](docs/visual-overhaul.md).
 The first three campaign levels also have rebuilt architecture, raised walls,
 Blender materials, and corrected full-wall collision; see
 [`docs/opening-levels.md`](docs/opening-levels.md).
-A ten-stage layered pipeline (`src/render/renderer.js`): tiled floor,
-persistent decals, hazards, geometry with height offsets, ground effects, y-sorted
-entities with shadows, projectiles, beams, pooled particles, an additive half-resolution
-lighting pass, then post (vignette, flash, minimap, off-screen threat markers). All
-combatant sprites use the Blender atlases, with procedural vector fallbacks when
-an image cannot load. Effects and gameplay telegraphs remain live vector layers.
+
+**Rendering.** Two renderers, same public surface, chosen in one place.
+
+The Canvas 2D one (`src/render/renderer.js`) is a ten-stage layered pipeline: tiled
+floor, persistent decals, hazards, geometry with height offsets, ground effects,
+y-sorted entities with shadows, projectiles, beams, pooled particles, an additive
+half-resolution lighting pass, then post (vignette, flash, minimap, off-screen threat
+markers).
+
+The deferred WebGL2 one (`src/render/gl/`) draws the same contract in all ten theatres
+with per-pixel lighting, contact shadows, bloom and procedural materials: an instanced
+G-buffer, instanced light volumes, a separable bloom chain and a filmic composite. It
+does not reimplement a single sprite — hostiles, projectiles, decals, landmarks and
+markers are still drawn by the 2D code and composited over the lit scene, so nothing
+in the game changes shape when the renderer does. A theatre with painted floor art has
+that art laid into the G-buffer as albedo and lit, rather than replaced.
+
+`Settings → Presentation → Renderer` picks between them; AUTOMATIC takes the deferred
+path wherever there is real hardware behind WebGL2 and Canvas 2D everywhere else, and
+anything that fails falls back rather than breaking. See
+[`docs/deferred-renderer.md`](docs/deferred-renderer.md).
+
+Combatants use animated Blender atlases with authored and procedural fallbacks.
+Blacksite, Crossfall and Hollow use the Canvas architecture pass for raised structures
+and depth sorting, regardless of the renderer preference; other theatres retain
+automatic WebGL2 selection.
+
+**Collision and gameplay integrity.** The renderer is downstream of the
+simulation and is not permitted to change it. Movement goes through one swept
+path that cannot tunnel; spawns are validated against the entity's own radius
+and against a reachability map flood-filled from the operative's start; aim
+converts CSS pixels to world space explicitly; and hostile deployment distance
+is a world-space constant rather than a reading off the camera. `?collisiondebug=1`
+draws every gameplay shape from live simulation data under either renderer. See
+[`docs/collision-integrity.md`](docs/collision-integrity.md).
+
+**Performance, on the device that matters.** Turn on *Performance readout* in
+settings and the game reports what it is actually doing, in a panel meant to be
+read off a phone with no console attached. It leads with **SCREEN** — the
+interval between presented frames — because that is the only timing a GPU
+renderer cannot flatter: WebGL commands are queued and return immediately, so
+the CPU can finish a frame in under two milliseconds while the display manages
+five a second. `outside` is the difference between the two, which is GPU,
+compositor and vsync by subtraction. **STEP CLAMPS** above zero means the
+simulation is discarding time and the contract is running slower than its own
+clock, which is the difference between "slow" and "wrong". `?gpusync=1` forces a
+`gl.finish()` for a direct reading of the frame's cost, reported next to the
+interval it should match — it does not always agree, and when it disagrees the
+work is happening somewhere `finish` cannot see.
 
 **Audio.** Sound effects are fully synthesized at runtime from oscillators and shaped
 noise (`src/core/audio.js`) — a complete sound library with no samples.
@@ -417,6 +460,7 @@ data/     content registries (operatives, weapons, passives, enemies, bosses, ma
 src/core/ rng, math + spatial hash, camera, input, synthesized audio
 src/game/ engine, world generation, AI, weapons, abilities, boss, director, fx
 src/render/ layered renderer and procedural sprite library
+src/render/gl/ deferred WebGL2 renderer and per-theatre scene dressing
 src/ui/   menus, HUD, adaptation screen, pause menu, animated menu background
 src/save/ persistence and progression evaluation
 css/      general, HUD, responsive

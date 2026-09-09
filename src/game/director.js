@@ -1,6 +1,7 @@
 import {ENEMIES,ENEMIES_BY_ID,ELITES,CHOPPER,CARRIER} from '../../data/enemies.js';
 import {MINIBOSSES} from '../../data/bosses.js';
 import {clamp,TAU} from '../core/math.js';
+import {MAX_VISIBLE_WIDTH,MAX_VISIBLE_HEIGHT} from '../core/camera.js';
 import {Squad} from './ai.js';
 
 // Spawn director. Owns pacing: how many hostiles, of what type, in what
@@ -13,6 +14,32 @@ const WAVE_STATES={LULL:'lull',DEPLOY:'deploy',SUSTAIN:'sustain',SURGE:'surge'};
 // Wall-clock span over which threat escalation reaches its ceiling, regardless
 // of how long the contract itself runs.
 const ESCALATION_SECONDS=12*60;
+
+// How far from the operative reinforcements arrive, in world units.
+//
+// This used to be `camera.viewHalfWidth(margin)`, which made hostile
+// deployment a function of the browser window. A wide desktop deployed at
+// about 460 units; an iPhone in portrait at about 272 — well inside the 590
+// units of ground that phone can see vertically, so on the primary handheld
+// target hostiles materialised in plain view. It also moved with the cosmetic
+// zoom punch on a boss reveal, and with the performance-mode setting, because
+// both change the camera.
+//
+// The camera never shows more than MAX_VISIBLE_WIDTH x MAX_VISIBLE_HEIGHT of
+// world, so half that rectangle's diagonal is the nearest a hostile can deploy
+// and still be off screen on every device and at every zoom. It lands inside
+// the range the desktop build already used, which is why this is a
+// renderer-independence fix rather than a pacing change.
+const DEPLOY_RADIUS=Math.hypot(MAX_VISIBLE_WIDTH,MAX_VISIBLE_HEIGHT)/2;
+
+// Carriers are the nearest thing to deploy, on purpose: one drives in on the
+// ground with only local avoidance to steer by, so every extra metre of
+// geometry between it and the operative is another chance to wedge. "Nearest"
+// is expressed as the smallest spread on top of DEPLOY_RADIUS rather than as a
+// smaller radius — a first attempt at 0.82x put a carrier inside an iPhone's
+// visible rectangle at around seventy degrees off horizontal, which is exactly
+// the class of viewport-dependent bug this whole change is removing.
+const CARRIER_SPREAD=60;
 
 export class Director{
   constructor(engine,options){
@@ -33,6 +60,8 @@ export class Director{
     this.lastPressureSample=0;
     this.bossSpawned=false;
     this.bossesSpawned=0;
+    // Scheduled events that came due at a moment they could not run.
+    this.pendingEvents=[];
     this.scriptedEvents=this.buildEventSchedule(options.duration);
     this.eventIndex=0;
     this.totalSpawned=0;
@@ -247,11 +276,11 @@ export class Director{
     const engine=this.engine;
     const rng=engine.rng;
     const angle=request.bearing+(rng.next()-.5)*(request.spread??.6);
-    const distance=engine.camera.viewHalfWidth(180)+rng.range(0,260);
+    const distance=DEPLOY_RADIUS+rng.range(0,180);
     const point=engine.world.findSpawn(rng,{
       x:engine.player.x+Math.cos(angle)*distance,
       y:engine.player.y+Math.sin(angle)*distance
-    },0,180);
+    },0,180,(ENEMIES_BY_ID[request.archetype?.id]?.radius||request.archetype?.radius||12)+4);
 
     const enemy=engine.spawnEnemy(request.archetype,point.x,point.y,request.options);
     if(!enemy)return null;
@@ -274,11 +303,11 @@ export class Director{
     const tierCap=Math.min(ELITES.length,2+Math.floor(this.escalation*ELITES.length));
     const elite=rng.pick(ELITES.slice(0,tierCap));
     const angle=rng.angle();
-    const distance=engine.camera.viewHalfWidth(200);
+    const distance=DEPLOY_RADIUS;
     const point=engine.world.findSpawn(rng,{
       x:engine.player.x+Math.cos(angle)*distance,
       y:engine.player.y+Math.sin(angle)*distance
-    },0,200);
+    },0,200,(elite.radius||18)+6);
     const enemy=engine.spawnEliteEnemy(elite,point.x,point.y);
     if(enemy){
       enemy.awareness=1;
@@ -301,7 +330,7 @@ export class Director{
     let deployed=0;
     for(let i=0;i<count;i++){
       const angle=bearing+(i-(count-1)/2)*.45;
-      const distance=engine.camera.viewHalfWidth(220)+rng.range(60,220);
+      const distance=DEPLOY_RADIUS+rng.range(0,160);
       const x=clamp(engine.player.x+Math.cos(angle)*distance,60,engine.world.width-60);
       const y=clamp(engine.player.y+Math.sin(angle)*distance,60,engine.world.height-60);
       // Flying, so it does not need a clear ground spawn — only to be inside
@@ -333,11 +362,11 @@ export class Director{
       // Just beyond the edge of view. A carrier has to drive in on the ground
       // with only local avoidance to steer by, so every extra metre of
       // geometry between it and the operative is another chance to wedge.
-      const distance=engine.camera.viewHalfWidth(60)+rng.range(20,90);
+      const distance=DEPLOY_RADIUS+rng.range(0,CARRIER_SPREAD);
       const point=engine.world.findSpawn(rng,{
         x:engine.player.x+Math.cos(angle)*distance,
         y:engine.player.y+Math.sin(angle)*distance
-      },0,220);
+      },0,220,(CARRIER.radius||30)+8);
       const carrier=engine.spawnEnemy(CARRIER,point.x,point.y,{});
       if(!carrier)continue;
       carrier.awareness=1;
@@ -359,10 +388,37 @@ export class Director{
     while(this.eventIndex<this.scriptedEvents.length&&
           this.engine.elapsed>=this.scriptedEvents[this.eventIndex].at){
       const event=this.scriptedEvents[this.eventIndex++];
-      this.fireEvent(event);
+      if(!this.fireEvent(event))this.pendingEvents.push(event);
     }
+    this.retryHeldEvents();
   }
 
+  // Events that could not fire when they came due.
+  //
+  // Everything that can be held is held for one reason: a signature was
+  // already in the sector, and both `spawnBoss` and `spawnNemesis` refuse
+  // while one is. So there is nothing to retry until that is gone — the first
+  // version retried on every step regardless and made 18,722 refused calls in
+  // a single twenty-minute contract.
+  //
+  // The attempt cap is for the refusals that are not about the boss at all: a
+  // theatre naming a signature that is not in the table, or a walker event on
+  // a save with no record. Those can never succeed, and without a cap they
+  // would sit in the queue being retried for the rest of the contract.
+  retryHeldEvents(){
+    if(!this.pendingEvents.length)return;
+    // Past the clock the contract is asking the operative to leave, and a
+    // fresh signature is not a thing to drop on them on their way out.
+    if(this.engine.extraction){this.pendingEvents.length=0;return}
+    if(this.engine.boss)return;
+    const held=this.pendingEvents.shift();
+    if(this.fireEvent(held))return;
+    held.attempts=(held.attempts||0)+1;
+    if(held.attempts<3)this.pendingEvents.push(held);
+  }
+
+  // Returns false when the event came due at a moment it could not run, and
+  // wants holding for later. Anything else counts as handled.
   fireEvent(event){
     const engine=this.engine;
     switch(event.type){
@@ -392,23 +448,43 @@ export class Director{
         break;
       }
       case 'nemesis':{
-        engine.spawnNemesis();
+        // The walker refuses on the same condition as a signature, and on a
+        // twenty-minute contract it is scheduled at 44% against a boss at 42%
+        // — twenty-four seconds apart, against a fight tuned to last minutes.
+        // Measured: refused every time, so on any long contract where the
+        // operator's record said the walker was due, it never came. It queues
+        // behind the signature now instead of being lost.
+        if(!engine.spawnNemesis())return false;
         break;
       }
       case 'boss':
       case 'finalBoss':{
-        engine.spawnBoss(this.bossId);
+        // `spawnBoss` refuses while a signature is already in the sector, and
+        // this used to swallow the refusal. A twenty-minute contract schedules
+        // one at 42% and its climax at 74%; measured on a real timeline, the
+        // first was still alive when the second came due, so the contract's
+        // final boss silently never happened. The event is held instead and
+        // retried once the sector is clear.
+        if(!engine.spawnBoss(this.bossId))return false;
         this.bossesSpawned++;
         break;
       }
       default:break;
     }
+    return true;
   }
 
   // Text describing the current phase, shown on the HUD.
   phaseLabel(){
+    // Extraction outranks the signature. It used to be the other way around,
+    // which meant that on a contract whose boss was still standing when the
+    // clock ran out — the common case on a long one — the HUD went on saying
+    // COMMAND SIGNATURE ACTIVE for the whole sixty-second window and never
+    // once told the operative the door was open. The window closed on them.
+    if(this.engine.extraction){
+      return this.engine.boss?'EXTRACT NOW // SIGNATURE ACTIVE':'EXTRACTION PHASE';
+    }
     if(this.engine.boss)return 'COMMAND SIGNATURE ACTIVE';
-    if(this.engine.extraction)return 'EXTRACTION PHASE';
     const progress=this.progress;
     if(this.state===WAVE_STATES.SURGE)return 'HOSTILE SURGE';
     if(progress>.85)return 'TOTAL LOCKDOWN';

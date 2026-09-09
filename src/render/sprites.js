@@ -1,28 +1,38 @@
 import {TAU} from '../core/math.js';
 import {drawCombatant} from './combatants.js';
+import {entityArt,drawEntityArt,tintFor,ENTITY_ART} from './entityart.js';
 
 // Blender combatant sprites with vector effects and a complete procedural
 // fallback while images decode or when an asset cannot be loaded.
 
 // Shared helper: a walking figure with swinging legs and a shouldered weapon.
+// `part` selects what is drawn: 'all' (default), 'legs' or 'body'.
+//
+// The split exists for the authored-art layer. Legs are animated from the walk
+// phase and cannot be baked without freezing the walk, so where a baked body
+// exists the runtime draws the legs here and the render on top — the same
+// division the bosses use, and for the same reason.
 function drawHumanoid(ctx,options){
   const{
     bodyColor,accentColor,outline='rgba(230,244,242,.55)',
     scale=1,phase=0,moving=1,weapon='rifle',weaponColor=accentColor,
-    flash=false,armor=0
+    flash=false,armor=0,part='all'
   }=options;
 
   ctx.scale(scale,scale);
 
   // Legs — counter-swinging, amplitude driven by movement speed.
-  const swing=Math.sin(phase)*4.5*moving;
-  ctx.strokeStyle=shade(bodyColor,-.35);
-  ctx.lineWidth=3.6;
-  ctx.lineCap='round';
-  ctx.beginPath();
-  ctx.moveTo(-1,-3.5);ctx.lineTo(-3+swing*.5,-7.5-swing*.35);
-  ctx.moveTo(-1,3.5);ctx.lineTo(-3-swing*.5,7.5+swing*.35);
-  ctx.stroke();
+  if(part!=='body'){
+    const swing=Math.sin(phase)*4.5*moving;
+    ctx.strokeStyle=shade(bodyColor,-.35);
+    ctx.lineWidth=3.6;
+    ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(-1,-3.5);ctx.lineTo(-3+swing*.5,-7.5-swing*.35);
+    ctx.moveTo(-1,3.5);ctx.lineTo(-3-swing*.5,7.5+swing*.35);
+    ctx.stroke();
+  }
+  if(part==='legs')return;
 
   // Torso.
   ctx.fillStyle=flash?'#ffffff':bodyColor;
@@ -331,6 +341,94 @@ const WEAPON_LOOK={
 // Enemies — one routine per render kind.
 // ---------------------------------------------------------------------------
 
+// What the runtime still draws when a baked body exists for a kind.
+//
+// `under` is drawn beneath the render, `over` on top. Everything here moves:
+// legs swing from the walk phase, rotors and dishes and rings turn, charges
+// pulse. None of it can be baked without freezing it, and a walker that glides
+// is the most obvious way to make an expensive asset look cheap. Each fragment
+// is lifted from the procedural renderer it belongs to, so the animation is
+// identical whichever body is drawn under it.
+const legsOf=k=>(ctx,enemy)=>drawHumanoid(ctx,{
+  bodyColor:enemy.color,scale:k,phase:enemy.walkPhase,
+  moving:Math.min(1,Math.hypot(enemy.vx,enemy.vy)/90),part:'legs'
+});
+const ART_PARTS={
+  soldier:{under:legsOf(1)},
+  shield:{under:legsOf(1)},
+  sniper:{under:legsOf(.96)},
+  sapper:{under:legsOf(.95),over(ctx,enemy,scale,time){
+    const armed=enemy.windup>0;
+    ctx.save();ctx.scale(scale,scale);
+    ctx.fillStyle=armed?withAlpha('#ff3b30',.55+Math.sin(time*(armed?26:5))*.45):withAlpha('#ffa14f',.6);
+    ctx.beginPath();ctx.arc(-6,0,4.5,0,TAU);ctx.fill();ctx.restore();
+  }},
+  veil:{under:legsOf(.92),over(ctx,enemy,scale,time){
+    ctx.save();ctx.scale(scale,scale);
+    ctx.strokeStyle=withAlpha('#b58cff',.3);ctx.lineWidth=1;
+    ctx.beginPath();ctx.arc(0,0,13+Math.sin(time*6)*2,0,TAU);ctx.stroke();ctx.restore();
+  }},
+  augment:{under:(ctx,enemy)=>drawHumanoid(ctx,{
+    bodyColor:enemy.enraged?'#ff5b45':enemy.color,scale:1.08,
+    phase:enemy.walkPhase*(enemy.enraged?1.8:1),moving:1,part:'legs'
+  }),over(ctx,enemy,scale,time){
+    if(!enemy.enraged)return;
+    ctx.save();ctx.scale(scale,scale);
+    ctx.strokeStyle=withAlpha('#ff5b30',.45+Math.sin(time*14)*.2);ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(0,0,16,0,TAU);ctx.stroke();ctx.restore();
+  }},
+  heavy:{under(ctx,enemy){
+    ctx.save();ctx.scale(1.18,1.18);
+    ctx.strokeStyle=shade(enemy.color,-.45);ctx.lineWidth=4.5;ctx.lineCap='round';
+    const swing=Math.sin(enemy.walkPhase)*3;
+    ctx.beginPath();
+    ctx.moveTo(-2,-6);ctx.lineTo(-5+swing,-11);
+    ctx.moveTo(-2,6);ctx.lineTo(-5-swing,11);
+    ctx.stroke();ctx.restore();
+  }},
+  drone:{over(ctx,enemy,scale,time){
+    // Brighter and a touch wider than the procedural rotors. Those sat over a
+    // dark outlined fuselage and read at alpha .4; over the baked hubs, which
+    // are opaque and lit, the same arcs all but vanished.
+    ctx.save();ctx.scale(scale,scale);
+    ctx.strokeStyle=withAlpha(enemy.color,.6);ctx.lineWidth=1.3;
+    const spin=time*26+(enemy.walkPhase||0);
+    for(const [rx,ry] of [[-4,-9],[-4,9]]){
+      ctx.beginPath();ctx.arc(rx,ry,6,spin%TAU,spin%TAU+2.4);ctx.stroke();
+    }
+    ctx.restore();
+  }},
+  crawler:{under(ctx,enemy){
+    ctx.save();ctx.scale(1,1);
+    const legPhase=Math.sin(enemy.walkPhase*2)*2.6;
+    ctx.strokeStyle=shade(enemy.color,-.2);ctx.lineWidth=1.6;ctx.lineCap='round';
+    ctx.beginPath();
+    for(const side of [-1,1])for(let i=0;i<3;i++){
+      const ox=(i-1)*5,wobble=(i%2?legPhase:-legPhase)*side;
+      ctx.moveTo(ox,side*5);ctx.lineTo(ox+wobble,side*12);
+    }
+    ctx.stroke();ctx.restore();
+  }},
+  jammer:{over(ctx,enemy,scale,time){
+    ctx.save();ctx.scale(scale,scale);
+    ctx.save();ctx.rotate(time*1.6);
+    ctx.strokeStyle='#c8b6ff';ctx.lineWidth=1.6;
+    ctx.beginPath();ctx.arc(0,0,10,-.9,.9);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(10,0);ctx.stroke();
+    ctx.restore();
+    const pulse=(time*.8+(enemy.walkPhase||0)*.1)%1;
+    ctx.strokeStyle=withAlpha('#b29ae9',(1-pulse)*.4);ctx.lineWidth=1.4;
+    ctx.beginPath();ctx.arc(0,0,10+pulse*22,0,TAU);ctx.stroke();
+    ctx.restore();
+  }},
+  warden:{over(ctx,enemy,scale,time){
+    ctx.save();ctx.scale(scale,scale);ctx.rotate(-time*1.1);
+    ctx.strokeStyle=withAlpha(enemy.color,.5);ctx.lineWidth=2;ctx.setLineDash([6,6]);
+    ctx.beginPath();ctx.arc(0,0,17,0,TAU);ctx.stroke();ctx.restore();
+  }},
+  mortar:{}
+};
+
 export function drawEnemy(ctx,enemy,time,settings){
   // Cloaked infiltrators are barely visible until they commit.
   const cloaked=enemy.cloaked;
@@ -340,7 +438,15 @@ export function drawEnemy(ctx,enemy,time,settings){
   const scale=enemy.radius/11;
   // An aircraft's shadow sits offset and smaller, which is what sells it as
   // being above the deck rather than on it.
-  if(enemy.flying)drawShadow(ctx,enemy.x+16,enemy.y+22,enemy.radius*.7,.34);
+  if(enemy.flying){
+    // Altitude is carried by the shadow and nothing else: in a top-down view
+    // the airframe cannot move up the screen to show height, so the shadow
+    // slides out from under it instead. A wreck on its way down brings the two
+    // back together, and the shadow hardens and grows as it closes.
+    const alt=enemy.altitude??1;
+    drawShadow(ctx,enemy.x+16*alt,enemy.y+22*alt,
+      enemy.radius*(.7+(1-alt)*.42),.34+(1-alt)*.22);
+  }
   else drawShadow(ctx,enemy.x,enemy.y,enemy.radius,cloaked?.1:.3);
 
   const kind=enemy.render||'soldier';
@@ -348,8 +454,37 @@ export function drawEnemy(ctx,enemy,time,settings){
   if(!drawCombatant(ctx,key,enemy,{phase:enemy.flying?time*20:(enemy.walkPhase||0),moving:Math.hypot(enemy.vx||0,enemy.vy||0)>4||enemy.flying})){
   ctx.translate(enemy.x,enemy.y);
   ctx.rotate(enemy.angle);
-  const renderer=ENEMY_RENDERERS[kind]||ENEMY_RENDERERS.soldier;
-  renderer(ctx,enemy,scale,time);
+
+  // Authored art where one exists, procedural otherwise — including while the
+  // image is still decoding, so the first seconds of a contract never show a
+  // hole where a hostile should be.
+  const art=entityArt(kind);
+  if(art){
+    const parts=ART_PARTS[kind]||{};
+    // Legs and anything else that moves beneath the body. Drawn in the same
+    // scale space the procedural renderer used, so the animation is unchanged.
+    if(parts.under){ctx.save();ctx.scale(scale,scale);parts.under(ctx,enemy,scale,time);ctx.restore()}
+    // Elites carry their own colour and must keep reading as elites; the
+    // policy lives in `tintFor` so it can be asserted on directly.
+    const {color,tint}=tintFor(enemy);
+    // A hit flash is a whole-body white; the baked render cannot do it, so
+    // the procedural body draws for that frame instead. It is one frame, and
+    // the procedural silhouette is close enough that it reads as a flash
+    // rather than as a swap.
+    if(enemy.hitFlash>0&&ENEMY_RENDERERS[kind]){
+      ENEMY_RENDERERS[kind](ctx,enemy,scale,time);
+    }else{
+      drawEntityArt(ctx,art,enemy.radius,{color,tint,file:ENTITY_ART[kind]?.file});
+    }
+    // The rotor is a moving part and stays procedural over the baked airframe.
+    // Its blur has to track the engine's real spin rate, and during a crash
+    // that rate is winding down — baking it would freeze it.
+    if(kind==='chopper')drawRotor(ctx,enemy,scale,time);
+    if(parts.over)parts.over(ctx,enemy,scale,time);
+  }else{
+    const renderer=ENEMY_RENDERERS[kind]||ENEMY_RENDERERS.soldier;
+    renderer(ctx,enemy,scale,time);
+  }
   }else{
     drawCombatantSignals(ctx,enemy,time);
   }
@@ -460,6 +595,49 @@ function drawApc(ctx,enemy,scale,time){
   }
 }
 
+// The main rotor, extracted so it can be drawn over a baked airframe as well
+// as over the procedural one.
+//
+// A moving part cannot be baked: the blur has to track the engine's real spin
+// rate, and during a crash that rate is winding down. This is the one piece of
+// a gunship that must stay drawn at runtime whatever the hull is made of.
+export function drawRotor(ctx,enemy,scale,time){
+  const s=scale*.92;
+  const spin=enemy.rotor||time*26;
+  ctx.save();
+  ctx.globalAlpha=.11;
+  ctx.fillStyle='#dfe9ee';
+  ctx.beginPath();ctx.arc(0,0,34*s,0,TAU);ctx.fill();
+  // The blades sit under the disc in weight so the airframe still reads.
+  ctx.globalAlpha=.5;
+  ctx.strokeStyle='#e6eef2';
+  ctx.lineWidth=1.8*s;
+  ctx.beginPath();
+  for(let i=0;i<4;i++){
+    const a=spin+i*(TAU/4);
+    ctx.moveTo(0,0);
+    ctx.lineTo(Math.cos(a)*34*s,Math.sin(a)*34*s);
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  // Tail rotor. Turns faster than the main and is driven off the same spin, so
+  // it belongs with it rather than with the airframe — a wreck losing drive to
+  // the tail rotor is the reason it goes down at all.
+  ctx.save();
+  ctx.translate(-34*s,0);
+  ctx.globalAlpha=.6;
+  ctx.strokeStyle='#dfe9ee';
+  ctx.lineWidth=1.4*s;
+  ctx.beginPath();
+  for(let i=0;i<3;i++){
+    const a=spin*1.7+i*(TAU/3);
+    ctx.moveTo(0,0);ctx.lineTo(Math.cos(a)*9*s,Math.sin(a)*9*s);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawChopper(ctx,enemy,scale,time){
   const s=scale*.92;
   const body=enemy.color||'#c8d2d6';
@@ -494,38 +672,8 @@ function drawChopper(ctx,enemy,scale,time){
   ctx.beginPath();roundedRect(ctx,-4*s,-19*s,12*s,8*s,2*s);ctx.fill();ctx.stroke();
   ctx.beginPath();roundedRect(ctx,-4*s,11*s,12*s,8*s,2*s);ctx.fill();ctx.stroke();
 
-  // Main rotor: a fast disc plus blades, so it reads as turning at any speed.
-  const spin=enemy.rotor||time*26;
-  ctx.save();
-  ctx.globalAlpha=.11;
-  ctx.fillStyle='#dfe9ee';
-  ctx.beginPath();ctx.arc(0,0,34*s,0,TAU);ctx.fill();
-  // The blades sit under the disc in weight so the airframe still reads.
-  ctx.globalAlpha=.5;
-  ctx.strokeStyle='#e6eef2';
-  ctx.lineWidth=1.8*s;
-  ctx.beginPath();
-  for(let i=0;i<4;i++){
-    const a=spin+i*(TAU/4);
-    ctx.moveTo(0,0);
-    ctx.lineTo(Math.cos(a)*34*s,Math.sin(a)*34*s);
-  }
-  ctx.stroke();
-  ctx.restore();
+  drawRotor(ctx,enemy,scale,time);
 
-  // Tail rotor.
-  ctx.save();
-  ctx.translate(-34*s,0);
-  ctx.globalAlpha=.6;
-  ctx.strokeStyle='#dfe9ee';
-  ctx.lineWidth=1.4*s;
-  ctx.beginPath();
-  for(let i=0;i<3;i++){
-    const a=spin*1.7+i*(TAU/3);
-    ctx.moveTo(0,0);ctx.lineTo(Math.cos(a)*9*s,Math.sin(a)*9*s);
-  }
-  ctx.stroke();
-  ctx.restore();
 
   // Navigation strobe.
   const blink=(Math.sin(time*5)+1)/2;
@@ -869,8 +1017,21 @@ export function drawBoss(ctx,boss,time){
   ctx.translate(boss.x,boss.y);
   const flash=boss.hitFlash>0;
   const body=flash?'#ffffff':'#2a1418';
-  const renderer=BOSS_RENDERERS[boss.def.render]||BOSS_RENDERERS.manticore;
-  renderer(ctx,boss,time,body);
+  // Legs first, so the hull sits on top of them and the limbs read as coming
+  // out from underneath rather than being stuck to the front. The Nemesis
+  // draws its own, which are part of its chassis rather than bolted under it.
+  if(boss.def.gait&&boss.def.render!=='nemesis')drawMechLegs(ctx,boss,flash);
+  // The legs above are animated from the gait and stay procedural; only the
+  // hull is baked, and it is drawn over them exactly as the procedural hull was
+  // — so the walk cycle is unchanged and the chassis still sits on top of its
+  // own limbs.
+  const bossArt=flash?null:entityArt(boss.def.render,true);
+  if(bossArt){
+    drawEntityArt(ctx,bossArt,boss.radius,{});
+  }else{
+    const renderer=BOSS_RENDERERS[boss.def.render]||BOSS_RENDERERS.manticore;
+    renderer(ctx,boss,time,body);
+  }
   }
 
   ctx.restore();
@@ -884,6 +1045,83 @@ export function drawBoss(ctx,boss,time){
     ctx.beginPath();ctx.arc(boss.x,boss.y,boss.radius+16,0,TAU);ctx.stroke();
     ctx.restore();
   }
+}
+
+// Legs for a signature that has them, which is now all of them.
+//
+// The rule the Nemesis established: read from above, a walker only reads as a
+// walker if its feet clear the hull. Legs tucked under a chassis just look like
+// a tank, because from overhead there is no vertical axis to sell the arc of a
+// stride. So the feet ride rails outboard of the body and swing fore and aft
+// far enough that the eye can see them alternate.
+//
+// Two legs counter-swing. Four go in diagonal pairs, which is what a walking
+// quadruped actually does and what stops it looking like it is hopping.
+function drawMechLegs(ctx,boss,flash){
+  const gait=boss.def.gait;
+  const r=boss.radius;
+  const span=(gait.span||1)*r;
+  const stride=boss.stridePhase||0;
+  const accent=boss.def.accent||'#ffb35c';
+  const shell=flash?'#ffffff':'#333b41';
+  const plate=flash?'#ffffff':'#454e55';
+  const dark=flash?'#dddddd':'#1d2429';
+  const quad=gait.legs===4;
+
+  ctx.save();
+  // Aligned to travel, not to facing: a machine walks where it is going even
+  // while its guns track somewhere else.
+  //
+  // Rotated absolutely, because this is drawn from `drawBoss` where the context
+  // has only been translated. The Nemesis subtracts `boss.angle` here instead —
+  // its legs are drawn inside its own renderer, after the hull has already been
+  // turned to face. Copying that line into this one pointed every other
+  // signature's legs off by its facing.
+  const speed=Math.hypot(boss.vx,boss.vy);
+  ctx.rotate(speed>6?Math.atan2(boss.vy,boss.vx):boss.angle);
+
+  // [lateral rail, fore/aft offset, phase] per limb.
+  const limbs=quad
+    ?[[-1,r*.42,0],[1,r*.42,Math.PI],[-1,-r*.42,Math.PI],[1,-r*.42,0]]
+    :[[-1,0,Math.PI],[1,0,0]];
+
+  for(const [side,base,phase] of limbs){
+    const swing=Math.sin(stride+phase);
+    const planted=swing<0;
+    const reach=base+swing*r*(quad?.34:.52);
+    const rail=side*span;
+    const width=quad?r*.16:r*.26;
+
+    // Thigh: a tapered plate from the hip out to the rail.
+    ctx.fillStyle=planted?plate:shell;
+    ctx.strokeStyle=accent;
+    ctx.lineWidth=1.6;
+    ctx.beginPath();
+    ctx.moveTo(base-r*.16,side*r*.26);
+    ctx.lineTo(base+r*.16,side*r*.26);
+    ctx.lineTo(reach+width,rail);
+    ctx.lineTo(reach-width,rail);
+    ctx.closePath();ctx.fill();ctx.stroke();
+
+    // Foot, square to the rail and clearly outboard of the hull. The planted
+    // one is lit, which is what makes the alternation legible at a distance.
+    ctx.save();
+    ctx.translate(reach,rail);
+    ctx.fillStyle=planted?plate:dark;
+    ctx.strokeStyle=planted?'#ffd9a8':accent;
+    ctx.lineWidth=2;
+    const fw=quad?r*.3:r*.5,fh=quad?r*.2:r*.32;
+    ctx.beginPath();roundedRect(ctx,-fw/2,-fh/2,fw,fh,3);ctx.fill();ctx.stroke();
+    ctx.fillStyle=dark;
+    ctx.fillRect(-fw*.36,-fh*.28,fw*.24,fh*.56);
+    ctx.fillRect(fw*.12,-fh*.28,fw*.24,fh*.56);
+    if(planted){
+      ctx.fillStyle=withAlpha(boss.def.color||'#e0533f',.7);
+      ctx.fillRect(fw*.4,-fh*.14,fw*.08,fh*.28);
+    }
+    ctx.restore();
+  }
+  ctx.restore();
 }
 
 const BOSS_RENDERERS={
@@ -904,10 +1142,11 @@ const BOSS_RENDERERS={
     const plate=flash?'#ffffff':'#454e55';
     const dark=flash?'#dddddd':'#1d2429';
 
-    const moving=Math.min(1,Math.hypot(boss.vx,boss.vy)/40);
-    const limp=boss.strideLimp?.5:1;
-    boss.stridePhase=(boss.stridePhase||0)+(.7+moving*3)*.016*limp;
-    const stride=boss.stridePhase;
+    // Advanced by the simulation on the fixed step. This used to be done here,
+    // on a hardcoded sixteen milliseconds, which made the gait run at whatever
+    // frame rate the device managed and had the draw pass writing simulation
+    // state.
+    const stride=boss.stridePhase||0;
 
     // ---- Legs: outboard of the hull, aligned to travel ----
     // Each foot travels fore and aft along its own rail. Letting them swing

@@ -22,7 +22,11 @@ export const MUSIC_TRACKS={
 
   // Operation 02 — CROSSFALL, Crossfall Span.
   op2:{file:'CROSSFALL.ogg',title:'CROSSFALL'},
-  crossfall:{file:'CROSSFALL.ogg',title:'CROSSFALL'}
+  crossfall:{file:'CROSSFALL.ogg',title:'CROSSFALL'},
+
+  // Operation 03 — HOLLOW, Hollow Valley.
+  op3:{file:'TheHollow.ogg',title:'THE HOLLOW'},
+  hollow:{file:'TheHollow.ogg',title:'THE HOLLOW'}
 };
 
 // Formats the loader will offer the browser, best-supported last so the list

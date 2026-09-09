@@ -6,9 +6,11 @@ import {buildSurface,wallMaterial} from './surface.js';
 import {Architecture} from './architecture.js';
 import {drawLandmark} from './landmarks.js';
 import {EnvironmentArt,drawSprite,drawSlicedWall} from './environment.js';
-import {EXTRACTION_RADIUS,EXTRACTION_HOLD} from '../game/engine.js';
+import {EXTRACTION_RADIUS,EXTRACTION_HOLD,FIXED_STEP} from '../game/engine.js';
 import {vaultKind} from '../../data/vaults.js';
 import {REVIVE_RADIUS} from '../game/squadmate.js';
+import {colorblindActive,HOSTILE_OUTLINE} from '../../data/colorblind.js';
+import {lightingFor,exposureAt} from '../../data/lighting.js';
 import {
   drawPlayer,drawSquadmate,drawEnemy,drawBoss,drawPhantom,drawTurret,drawMine,drawPickup,
   drawShadow,withAlpha,shade,roundedRect
@@ -32,7 +34,17 @@ import {
 // lighting pass and no culling.
 
 // Cover whose visible form is an authored landmark rather than a generic box.
-const LANDMARK_COLLIDERS=new Set(['fuselage','trunk','boulder','wreck']);
+const LANDMARK_COLLIDERS=new Set(['fuselage','wing','trunk','boulder','wreck','conifer']);
+
+// ?collisiondebug=1 draws every gameplay shape in the sector over the top of
+// whichever renderer is running. Developer tooling: it is off unless asked
+// for, and nothing about it is reachable from normal play.
+const COLLISION_DEBUG=(()=>{
+  try{
+    const value=new URLSearchParams(location.search).get('collisiondebug');
+    return value!==null&&value!=='0'&&value.toLowerCase()!=='false';
+  }catch{return false}
+})();
 
 export class Renderer{
   constructor(canvas,ctx,engine){
@@ -42,16 +54,24 @@ export class Renderer{
     this.settings=engine.settings;
     loadCombatants();
     this.quality=this.settings.particles||'high';
+    // Set by the deferred renderer when it drives this one as its sprite pass.
+    // Null means this renderer is the one on screen.
+    this.host=null;
 
     // Offscreen buffer for the additive lighting pass.
     this.lightCanvas=document.createElement('canvas');
     this.lightCtx=this.lightCanvas.getContext('2d');
 
     this.sortBuffer=[];
+    // Reused across frames so reading the muzzle flashes allocates nothing.
+    this.muzzleScratch=[];
     this.frameTimes=[];
     this.lastFrame=performance.now();
     this.fps=60;
     this.floorPattern=null;
+    // Developer collision visualisation, off unless ?collisiondebug=1 is on the
+    // URL. Read once here rather than per frame.
+    this.collisionDebug=COLLISION_DEBUG;
     this.buildFloorPattern();
     // Per-theatre ambient weather; theatres without a profile cost nothing.
     this.weather=new Weather(engine.map?.weather,this.settings);
@@ -115,10 +135,10 @@ export class Renderer{
 
     this.drawFloor(ctx);
     this.drawDecals(ctx);
-    this.drawLandmarks(ctx);
+    this.drawLandmarks(ctx,'under');
     this.drawHazards(ctx);
     this.drawGroundEffects(ctx);
-    if(!this.architecture.active)this.drawGeometry(ctx);
+    if(!this.architecture.active){this.drawGeometry(ctx);this.drawLandmarks(ctx,'over')}
     this.drawEntities(ctx);
     this.drawProjectiles(ctx);
     this.drawBeams(ctx);
@@ -128,6 +148,7 @@ export class Renderer{
     this.drawMissionMarkers(ctx);
     this.drawSquadMarkers(ctx);
     this.drawOptic(ctx);
+    if(this.collisionDebug)this.drawCollisionDebug(ctx);
 
     ctx.restore();
 
@@ -142,6 +163,7 @@ export class Renderer{
     }
 
     this.drawPost(ctx,width,height);
+    if(this.collisionDebug)this.drawCollisionReadout(ctx,width,height,'Canvas 2D');
     // Closes the render section and the frame. The simulation half was marked
     // in Engine.update, so the two together account for the whole frame.
     profiler.mark('render');
@@ -234,13 +256,20 @@ export class Renderer{
   }
 
   // Authored theatre furniture: towers, wrecks, trees, airframes.
-  drawLandmarks(ctx){
+  //
+  // `layer` splits the pass around the geometry: 'under' is everything that
+  // sits on the floor, 'over' is the ridge crest, which is drawn on top of
+  // its wall now that the wall spans the crest (it used to poke out past a
+  // shallower wall). Omitted, both are drawn — the GL path composites this
+  // layer over its lit geometry already.
+  drawLandmarks(ctx,layer=null){
     if(this.architecture.active)return;
     const world=this.engine.world;
     if(!world.landmarks?.length)return;
     const camera=this.engine.camera;
     const time=this.engine.elapsed;
     for(const item of world.landmarks){
+      if(layer&&(item.kind==='ridge')!==(layer==='over'))continue;
       if(!camera.isVisible(item.x,item.y,item.span||item.r||item.size||260))continue;
       drawLandmark(ctx,item,world.palette,time);
     }
@@ -357,13 +386,22 @@ export class Renderer{
       if(!camera.isVisible(hazard.x,hazard.y,hazard.radius))continue;
 
       if(hazard.passive){
-        ctx.globalAlpha=.16+Math.sin(time*1.6+hazard.phase)*.04;
+        // A drift, sinkhole or slick is felt as drag on the operative, and at
+        // sixteen percent over a dark floor it could not be seen, so the drag
+        // read as the ground catching. Fill, a firm edge, and a second ring
+        // at the inner radius so the zone has visible depth.
+        ctx.globalAlpha=.26+Math.sin(time*1.6+hazard.phase)*.05;
         ctx.fillStyle=hazard.color;
         ctx.beginPath();ctx.arc(hazard.x,hazard.y,hazard.radius,0,TAU);ctx.fill();
-        ctx.globalAlpha=.3;
+        ctx.globalAlpha=.55;
         ctx.strokeStyle=hazard.color;
-        ctx.lineWidth=1.5;
+        ctx.lineWidth=2.5;
         ctx.stroke();
+        ctx.globalAlpha=.22;
+        ctx.lineWidth=1.5;
+        ctx.setLineDash([9,7]);
+        ctx.beginPath();ctx.arc(hazard.x,hazard.y,hazard.radius*.62,0,TAU);ctx.stroke();
+        ctx.setLineDash([]);
         continue;
       }
 
@@ -404,8 +442,16 @@ export class Renderer{
     const palette=this.engine.world.palette;
     ctx.save();
 
+    // The perimeter is drawn like any other wall. It was skipped here, so on
+    // this renderer the sector ended at a dashed line with floor continuing
+    // past it — an invisible wall at every edge, while the GL renderer stood a
+    // solid one there.
+    const water=this.engine.world.water;
     for(const wall of this.engine.world.walls){
-      if(wall.type==='perimeter')continue;
+      // A perimeter run that lies out in a theatre's water is unreachable
+      // (the parapets are the real edge) and would draw as a wall standing
+      // in the sea.
+      if(wall.type==='perimeter'&&water&&(wall.y<water.y1||wall.y>water.y2))continue;
       if(!camera.isVisible(wall.x,wall.y,Math.max(wall.hw,wall.hh)))continue;
       // Faux height: a dark base offset down, then the lit top face. A pack
       // that bakes its own shadows switches this off in its manifest so the
@@ -611,11 +657,19 @@ export class Renderer{
         ctx.restore();
         break;
       case 'pillar':
+        // A square base plate under the round column. The collider is the
+        // square; a bare circle left eight units of invisible wall at each
+        // corner, and there are dozens of pillars in every interior sector.
+        ctx.fillStyle=shade(palette.wall,-.22);
+        ctx.strokeStyle=withAlpha(palette.wallEdge,.7);
+        ctx.lineWidth=1.2;
+        ctx.fillRect(x,y,cover.w,cover.h);
+        ctx.strokeRect(x,y,cover.w,cover.h);
         ctx.fillStyle=palette.wall;
         ctx.strokeStyle=palette.wallEdge;
         ctx.lineWidth=1.6;
         ctx.beginPath();
-        ctx.arc(cover.x,cover.y,cover.hw,0,TAU);
+        ctx.arc(cover.x,cover.y,cover.hw*.82,0,TAU);
         ctx.fill();ctx.stroke();
         break;
       case 'machinery':
@@ -755,6 +809,13 @@ export class Renderer{
     for(const pickup of engine.pickups){
       if(camera.isVisible(pickup.x,pickup.y,24))sortable.push(pickup);
     }
+    // Falling wreckage sorts and draws with everything else. A wreck carries
+    // the same fields the sprite layer reads off an aircraft, so it goes
+    // through `drawEnemy` and comes out as the airframe it was — tumbling,
+    // because the only thing that changed is its angle.
+    for(const wreck of engine.wrecks){
+      if(camera.isVisible(wreck.x,wreck.y,wreck.radius+40))sortable.push(wreck);
+    }
     for(const turret of engine.turrets)sortable.push(turret);
     for(const phantom of engine.phantoms)sortable.push(phantom);
     if(engine.boss)sortable.push(engine.boss);
@@ -782,6 +843,12 @@ export class Renderer{
         drawTurret(ctx,entity,time);
       }else if(entity.render!==undefined&&entity.life!==undefined&&!entity.archetype){
         drawPhantom(ctx,entity,time);
+      }else if(entity.wreck){
+        // Explicit rather than left to the fallthrough below. The dispatch
+        // above is duck-typed on field presence, and a wreck happens to miss
+        // every test by luck rather than by design — one added field and it
+        // would silently start drawing as something else.
+        drawEnemy(ctx,entity,time,this.settings);
       }else{
         drawEnemy(ctx,entity,time,this.settings);
       }
@@ -894,6 +961,19 @@ export class Renderer{
       ctx.beginPath();ctx.moveTo(p.px,p.py);ctx.lineTo(p.x,p.y);ctx.stroke();
       ctx.fillStyle=color;
       ctx.beginPath();ctx.arc(p.x,p.y,p.radius,0,TAU);ctx.fill();
+      // The non-colour tell, and the part of the accessibility work that
+      // actually carries the load.
+      //
+      // No palette remap can make two hues reliably separable for every kind of
+      // colour blindness at once. A hard dark edge against a bright core is
+      // read by contrast instead, which every form of colour vision keeps — and
+      // it costs one stroke on a shape that is already being drawn. Only when
+      // a mode is on, because it is a legibility aid rather than a look.
+      if(colorblindActive()){
+        ctx.strokeStyle=HOSTILE_OUTLINE;
+        ctx.lineWidth=1.6;
+        ctx.stroke();
+      }
       // Hostile rounds get a white core so they read against the background.
       ctx.fillStyle='rgba(255,255,255,.85)';
       ctx.beginPath();ctx.arc(p.x,p.y,p.radius*.42,0,TAU);ctx.fill();
@@ -1416,6 +1496,15 @@ export class Renderer{
       else if(hazard.passive&&hazard.damage)addLight(hazard.x,hazard.y,hazard.radius,hazard.color,.3);
     }
 
+    // Gunfire. Brief and warm, and the only light in the frame that can arrive
+    // several times a second — which is why it is capped in `Fx` rather than
+    // here, where a cap would have to be repeated in both renderers.
+    for(const f of engine.fx.activeMuzzleLights(this.muzzleScratch)){
+      addLight(f.x,f.y,f.radius,
+        `rgb(${Math.round(f.r*255)},${Math.round(f.g*255)},${Math.round(f.b*255)})`,
+        f.intensity);
+    }
+
     // Elites and bosses are self-lit so they stand out in a crowd.
     for(const enemy of engine.enemies){
       if(enemy.dead||!enemy.elite)continue;
@@ -1434,26 +1523,259 @@ export class Renderer{
     ctx.setTransform(1,0,0,1,0,0);
     ctx.globalCompositeOperation='lighter';
     ctx.imageSmoothingEnabled=true;
+    // The theatre's grade. The 2D path has no exposure uniform to scale, so it
+    // scales how much of the light layer is composited instead — which reaches
+    // the same place by the only route this renderer has, and costs one
+    // property write rather than a second fullscreen pass.
+    const grade=lightingFor(engine.config?.map?.id);
+    ctx.globalAlpha=clamp(
+      exposureAt(grade,engine.elapsed||0,this.settings.reducedFlashing),.7,1.3);
     ctx.drawImage(this.lightCanvas,0,0,camera.width,camera.height);
+    ctx.globalAlpha=1;
     ctx.globalCompositeOperation='source-over';
     ctx.restore();
   }
 
+  // ---- Collision debug ----------------------------------------------------
+  //
+  // Developer-only, behind ?collisiondebug=1. Every shape below is read from
+  // the live simulation — world.walls, world.cover, entity.radius, the same
+  // hazard.radius the damage test uses — and never reconstructed from sprite
+  // bounds. That is the whole point: if the drawn shape and the played shape
+  // ever disagree, this overlay is wrong in the same direction as the bug, and
+  // it would prove nothing.
+  //
+  // Both renderers call this with a camera-transformed context, so what it
+  // shows is identical under Canvas 2D and WebGL2.
+  drawCollisionDebug(ctx){
+    const engine=this.engine;
+    const world=engine.world;
+    const camera=engine.camera;
+    const halfW=camera.viewHalfWidth(220);
+    const halfH=camera.viewHalfHeight(220);
+    const near=(x,y,pad=0)=>Math.abs(x-camera.x)<halfW+pad&&Math.abs(y-camera.y)<halfH+pad;
+
+    ctx.save();
+    ctx.lineWidth=1.5;
+    ctx.font='10px ui-monospace,monospace';
+
+    const box=(o,stroke,fill)=>{
+      if(!near(o.x,o.y,Math.max(o.hw,o.hh)))return;
+      if(fill){ctx.fillStyle=fill;ctx.fillRect(o.x-o.hw,o.y-o.hh,o.hw*2,o.hh*2)}
+      ctx.strokeStyle=stroke;
+      ctx.strokeRect(o.x-o.hw,o.y-o.hh,o.hw*2,o.hh*2);
+    };
+    const circle=(x,y,r,stroke,dash=null)=>{
+      if(!(r>0)||!near(x,y,r))return;
+      ctx.setLineDash(dash||[]);
+      ctx.strokeStyle=stroke;
+      ctx.beginPath();ctx.arc(x,y,r,0,TAU);ctx.stroke();
+      ctx.setLineDash([]);
+    };
+
+    // Solid geometry. Perimeter and interior walls are distinguished because
+    // "the doorway is too narrow" and "the arena edge is where I think it is"
+    // are different questions.
+    for(const wall of world.walls){
+      box(wall,wall.type==='perimeter'?'#ff5b7a':'#7fb4ff',
+        wall.type==='perimeter'?null:'rgba(127,180,255,.10)');
+    }
+    // Cover: destructible in amber, permanent in blue, broken struck through.
+    for(const cover of world.cover){
+      if(cover.broken){
+        if(near(cover.x,cover.y,40)){
+          ctx.strokeStyle='rgba(120,130,140,.5)';
+          ctx.beginPath();
+          ctx.moveTo(cover.x-cover.hw,cover.y-cover.hh);
+          ctx.lineTo(cover.x+cover.hw,cover.y+cover.hh);
+          ctx.stroke();
+        }
+        continue;
+      }
+      box(cover,cover.destructible?'#ffb35c':'#76e7d4','rgba(255,179,92,.08)');
+    }
+    // Vault chambers: the blocker geometry, not the art.
+    for(const vault of world.vaults){
+      if(!near(vault.x,vault.y,vault.half))continue;
+      ctx.strokeStyle='#c895ff';
+      ctx.setLineDash([6,5]);
+      ctx.strokeRect(vault.x-vault.half,vault.y-vault.half,vault.half*2,vault.half*2);
+      ctx.setLineDash([]);
+    }
+
+    // Hazards. Two rings, deliberately: the solid one is the radius the damage
+    // test actually uses against the operative's centre, the dashed one is
+    // that radius plus the operative's body. Anything between them looks like
+    // contact and is not treated as contact — the one mismatch in the game
+    // that is intentional, and this is how to see it.
+    for(const hazard of world.hazards){
+      const live=hazard.active||hazard.passive;
+      circle(hazard.x,hazard.y,hazard.radius,live?'#ff5b30':'rgba(255,91,48,.45)');
+      circle(hazard.x,hazard.y,hazard.radius+engine.player.radius,'rgba(255,91,48,.35)',[4,4]);
+    }
+
+    // Entities, at the radius collision and hit detection use.
+    for(const enemy of engine.enemies){
+      if(enemy.dead)continue;
+      circle(enemy.x,enemy.y,enemy.radius,enemy.flying?'#c895ff':'#ff8a5c');
+    }
+    if(engine.boss&&!engine.boss.dead)circle(engine.boss.x,engine.boss.y,engine.boss.radius,'#ff5b5b');
+    for(const mate of engine.squad||[])if(!mate.down)circle(mate.x,mate.y,mate.radius,'#8fd8ff');
+    for(const p of engine.projectiles)circle(p.x,p.y,Math.max(2,p.radius),'#ffe08a');
+    for(const p of engine.enemyProjectiles)circle(p.x,p.y,Math.max(2,p.radius),'#ff8a5c');
+
+    // Pickups: the body, and the magnet range that pulls them in.
+    for(const pickup of engine.pickups){
+      circle(pickup.x,pickup.y,6,'#8bff9b');
+      circle(pickup.x,pickup.y,engine.player.radius+10,'rgba(139,255,155,.3)',[3,3]);
+    }
+
+    // The operative. Body, magnet reach, and the extraction hold radius.
+    const player=engine.player;
+    circle(player.x,player.y,player.radius,'#76e7d4');
+    circle(player.x,player.y,110*(engine.stats.magnet||1),'rgba(118,231,212,.25)',[3,5]);
+    if(engine.extractionPoint){
+      circle(engine.extractionPoint.x,engine.extractionPoint.y,EXTRACTION_RADIUS,'#f5d27a',[8,6]);
+    }
+    // Where the AI thinks it can stand.
+    for(const point of world.coverPoints||[]){
+      if(!near(point.x,point.y,12))continue;
+      ctx.fillStyle=point.claimedBy?'rgba(255,179,92,.7)':'rgba(120,140,150,.45)';
+      ctx.fillRect(point.x-2,point.y-2,4,4);
+    }
+    ctx.restore();
+  }
+
+  // The screen-space half of the debug flag: what is running, and where the
+  // operative actually is in world coordinates. Written to be readable on a
+  // phone held at arm's length, because that is the device it exists for.
+  drawCollisionReadout(ctx,width,height,rendererName){
+    const engine=this.engine;
+    const player=engine.player;
+    const lines=[
+      `renderer  ${rendererName}`,
+      `theatre   ${engine.map?.id||'?'}`,
+      `fps       ${this.fps}`,
+      `sim       ${Math.round(1/FIXED_STEP)} Hz fixed`,
+      `player    ${player.x.toFixed(1)}, ${player.y.toFixed(1)}`,
+      `world     ${engine.world.width} x ${engine.world.height}`,
+      `hostiles  ${engine.enemies.filter(e=>!e.dead).length}`,
+      `rounds    ${engine.projectiles.length}+${engine.enemyProjectiles.length}`,
+      `walls     ${engine.world.walls.length}  cover ${engine.world.cover.length}`,
+      `hazards   ${engine.world.hazards.length}`
+    ];
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    const scale=Math.max(1,Math.min(2,width/900));
+    ctx.scale(scale,scale);
+    // Sits clear of the bottom-left weapon widget, which is where the readout
+    // landed first and was half hidden behind it on a phone.
+    const w=190,h=lines.length*13+12;
+    const x=8,y=(height/scale)-h-76;
+    ctx.fillStyle='rgba(4,10,14,.82)';
+    ctx.fillRect(x,y,w,h);
+    ctx.strokeStyle='rgba(118,231,212,.5)';
+    ctx.lineWidth=1;
+    ctx.strokeRect(x+.5,y+.5,w,h);
+    ctx.font='10px ui-monospace,monospace';
+    ctx.fillStyle='#9fd6cf';
+    ctx.textAlign='left';
+    lines.forEach((line,i)=>ctx.fillText(line,x+8,y+18+i*13));
+    ctx.restore();
+  }
+
+  // ---- Layer entry points -------------------------------------------------
+  //
+  // The deferred renderer (src/render/gl/deferred.js) draws the floor, the
+  // geometry, the lighting and the post chain itself, and needs everything
+  // else from here. Rather than teach it the draw order, it calls these two
+  // and gets exactly the passes render() would have run, in the same sequence.
+  //
+  // Nothing in the Canvas 2D path goes through them, so this class behaves
+  // identically whether or not a GL renderer exists.
+
+  // The painted floor, when this theatre ships one, for the deferred renderer
+  // to lay into its G-buffer and light. Returns false when there is no
+  // authored art — including while the pack is still loading — so the caller
+  // can skip the upload rather than pay for a blank texture.
+  //
+  // Only the floor: no theatre has painted walls yet, and the deferred path
+  // wants to draw geometry itself anyway, for the height field.
+  drawAuthoredGround(ctx){
+    if(!this.art?.active||!this.artFloorPattern)return false;
+    this.drawFloor(ctx);
+    return true;
+  }
+
+  // World space, part one: everything that is a thing in the sector. The caller
+  // has already applied the camera transform and is responsible for restoring
+  // it.
+  //
+  // Markers are deliberately not here. The deferred renderer runs a
+  // contrast-adaptive rim over this layer's silhouettes, which is what keeps a
+  // hostile readable against lit plating, and putting a marker reticle through
+  // the same filter would only fringe it.
+  drawWorldLayer(ctx,{particles=true}={}){
+    this.drawDecals(ctx);
+    // Landmarks stay on this layer rather than becoming GL props: they are
+    // authored art with their own shading, and a generic lit quad in place of
+    // a wrecked airframe is a downgrade, not an upgrade.
+    this.drawLandmarks(ctx);
+    this.drawHazards(ctx);
+    this.drawGroundEffects(ctx);
+    this.drawEntities(ctx);
+    this.drawProjectiles(ctx);
+    this.drawBeams(ctx);
+    if(particles)this.drawParticles(ctx);
+  }
+
+  // World space, part two: the overlays that tell the player where to go. Not
+  // part of the sector and not lit by it.
+  drawWorldMarkers(ctx){
+    this.drawExtractionBeacon(ctx);
+    this.drawVaultMarkers(ctx);
+    this.drawMissionMarkers(ctx);
+    this.drawSquadMarkers(ctx);
+    this.drawOptic(ctx);
+  }
+
+  // Screen space: weather, the flash and health pulse, and the readouts. The
+  // caller supplies the frame delta because this instance is not the one
+  // driving the loop and has no other way to know it.
+  drawScreenLayer(ctx,width,height,{vignette=true,delta=1/60}={}){
+    this.lastDelta=clamp(delta,0,.05);
+    this.frameTimes.push(delta*1000);
+    if(this.frameTimes.length>40)this.frameTimes.shift();
+    const average=this.frameTimes.reduce((a,b)=>a+b,0)/this.frameTimes.length;
+    this.fps=Math.round(1000/Math.max(1,average));
+
+    if(this.weather.active){
+      ctx.setTransform(1,0,0,1,0,0);
+      this.weather.update(this.lastDelta);
+      this.weather.draw(ctx,width,height,this.engine.camera,this.engine.elapsed);
+    }
+    this.drawPost(ctx,width,height,{vignette});
+  }
+
   // ---- 10. Post -----------------------------------------------------------
-  drawPost(ctx,width,height){
+  // `vignette` is false when the deferred renderer is running: its composite
+  // shader already applies one, and two stacked vignettes close the frame down
+  // to a porthole.
+  drawPost(ctx,width,height,{vignette=true}={}){
     const engine=this.engine;
     ctx.save();
     ctx.setTransform(1,0,0,1,0,0);
 
-    // Vignette.
-    const vignette=ctx.createRadialGradient(
-      width/2,height/2,Math.min(width,height)*.32,
-      width/2,height/2,Math.max(width,height)*.78
-    );
-    vignette.addColorStop(0,'rgba(0,0,0,0)');
-    vignette.addColorStop(1,engine.world.palette.fog||'rgba(0,4,8,.55)');
-    ctx.fillStyle=vignette;
-    ctx.fillRect(0,0,width,height);
+    if(vignette){
+      const gradient=ctx.createRadialGradient(
+        width/2,height/2,Math.min(width,height)*.32,
+        width/2,height/2,Math.max(width,height)*.78
+      );
+      gradient.addColorStop(0,'rgba(0,0,0,0)');
+      gradient.addColorStop(1,engine.world.palette.fog||'rgba(0,4,8,.55)');
+      ctx.fillStyle=gradient;
+      ctx.fillRect(0,0,width,height);
+    }
 
     // Low-health pulse.
     const healthRatio=engine.player.hp/engine.player.maxHp;
@@ -1487,10 +1809,19 @@ export class Renderer{
     const engine=this.engine;
     if(this.settings.showThreatIndicators===false)return;
     const camera=engine.camera;
-    const margin=42;
+    // Grows with the arrows: a bigger marker projected onto the same ellipse
+    // would hang off the edge of the screen.
+    const margin=Math.round(42*Math.max(1,Math.min(width,height)/560));
     const centerX=width/2,centerY=height/2;
 
-    const mark=(worldX,worldY,color,size=8)=>{
+    // Arrow scale. The old sizes were authored against a desktop window and
+    // read as specks on a phone held at arm's length, which is where this game
+    // is actually played. They are scaled off the short edge of the viewport so
+    // a small screen gets proportionally *more* arrow rather than less, and
+    // floored so they never shrink below what a thumb-sized target needs.
+    const unit=Math.max(1.35,Math.min(width,height)/430);
+
+    const mark=(worldX,worldY,color,size=8,options={})=>{
       const screen=camera.worldToScreen(worldX,worldY);
       if(screen.x>margin&&screen.x<width-margin&&screen.y>margin&&screen.y<height-margin)return;
       const angle=Math.atan2(screen.y-centerY,screen.x-centerX);
@@ -1503,47 +1834,70 @@ export class Renderer{
       );
       const x=centerX+Math.cos(angle)*scale;
       const y=centerY+Math.sin(angle)*scale;
+      // A marker that must not be missed breathes, so it separates itself from
+      // the static ones without needing to be bigger still.
+      const pulse=options.pulse?.82+Math.sin(engine.elapsed*6)*.18:1;
+      const s=size*unit*pulse;
       ctx.save();
       ctx.translate(x,y);
       ctx.rotate(angle);
-      ctx.fillStyle=color;
-      ctx.globalAlpha=.85;
+      // A dark backing so the arrow survives a bright floor or a bloom bloom-out
+      // underneath it. Without this the yellow beacon arrow disappeared
+      // completely over molten ground.
+      ctx.globalAlpha=.55;
+      ctx.fillStyle='rgba(2,8,11,.9)';
       ctx.beginPath();
-      ctx.moveTo(size,0);ctx.lineTo(-size*.7,-size*.7);ctx.lineTo(-size*.7,size*.7);
+      ctx.moveTo(s*1.24,0);
+      ctx.lineTo(-s*.92,-s*.92);
+      ctx.lineTo(-s*.92,s*.92);
       ctx.closePath();ctx.fill();
+      ctx.globalAlpha=1;
+      ctx.fillStyle=color;
+      ctx.beginPath();
+      ctx.moveTo(s,0);ctx.lineTo(-s*.7,-s*.7);ctx.lineTo(-s*.7,s*.7);
+      ctx.closePath();ctx.fill();
+      // A hairline edge in the same colour, which is what makes it read as a
+      // deliberate marker rather than a stray particle.
+      ctx.globalAlpha=.9;
+      ctx.strokeStyle='rgba(255,255,255,.55)';
+      ctx.lineWidth=Math.max(1,s*.09);
+      ctx.stroke();
       ctx.restore();
     };
 
-    if(engine.boss)mark(engine.boss.x,engine.boss.y,engine.boss.def.color,12);
+    if(engine.boss)mark(engine.boss.x,engine.boss.y,engine.boss.def.color,13);
+    // The way out, and the largest thing on the edge of the screen by some
+    // margin. A missed extraction window ends a twenty-minute contract, so
+    // this one pulses and outsizes everything else including the signature.
     if(engine.extraction&&engine.extractionPoint){
-      mark(engine.extractionPoint.x,engine.extractionPoint.y,'#f5d27a',12);
+      mark(engine.extractionPoint.x,engine.extractionPoint.y,'#ffd45e',18,{pulse:true});
     }
     // Objective markers take priority: they are what the operation is for.
     for(const cache of engine.mission?.caches||[]){
-      if(!cache.recovered)mark(cache.x,cache.y,'#8fd8ff',10);
+      if(!cache.recovered)mark(cache.x,cache.y,'#8fd8ff',12);
     }
     if(engine.mission?.asset&&!engine.mission.asset.downed&&!engine.mission.asset.aboard){
-      mark(engine.mission.asset.x,engine.mission.asset.y,'#ffd166',11);
+      mark(engine.mission.asset.x,engine.mission.asset.y,'#ffd166',13);
     }
     // A scanned vault stays flagged off-screen until it has been opened, and
     // so does the console holding it shut — that one is the objective, not the
     // chamber, until it goes down.
     for(const vault of engine.world.vaults){
       if(!vault.discovered||vault.breached)continue;
-      mark(vault.x,vault.y,'#f5d27a',9);
+      mark(vault.x,vault.y,'#f5d27a',11);
       if(vault.terminal&&!vault.terminal.broken){
-        mark(vault.terminal.x,vault.terminal.y,'#c895ff',9);
+        mark(vault.terminal.x,vault.terminal.y,'#c895ff',11);
       }
     }
     let eliteCount=0;
     for(const enemy of engine.enemies){
       if(enemy.dead||!enemy.elite||eliteCount>=6)continue;
-      mark(enemy.x,enemy.y,enemy.color,8);
+      mark(enemy.x,enemy.y,enemy.color,9);
       eliteCount++;
     }
     // Incoming strikes near the player but off-screen.
     for(const strike of engine.strikes){
-      if(strike.hostile)mark(strike.x,strike.y,'#ff5b5b',7);
+      if(strike.hostile)mark(strike.x,strike.y,'#ff5b5b',9,{pulse:true});
     }
   }
 
@@ -1659,18 +2013,38 @@ export class Renderer{
     if(!engine.announcements.length)return;
     ctx.save();
     ctx.textAlign='center';
-    let y=height*.24;
+    // In portrait the top third of the screen is mission header, codec traffic
+    // and the objective list, and announcements were landing on all three at
+    // once. They sit below that furniture instead — still well above the
+    // operative, and over floor rather than over other text.
+    // Clear of the top HUD in both shapes: the mission panel, the signature's
+    // health and the radio traffic stack down the middle, and a banner drawn
+    // at a quarter height landed on the codec in landscape and on all three in
+    // portrait.
+    const portrait=height>width;
+    let y=portrait?height*.44:height*.33;
+    const step=portrait?30:30;
     for(const announcement of engine.announcements){
       const fade=clamp(announcement.life/Math.min(.6,announcement.maxLife),0,1);
       const rise=(1-clamp(announcement.life/announcement.maxLife,0,1))*10;
       ctx.globalAlpha=fade;
-      ctx.font='bold 20px ui-monospace,SFMono-Regular,monospace';
+      // Fitted to the screen rather than fixed. 'EXTRACTION WINDOW OPEN //
+      // REACH THE BEACON' at a fixed 20px ran off both edges of a phone, which
+      // is the one message that most needed reading.
+      let size=portrait?19:20;
+      ctx.font=`bold ${size}px ui-monospace,SFMono-Regular,monospace`;
+      const room=width-24;
+      const measured=ctx.measureText(announcement.text).width;
+      if(measured>room){
+        size=Math.max(11,Math.floor(size*room/measured));
+        ctx.font=`bold ${size}px ui-monospace,SFMono-Regular,monospace`;
+      }
       ctx.lineWidth=4;
-      ctx.strokeStyle='rgba(0,0,0,.65)';
+      ctx.strokeStyle='rgba(0,0,0,.75)';
       ctx.strokeText(announcement.text,width/2,y-rise);
       ctx.fillStyle=announcement.color;
       ctx.fillText(announcement.text,width/2,y-rise);
-      y+=30;
+      y+=step;
     }
     ctx.restore();
   }
@@ -1688,10 +2062,54 @@ export class Renderer{
     ctx.font='10px ui-monospace,monospace';
     ctx.textAlign='left';
 
+    // Which renderer's numbers these are. Under GL the per-pass costs below are
+    // what the CPU spent handing work to the driver, not what the GPU spent
+    // doing it, and a reader who does not know that will conclude the frame is
+    // free when the display says otherwise. `?gpusync=1` makes them real.
+    const host=this.host;
+    const gl=!!host;
+    const synced=gl&&host.syncTiming;
+    const unaccounted=p.presentSamples?Math.max(0,p.presentMs.p50-p.frameMs.p50):0;
+
     const lines=[
-      [`${p.frameMs.p50||'--'}ms p50   ${p.frameMs.p95||'--'} p95   ${p.frameMs.p99||'--'} p99`,'#8ce6dc'],
-      [`worst ${p.frameMs.max||'--'}ms  (${p.fps.p50||0} fps typical, ${p.fps.worst||0} worst)`,'#8ce6dc'],
-      [`sim ${p.phasesMs.sim??'--'}ms   render ${p.phasesMs.render??'--'}ms`,'#8ce6dc'],
+      // Presented frames first: this is the number the player is complaining
+      // about, and the only one a queued GL frame cannot flatter.
+      [p.presentSamples
+        ? `SCREEN  ${p.presentMs.p50}ms p50   ${p.presentMs.p95} p95   ${p.presentMs.p99} p99`
+        : 'SCREEN  -- waiting for frames','#ffffff'],
+      [p.presentSamples
+        ? `        worst ${p.presentMs.max}ms  (${p.presentFps.p50} fps typical, ${p.presentFps.worst} worst)`
+        : '','#ffffff'],
+      [`cpu     ${p.frameMs.p50||'--'}ms p50   ${p.frameMs.p95||'--'} p95   ${p.frameMs.p99||'--'} p99`,'#8ce6dc'],
+      [`        sim ${p.phasesMs.sim??'--'}ms   render ${p.phasesMs.render??'--'}ms`,'#8ce6dc'],
+      // The gap between the two, which is the most useful number on the panel
+      // and the only honest way to talk about GPU cost from JavaScript. Nothing
+      // in this process can time what happens after the commands are handed
+      // over — the GPU, the compositor, the wait for vsync — but the interval
+      // between frames minus what the CPU spent is exactly that, by
+      // subtraction, and both halves are measured rather than inferred.
+      ...(unaccounted>1?[[
+        `outside  ${unaccounted.toFixed(1)}ms per frame past the CPU — gpu, compositor or vsync`,
+        unaccounted>8?'#ffd479':'rgba(140,230,220,.75)']]:[]),
+      // The renderer and its caveat sit high in the box on purpose. The rows
+      // below can be covered by the touch controls on a phone, and this is the
+      // line that stops a 2ms CPU frame being read as a fast game.
+      ...(gl?[
+        [`submit  gbuf ${p.phasesMs.gbuffer??'--'} light ${p.phasesMs.lights??'--'} bloom ${p.phasesMs.bloom??'--'} spr ${p.phasesMs.sprites??'--'} comp ${p.phasesMs.composite??'--'}`,
+         '#c8b4ff'],
+        // `gl.finish()` is supposed to make `gpu` the true cost of the frame.
+        // It is reported next to the interval it should match rather than on
+        // its own, because it does not always: under a rasteriser that hands
+        // the work to another process, finish returns once the commands are
+        // handed over and the number comes back a hundred times too small.
+        // Measured here at 0.98ms against a 167ms frame. SCREEN is the
+        // authority; this is a hint, and a hint that disagrees is telling you
+        // the work is happening somewhere finish cannot see.
+        [synced
+          ? `deferred WebGL2 · gl.finish() says ${p.phasesMs.gpu??'--'}ms vs ${p.presentMs.p50||'--'}ms on screen`
+          : 'deferred WebGL2 · pass times are CPU submit · ?gpusync=1',
+         synced?'#ffd479':'rgba(200,180,255,.75)']
+      ]:[]),
       // The clamp line is the point of the whole overlay. Anything above zero
       // means the simulation is discarding time and the contract is running
       // slower than its own clock.
@@ -1705,12 +2123,20 @@ export class Renderer{
       [`quality ${this.settings.particles||'high'}${this.settings.performanceMode?' · perf mode':''}${p.heapMb?`   heap ${p.heapMb}MB`:''}`,'rgba(140,230,220,.75)']
     ];
 
-    const boxH=lines.length*13+12;
+
+    const shown=lines.filter(([text])=>text);
+    const boxH=shown.length*13+12;
+    // In portrait the bottom of the screen belongs to the stick and the action
+    // buttons, and they are DOM elements over the canvas — a readout anchored
+    // to the bottom edge is read through them. Portrait is the orientation this
+    // overlay exists for, so it stands clear of them there.
+    const lift=height>width?128:10;
+    const top=height-boxH-lift;
     ctx.fillStyle='rgba(2,10,14,.72)';
-    ctx.fillRect(8,height-boxH-10,332,boxH);
-    lines.forEach(([line,color],i)=>{
+    ctx.fillRect(8,top,390,boxH);
+    shown.forEach(([line,color],i)=>{
       ctx.fillStyle=color;
-      ctx.fillText(line,16,height-boxH+4+i*13);
+      ctx.fillText(line,16,top+14+i*13);
     });
     ctx.restore();
   }
