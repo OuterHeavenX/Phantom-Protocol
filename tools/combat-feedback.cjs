@@ -25,23 +25,47 @@ const fs=require('node:fs');
   const delta=(x,y)=>{const i=(y*w+x)*4;return [...after.slice(i,i+4)].reduce((v,n,j)=>v+Math.abs(n-before[i+j]),0)};
   const corner=delta(cx+Math.floor(radius*.85),cy+Math.floor(radius*.85));
   const center=delta(cx,cy);
-  const canvas=document.createElement('canvas');canvas.width=512;canvas.height=128;
+  const canvas=document.createElement('canvas');canvas.width=1024;canvas.height=128;
   const ctx=canvas.getContext('2d');const poses=[];
-  for(let p=0;p<4;p++){
-   drawCombatant(ctx,'op-wraith',{x:64+p*128,y:90,radius:18,angle:0},{phase:p*Math.PI/2+.01,moving:true});
+  for(let p=0;p<8;p++){
+   drawCombatant(ctx,'op-wraith',{x:64+p*128,y:90,radius:18,angle:0},{phase:p*Math.PI/4+.01,moving:true});
    poses.push(Array.from(ctx.getImageData(p*128,0,128,128).data).join(','));
   }
   window.__walkPreview=canvas.toDataURL();
-  return {corner,center,distinctWalkFrames:new Set(poses).size};
+  const wall=r.architecture.items.find(p=>p.height>40);
+  e.player.x=wall.x;e.player.y=wall.y-wall.hh-10;
+  wall.opacity=1;wall.fadeAt=performance.now()-100;
+  r.architecture.drawItem(r.ctx,wall,e.player);
+  const faded=wall.opacity;
+  e.player.x=wall.x+wall.w+500;wall.fadeAt=performance.now()-100;
+  r.architecture.drawItem(r.ctx,wall,e.player);
+  const restored=wall.opacity;
+  const {CHOPPER}=await import('/data/enemies.js');
+  const chopper=e.spawnEnemy(CHOPPER,wall.x,wall.y-10);
+  if(!chopper)throw Error('Chopper spawn failed');
+  chopper.x=wall.x;chopper.y=wall.y-10;
+  e.camera.x=wall.x;e.camera.y=wall.y;
+  const events=[];
+  const drawItem=r.architecture.drawItem.bind(r.architecture);
+  r.architecture.drawItem=(...args)=>{events.push('wall');return drawItem(...args)};
+  const drawImage=r.ctx.drawImage.bind(r.ctx);
+  r.ctx.drawImage=(image,...args)=>{if(image.src?.includes('enemy-chopper.webp'))events.push('chopper');return drawImage(image,...args)};
+  r.drawEntities(r.ctx);
+  const airborneAboveWalls=events.lastIndexOf('chopper')>events.lastIndexOf('wall')&&events.includes('wall');
+  r.ctx.drawImage=drawImage;r.architecture.drawItem=drawItem;
+  e.player.x=wall.x;e.player.y=wall.y-10;e.camera.x=wall.x;e.camera.y=wall.y;
+  r.render();
+  return {corner,center,distinctWalkFrames:new Set(poses).size,faded,restored,airborneAboveWalls};
  });
  assert.ok(result.corner<=2,'Muzzle corners must remain transparent within Canvas rounding');
  assert.ok(result.center>0,'Muzzle must still illuminate the center');
- assert.ok(result.distinctWalkFrames>=3,'Walking must have distinct stride poses');
+ assert.ok(result.distinctWalkFrames>=6,'Walking must have distinct stride poses');
+ assert.ok(result.faded<.4&&result.restored>result.faded,'Walls fade near the player and recover away');
+ assert.ok(result.airborneAboveWalls,'Chopper must draw after structures');
  assert.deepEqual(errors,[]);
+ await page.screenshot({path:'tools/visual-qa-output/airborne-wall.png'});
  const png=await page.evaluate(()=>window.__walkPreview.split(',')[1]);
  fs.writeFileSync('tools/visual-qa-output/walk-preview.png',Buffer.from(png,'base64'));
  console.log(JSON.stringify(result));
  }finally{await browser.close()}
 })().catch(e=>{console.error(e);process.exitCode=1});
-
-

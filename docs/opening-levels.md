@@ -74,3 +74,7 @@ Also run ESLint over `src data` and
 
 The opening three maps select the Canvas renderer for raised architecture and
 depth sorting even when WebGL2 is selected. Other maps keep the renderer setting.
+
+Walls fade gradually around the operative silhouette and retain an outline of
+their real collision footprint. Flying hostiles draw above every structure;
+falling wrecks return to ground depth sorting near touchdown.

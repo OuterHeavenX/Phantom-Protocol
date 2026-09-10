@@ -15,11 +15,11 @@ requiring a 3D engine on players' devices. It is enabled during normal play.
 
 The editable source is `assets/models/red-static-combatants.blend`. Its 36 named
 root hierarchies are arranged as a six-column gallery; mesh parts and materials
-remain editable. Humanoid leg assemblies contain four keyed stride poses.
+remain editable. Humanoid leg assemblies contain eight keyed stride poses.
 These are stylized hard-surface models, not motion-captured or facially rigged characters.
 
-Each actor has eight headings and four poses, at 128 pixels per frame. The atlas
-contains 1,024 × 512 pixels. The renderer snaps facing to the nearest heading,
+Each actor has eight headings and eight poses, at 128 pixels per frame. The atlas
+contains 1,024 × 1,024 pixels. The renderer snaps facing to the nearest heading,
 selects the walking pose, and anchors the feet at the simulation position.
 The character camera is orthographic, looking down from `(0, -6, 9)`.
 Machine rotor blades change pose; other rigid machine parts remain static.
@@ -52,7 +52,7 @@ python tools/pack-blender-sprites.py
 ```
 
 The first script reads the actual content registries. The second builds geometry,
-renders 1,152 frames and the command artwork, and saves the Blender file. The
+renders 2,304 frames and the command artwork, and saves the Blender file. The
 third validates every frame, writes lossless WebP atlases, a manifest, and the
 contact sheet. Raw renders and Blender backups are ignored by Git. To use the
 packer outside Windows, change its contact-sheet font path to an installed font.

@@ -817,7 +817,9 @@ export class Engine{
     // destination let it finish on the far side of a wall.
     this.world.moveEntity(player,player.vx*dt,player.vy*dt,player.radius);
     this.telemetry.distance+=dist(previousX,previousY,player.x,player.y);
-    player.walkPhase+=Math.hypot(player.vx,player.vy)*dt*.05;
+    const walked=dist(previousX,previousY,player.x,player.y);
+    player.walkSpeed=dt>0?walked/dt:0;
+    player.walkPhase+=walked*.05;
 
     if(player.hp<=0)this.playerDown();
   }
@@ -2108,6 +2110,7 @@ export class Engine{
   }
   muzzleFlash(angle,scale,weapon){
     const player=this.player;
+    player.lastShotAt=this.elapsed;
     const voice=weaponVoice(weapon?.def);
     const x=player.x+Math.cos(angle)*18;
     const y=player.y+Math.sin(angle)*18;

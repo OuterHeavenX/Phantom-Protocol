@@ -33,7 +33,7 @@ export function loadCombatants(){
 }
 
 // Called in world coordinates, before the old sprite's facing transform.
-export function drawCombatant(ctx,key,entity,{phase=0,moving=false,scale=1}={}){
+export function drawCombatant(ctx,key,entity,{phase=0,moving=false,scale=1,recoil=0}={}){
   const actor=actors.get(key);
   if(!actor||!manifest)return false;
   const {frameSize:size,directions,poses}=manifest;
@@ -45,7 +45,8 @@ export function drawCombatant(ctx,key,entity,{phase=0,moving=false,scale=1}={}){
   ctx.save();
   ctx.imageSmoothingEnabled=true;
   ctx.drawImage(entity.hitFlash>0?actor.flash:actor.image,direction*size,pose*size,size,size,
-    entity.x-width*actor.anchor[0],entity.y-width*actor.anchor[1]+bob,width,width);
+    entity.x-width*actor.anchor[0]-Math.cos(angle)*recoil*2,
+    entity.y-width*actor.anchor[1]+bob-Math.sin(angle)*recoil*1.6,width,width);
   ctx.restore();
   return true;
 }

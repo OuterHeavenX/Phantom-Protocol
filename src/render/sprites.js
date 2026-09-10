@@ -251,7 +251,7 @@ function nameplate(ctx,mate,color,text){
 }
 
 export function drawPlayer(ctx,player,operative,time,weaponTint){
-  const moving=Math.min(1,Math.hypot(player.vx,player.vy)/120);
+  const moving=Math.min(1,(player.walkSpeed??Math.hypot(player.vx,player.vy))/120);
   drawShadow(ctx,player.x,player.y,player.radius,.4);
 
   ctx.save();
@@ -272,7 +272,8 @@ export function drawPlayer(ctx,player,operative,time,weaponTint){
   // Return to world coordinates for the camera-facing Blender atlas.
   ctx.restore();
   ctx.save();
-  if(!drawCombatant(ctx,`op-${operative.id}`,player,{phase:player.walkPhase,moving:moving>.08,scale:1.12})){
+  if(!drawCombatant(ctx,`op-${operative.id}`,player,{phase:player.walkPhase,moving:moving>.08,scale:1.12,
+    recoil:Math.max(0,1-(time-(player.lastShotAt??-10))*12)})){
   ctx.translate(player.x,player.y);ctx.rotate(player.angle);
   drawHumanoid(ctx,{
     bodyColor:'#22484c',

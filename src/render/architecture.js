@@ -156,11 +156,24 @@ export class Architecture{
 
   drawItem(ctx,p,player){
     if(p.source.broken)return;
-    if(!p.sprite||(p.source.destructible&&p.source.hp<p.source.maxHp))return this.paintItem(ctx,p,player);
     const x=p.x-p.hw,y=p.y-p.hh,z=p.height;
-    const occludes=player&&player.x>x-16&&player.x<x+p.w+16&&player.y<p.y+p.hh&&player.y>y-z-30;
-    ctx.save();if(occludes)ctx.globalAlpha=.35;
-    ctx.drawImage(p.sprite.canvas,x-z*.12-7,y-z-20,p.sprite.width,p.sprite.height);ctx.restore();
+    // Include the head and weapon, not just the actor's ground point.
+    const margin=(player?.radius||13)+28;
+    const occludes=player&&player.x>x-margin&&player.x<x+p.w+margin&&
+      player.y<p.y+p.hh+margin&&player.y>y-z-margin;
+    const now=performance.now(),dt=Math.min(.1,(now-(p.fadeAt??now))/1000);
+    p.fadeAt=now;
+    const target=occludes ? .16 : 1;
+    p.opacity=(p.opacity??1)+(target-(p.opacity??1))*(1-Math.exp(-dt*18));
+    ctx.save();ctx.globalAlpha*=p.opacity;
+    if(!p.sprite||(p.source.destructible&&p.source.hp<p.source.maxHp))this.paintItem(ctx,p,null);
+    else ctx.drawImage(p.sprite.canvas,x-z*.12-7,y-z-20,p.sprite.width,p.sprite.height);
+    ctx.restore();
+    if(p.opacity<.95){
+      // Keep the exact collision footprint legible through the faded facade.
+      ctx.save();ctx.strokeStyle='rgba(192,222,211,.7)';ctx.lineWidth=1.5;
+      ctx.strokeRect(x,y,p.w,p.h);ctx.restore();
+    }
   }
 
   paintItem(ctx,p,player){

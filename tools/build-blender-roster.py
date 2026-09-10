@@ -93,7 +93,7 @@ def human(r,plate,accent):
     kind=r['kind'];ident=r['id']
     heavy=kind in ('heavy','augment','arbiter') or ident in ('bastion','ferrous')
     w=1.28 if heavy else 1
-    # Separate thigh/shin/boot assemblies expose a real four-pose stride.
+    # Separate thigh/shin/boot assemblies expose a real eight-pose stride.
     for side in (-1,1):
         group=bpy.data.objects.new(('L' if side<0 else 'R')+' leg | stride',None)
         scene.collection.objects.link(group);group.parent=root
@@ -255,13 +255,15 @@ for index,r in enumerate(roster):
     members=[root,*root.children_recursive]
     camera.data.ortho_scale=5.1 if r['kind']=='chopper' else 4.2 if r['kind'] in ('apc','manticore','aegis','nemesis','carrion') else 3.7
     # Blender +X is game right; clockwise screen headings rotate about -Z.
-    for pose in range(4):
+    for pose in range(8):
         # Evaluate each pose at its own frame; render otherwise reapplies frame 1.
         scene.frame_set(pose+1)
         for leg,side in legs:
-            leg.location.x=math.sin(pose*math.pi/2)*side*.34
-            leg.location.z=max(0,math.sin(pose*math.pi/2)*side)*.13
+            leg.location.x=math.sin(pose*math.pi/4)*side*.34
+            leg.location.z=max(0,math.sin(pose*math.pi/4)*side)*.13
+            leg.rotation_euler.y=math.cos(pose*math.pi/4)*side*.12
             leg.keyframe_insert('location',frame=pose+1)
+            leg.keyframe_insert('rotation_euler',frame=pose+1)
         for obj in members:
             if obj.name.startswith(('Rotor | blade','Gunship | main rotor')):
                 obj.rotation_euler.z=pose*math.pi/4+(math.pi/2 if obj.name.endswith('.001') else 0)
@@ -290,6 +292,6 @@ if len(roots)>3:
 for i,r in enumerate(roots):
     r.location=((i%6)*5,(i//6)*5,0)
     for o in [r,*r.children_recursive]:o.hide_render=False
-scene.frame_start=1;scene.frame_end=4
+scene.frame_start=1;scene.frame_end=8
 bpy.ops.wm.save_as_mainfile(filepath=str(OUT/'red-static-combatants.blend'),compress=True)
 print('BLENDER_ROSTER_COMPLETE',flush=True)

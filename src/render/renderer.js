@@ -826,7 +826,11 @@ export class Renderer{
     }
 
     // Painter's algorithm on Y so nearer things overlap further ones.
-    sortable.sort((a,b)=>(a.architectureItem?a.depth:a.y)-(b.architectureItem?b.depth:b.y));
+    // Airborne hostiles render after every structure and ground actor. Falling
+    // wrecks return to ground sorting only when they reach the deck.
+    const airborne=e=>e.flying&&(!e.wreck||(e.altitude??0)>.15)?1:0;
+    sortable.sort((a,b)=>airborne(a)-airborne(b)||
+      (a.architectureItem?a.depth:a.y)-(b.architectureItem?b.depth:b.y));
 
     for(const entity of sortable){
       if(entity.architectureItem){

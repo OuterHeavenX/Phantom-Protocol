@@ -3,7 +3,7 @@
   "generator": "Blender 5.2 / tools/build-blender-roster.py",
   "frameSize": 128,
   "directions": 8,
-  "poses": 4,
+  "poses": 8,
   "actors": {
     "op-vesper": {
       "file": "op-vesper.webp",
