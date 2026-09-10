@@ -1865,6 +1865,7 @@ export class Screens{
           ${toggle('showHealthBars','Hostile health bars',settings.showHealthBars)}
           ${toggle('showThreatIndicators','Threat & awareness markers',settings.showThreatIndicators)}
           ${toggle('showFps','Performance readout',settings.showFps)}
+          ${toggle('hudLoadout','Loadout readout',!!settings.hudLoadout,'Weapon and passive strip in the corner during a contract — the pause screen always has the full version')}
           ${toggle('codec','Codec traffic',settings.codec!==false,'Radio chatter between the operative and command during a contract')}
         </section>
 
@@ -1937,7 +1938,7 @@ export class Screens{
     }
 
     for(const id of ['muted','damageNumbers','showMinimap','showHealthBars',
-                     'showThreatIndicators','showFps','codec','reducedFlashing',
+                     'showThreatIndicators','showFps','hudLoadout','codec','reducedFlashing',
                      'performanceMode','autoAim','leftHanded']){
       const button=document.getElementById(id);
       if(!button)continue;

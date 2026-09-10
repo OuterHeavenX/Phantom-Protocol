@@ -66,15 +66,16 @@
   /* Every gap and every pad in this region is paid for out of the sector the
      game is played in. Measured on a 430x932 iPhone before this: the top block
      was 309px of 932, a third of the screen, against 555px of play area. What
-     is trimmed here is space, not type — the type went up, not down. */
+     is trimmed here is space, not type — the dialogue type went up, not down. */
   .hud-top{grid-template-columns:minmax(0,1fr) auto;gap:4px}
-  .hud-panel{padding:5px 8px;font-size:10px}
+  .hud-panel{padding:5px 8px;font-size:9.5px}
+  .hud-chip{padding:3px 7px}
   .hud-column{gap:4px}
 
-  /* Four stacked rows: vitals beside the tally, then the timer, the radio
-     traffic and the objective stack each across the full width. Three tracks
-     do not fit on a phone, and letting them try put the timer on top of the
-     health bar. */
+  /* Four stacked rows: vitals beside the tally, then the clock, the
+     signature's health and the objective stack each across the full width.
+     Three tracks do not fit on a phone, and letting them try put the clock on
+     top of the health bar. */
   .vitals{grid-area:1/1;max-width:none}
   .tally{grid-area:1/2}
   .mission{grid-area:2/1/auto/-1;min-width:0;margin:0}
@@ -84,51 +85,53 @@
      name were all printed over each other. It is the one element in this
      region that was not a real grid item, and it was the one that collided. */
   .boss-bar{grid-area:3/1/auto/-1;width:auto;margin:0}
-  .codec{grid-area:4/1/auto/-1}
-  .replay-badge{grid-area:5/1/auto/-1;justify-self:center}
-  .hud-top-left{grid-area:6/1/auto/-1;gap:6px}
-  .mission-head{font-size:9px}
-  .mission-head #timerValue{font-size:14px}
-  .phase{font-size:7.5px}
+  .replay-badge{grid-area:4/1/auto/-1;justify-self:center}
+  .hud-top-left{grid-area:6/1/auto/-1;gap:5px}
+  .squad-strip{grid-area:5/1/auto/-1}
+  .mission #timerValue{font-size:16px}
+  .mission-sub{font-size:7.5px;letter-spacing:.14em}
   .hp-text b{font-size:12px}
   .xp-row{font-size:8.5px;margin-top:4px}
   .mission-bar{margin-top:4px}
-  .mission-objective{padding:4px 9px}
 
-  .objectives{max-width:none;padding:5px 8px}
-  .objectives-head{font-size:8px}
-  .objectives.open .objective-list{margin-top:5px}
-  .objective{font-size:9px;gap:5px;padding:2px 4px}
-  .objective-count{font-size:8.5px}
+  .objectives,.mission-objective{max-width:none}
+  .objectives-head{font-size:7.5px}
+  .objectives.open .objective-list{margin-top:4px}
+  .objective{font-size:8.5px;gap:5px;padding:2px 4px}
+  .objective-count{font-size:8px}
 
-  .tally{min-width:auto;justify-self:end}
-  .tally-row{gap:8px;font-size:9px}
+  .tally{justify-self:end;gap:8px}
+  .tally-row b{font-size:10px}
   .combo{font-size:11px}
 
+  /* The action row alone is most of a phone's width, so the radio traffic goes
+     above it rather than beside it — half a phone width is not enough to read a
+     line of dialogue in. */
+  .hud-bottom{flex-direction:column;align-items:stretch;gap:6px}
+  .hud-bottom-left{max-width:none;width:100%}
+  .hud-actions{justify-content:flex-end}
 
-
-  /* Collapse the loadout to fixed-size icon chips: four named weapon cards
-     consumed the whole left half of a phone screen and buried the play area. */
-  .loadout{max-width:none;gap:4px;flex-wrap:wrap;align-content:flex-end;max-height:84px}
+  /* Collapse the loadout to fixed-size icon chips when it is switched on: four
+     named weapon cards consumed the whole left half of a phone screen. */
+  .loadout{gap:4px;flex-wrap:wrap;align-content:flex-end;max-height:80px}
   .slot{flex:0 0 auto;padding:3px}
-  .slot.weapon{min-width:0;width:38px;height:38px;position:relative;justify-content:center}
+  .slot.weapon{min-width:0;width:34px;height:34px;position:relative;justify-content:center}
   .slot .slot-meta{display:none}
-  .slot-icon{width:100%;height:100%;font-size:8.5px;border:none;background:none}
+  .slot-icon{width:100%;height:100%;font-size:8px;border:none;background:none}
   .slot.weapon .slot-level{
     display:block;position:absolute;right:2px;bottom:1px;
     font-size:8px;color:var(--accent);line-height:1;font-weight:600;
   }
-  .slot.passive{width:30px;height:30px;justify-content:center}
-  .slot.passive .slot-icon{font-size:13px}
+  .slot.passive{width:28px;height:28px;justify-content:center;position:relative}
+  .slot.passive .slot-icon{font-size:12px}
   .slot-rank{position:absolute;right:2px;bottom:1px;font-size:7.5px}
-  .slot.passive{position:relative}
-  .slot-divider{height:20px}
+  .slot-divider{height:18px}
 
-  .ability-btn{min-width:88px;height:50px}
-  .dash-btn{min-width:58px;height:50px}
-  .icon-btn{width:44px;height:44px}
+  .ability-btn{min-width:82px;height:46px}
+  .dash-btn{min-width:54px;height:46px}
+  .icon-btn{width:40px;height:40px}
+  .kit-btn{height:46px;width:24px}
 
-  .status-strip{bottom:74px;max-width:94vw}
 
   .adapt-panel{padding:18px 14px}
   .adapt-head h2{font-size:26px}
@@ -145,43 +148,43 @@
 /* ---- Small phone -------------------------------------------------------- */
 @media(max-width:400px){
   .mission{margin:0}
-  .loadout{max-width:46vw}
   .slot-meta b{max-width:48px}
-  .ability-btn{min-width:76px}
+  .ability-btn{min-width:72px}
+  .codec-portrait{width:40px;height:40px}
+  .codec-text{font-size:13px}
   .payout-row,.stat-grid,.stat-grid.compact{grid-template-columns:1fr}
 }
 
 /* ---- Landscape phone: HUD must stay out of the play area ---------------- */
 @media(max-height:520px) and (orientation:landscape){
   /* A phone on its side has 430px of height and the top block was taking 193
-     of them — 45% of the screen, against 38% of sector. The middle column
-     stacks the contract panel, the signature's health and the radio traffic on
-     top of each other, so every one of them has to be short here. */
+     of them — 45% of the screen, against 38% of sector. Everything in the top
+     band has to be short here; the radio traffic is out of that band entirely
+     now, but it is on the bottom edge instead, so it is held to two lines. */
   .hud-panel{padding:4px 7px;font-size:9px}
+  .hud-chip{padding:3px 6px;font-size:9px}
   .mission{margin:0}
+  .mission #timerValue{font-size:16px}
   .hud-top{gap:4px}
   .hud-column{gap:4px}
   .vitals .xp-row{margin-top:3px}
   .mission-bar{margin-top:3px}
   /* The type stays legible — that was the complaint before this one — but the
      panel is held to two lines and the portrait shrinks to pay for it. */
-  .codec-portrait{width:40px;height:40px}
+  .hud-bottom-left{max-width:min(420px,48vw)}
+  .codec-portrait{width:38px;height:38px}
   .codec-body{padding:4px 9px;gap:1px}
-  .codec-head b{font-size:11px}
+  .codec-head b{font-size:10.5px}
   .codec-head span{font-size:8px}
-  .codec-text{
-    font-size:13px;line-height:1.3;
-    display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
-    line-clamp:2;overflow:hidden;
-  }
+  .codec-text{font-size:12.5px;line-height:1.3;-webkit-line-clamp:2;line-clamp:2}
   /* Only the objective currently closest to done is worth the vertical space. */
   .objective-list{gap:3px}
-  .objectives.open .objective-list{max-height:64px;margin-top:4px}
+  .objectives.open .objective-list{max-height:60px;margin-top:4px}
   .objective:nth-child(n+3){display:none}
-  .boss-bar{top:64px}
-  .status-strip{bottom:64px}
-  .ability-btn,.dash-btn{height:44px}
-  .icon-btn{width:40px;height:40px}
+  .loadout{max-height:44px}
+  .ability-btn,.dash-btn{height:40px}
+  .kit-btn{height:40px}
+  .icon-btn{width:36px;height:36px}
   .adapt-panel{padding:14px}
   .adapt-card{min-height:0;padding:12px}
   .adapt-icon{width:30px;height:30px;font-size:11px}

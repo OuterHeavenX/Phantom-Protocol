@@ -17,54 +17,66 @@
   z-index:4;
 }
 
-/* Two explicit rows. Row one is vitals / timer / tally; row two is the
-   objective stack and the radio traffic beside it, which puts the codec
-   directly under the timer. Everything here is a real grid item placed by
-   area, so no two panels can end up on top of each other at any width — which
-   they previously did on a phone.
+/* Two explicit rows. Row one is vitals / clock / tally; row two is the
+   objective stack on the left and the signature's health under the clock.
+   Everything here is a real grid item placed by area, so no two panels can end
+   up on top of each other at any width — which they previously did on a phone.
 
-   The middle track is a fixed width rather than `auto`. Sizing it to content
-   would mean the side panels resized every time a line of radio traffic came
-   in and went out again. */
+   Radio traffic is no longer part of this block at all: it moved to the bottom
+   left corner, where it is not sitting over the ground you are shooting into.
+
+   The middle track is a fixed width rather than `auto`, so the side panels do
+   not resize as the contract name and phase change length. */
 .hud-top{
   display:grid;
-  grid-template-columns:minmax(190px,1fr) min(520px,38vw) minmax(150px,1fr);
-  grid-template-rows:auto auto auto;
-  gap:10px;align-items:start;
+  grid-template-columns:minmax(168px,1fr) min(360px,32vw) minmax(120px,1fr);
+  grid-template-rows:auto auto;
+  gap:8px;align-items:start;
 }
 .vitals{grid-area:1/1}
 .mission{grid-area:1/2}
 .tally{grid-area:1/3}
-.hud-top-left{grid-area:2/1/-1/2}
-/* The signature's health sits between the clock and the radio traffic, in the
-   same column, as a row of the stack. It used to be positioned absolutely at a
-   fixed 96px and printed straight over the codec panel underneath it. */
+.hud-top-left{grid-area:2/1}
+/* The signature's health sits under the clock, in the same column, as a real
+   row of the grid. It used to be positioned absolutely at a fixed 96px and
+   printed straight over whatever was underneath it. */
 .boss-bar{grid-area:2/2}
-.codec{grid-area:3/2}
+.replay-badge{grid-area:2/3}
+.squad-strip{grid-area:3/3}
 
 .hud-panel{
-  background:linear-gradient(180deg,rgba(4,13,19,.88),rgba(3,10,14,.7));
-  border:1px solid rgba(118,231,212,.16);
-  box-shadow:inset 0 1px rgba(255,255,255,.03),0 10px 28px rgba(0,0,0,.3);
+  background:linear-gradient(180deg,rgba(4,13,19,.82),rgba(3,10,14,.62));
+  border:1px solid rgba(118,231,212,.14);
+  box-shadow:inset 0 1px rgba(255,255,255,.03),0 8px 22px rgba(0,0,0,.28);
   backdrop-filter:blur(6px);
-  padding:9px 11px;
-  font-size:11px;
+  padding:6px 9px;
+  font-size:10px;
+}
+
+/* Readouts that are reference rather than moment-to-moment get no panel of
+   their own — a hairline and a wash, so they read as annotations on the sector
+   instead of as another box competing with the three that matter. */
+.hud-chip{
+  background:rgba(3,10,14,.62);
+  border:1px solid rgba(118,231,212,.12);
+  backdrop-filter:blur(4px);
+  padding:4px 8px;font-size:10px;
 }
 
 /* ---- Vitals ------------------------------------------------------------- */
 
-.vitals{max-width:400px}
-.vital-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.vitals{max-width:300px}
+.vital-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:5px}
 .op-tag{
-  font-size:10px;letter-spacing:.18em;color:var(--op,#76e7d4);
+  font-size:9px;letter-spacing:.18em;color:var(--op,#76e7d4);
   border-left:2px solid var(--op,#76e7d4);padding-left:6px;
 }
-.hp-text{font-size:12px}
-.hp-text b{font-size:14px;color:#eafffc}
+.hp-text{font-size:11px;font-variant-numeric:tabular-nums}
+.hp-text b{font-size:13px;color:#eafffc}
 .hp-text i{font-style:normal;opacity:.4;margin:0 2px}
 .hp-text span{color:var(--muted)}
 
-.bar.hp{height:7px;position:relative}
+.bar.hp{height:6px;position:relative}
 .bar.hp>i{
   background:linear-gradient(90deg,#ff5f57,#ffb185);
   position:relative;z-index:2;
@@ -77,41 +89,44 @@
 }
 @keyframes hp-pulse{50%{filter:brightness(1.6)}}
 
-.xp-row{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:9.5px}
+/* The raw experience count went with the clean-up. Which level you are is
+   worth a glance mid-contract; how many points into it you are is what the
+   bar is for, and the number was three more digits over the sector. */
+.xp-row{display:flex;align-items:center;gap:8px;margin-top:5px;font-size:9px}
 .xp-row .lvl{color:var(--muted);white-space:nowrap}
-.xp-row .lvl b{color:var(--accent);font-size:11px}
-.xp-row .bar{flex:1;height:4px;margin:0}
+.xp-row .lvl b{color:var(--accent);font-size:10.5px}
+.xp-row .bar{flex:1;height:3px;margin:0}
 .xp-row .bar>i{background:linear-gradient(90deg,#7db2ff,#cfe3ff)}
-.xp-text{color:var(--muted);white-space:nowrap;font-size:9px}
 
 /* ---- Campaign objective ------------------------------------------------- */
 
 .mission-objective[hidden]{display:none}
 .mission-objective{
-  display:flex;justify-content:space-between;align-items:center;gap:12px;
-  max-width:400px;padding:7px 11px;
-  border-color:rgba(143,216,255,.5);
-  box-shadow:inset 0 0 0 1px rgba(143,216,255,.08),0 10px 28px rgba(0,0,0,.3);
+  display:flex;align-items:center;gap:10px;
+  max-width:300px;
+  border-left:2px solid rgba(143,216,255,.6);
 }
-.mission-objective-label{font-size:9px;letter-spacing:.2em;color:#8fd8ff}
-.mission-objective-value{font-size:13px;color:#eafffc;font-variant-numeric:tabular-nums}
-.mission-objective.done{border-color:rgba(139,255,155,.55)}
+.mission-objective-label{font-size:8.5px;letter-spacing:.2em;color:#8fd8ff}
+.mission-objective-value{
+  font-size:11px;color:#eafffc;font-variant-numeric:tabular-nums;margin-left:auto;
+}
+.mission-objective.done{border-left-color:#8bff9b}
 .mission-objective.done .mission-objective-label,
 .mission-objective.done .mission-objective-value{color:#8bff9b}
 
 /* ---- Field objectives --------------------------------------------------- */
 
-.hud-column{display:flex;flex-direction:column;gap:8px;min-width:0}
-.objectives{max-width:400px;padding:6px 9px}
+.hud-column{display:flex;flex-direction:column;gap:6px;min-width:0;align-items:flex-start}
+.objectives{max-width:300px}
 .objectives-head{
   display:flex;align-items:center;gap:8px;
-  font-size:8.5px;letter-spacing:.2em;color:var(--muted);
+  font-size:8px;letter-spacing:.2em;color:var(--muted);
 }
-.objectives-head b{color:var(--gold);font-size:10px;letter-spacing:.08em;margin-left:auto}
+.objectives-head b{color:var(--gold);font-size:9.5px;letter-spacing:.08em;margin-left:auto}
 /* The whole set's progress, so the collapsed header still says how far along
    the contract is without spending three rows saying it. */
 .objectives-bar{
-  flex:0 0 46px;height:2px;background:rgba(118,231,212,.16);
+  flex:0 0 40px;height:2px;background:rgba(118,231,212,.16);
   display:block;overflow:hidden;
 }
 .objectives-bar u{display:block;height:100%;background:var(--accent);
@@ -121,24 +136,24 @@
 /* Closed by default; `open` is added for a few seconds whenever a count moves.
    Height rather than display, so it slides instead of jumping. */
 .objective-list{
-  list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;
+  list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px;
   max-height:0;overflow:hidden;opacity:0;
   transition:max-height .22s ease,opacity .18s ease,margin-top .22s ease;
 }
-.objectives.open .objective-list{max-height:180px;opacity:1;margin-top:6px}
+.objectives.open .objective-list{max-height:180px;opacity:1;margin-top:5px}
 @media(prefers-reduced-motion:reduce){
   .objective-list{transition:none}
 }
 .objective{
   position:relative;display:grid;
-  grid-template-columns:12px 1fr auto;align-items:center;gap:6px;
-  padding:3px 5px;font-size:9.5px;overflow:hidden;
+  grid-template-columns:10px 1fr auto;align-items:center;gap:6px;
+  padding:2px 5px;font-size:9px;overflow:hidden;
   background:rgba(118,231,212,.05);
   border-left:2px solid rgba(118,231,212,.3);
 }
-.objective-mark{color:var(--muted);font-size:9px;line-height:1}
+.objective-mark{color:var(--muted);font-size:8.5px;line-height:1}
 .objective-text{color:#cfe3e2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.objective-count{color:var(--muted);font-variant-numeric:tabular-nums;font-size:9px}
+.objective-count{color:var(--muted);font-variant-numeric:tabular-nums;font-size:8.5px}
 .objective-fill{
   position:absolute;left:0;bottom:0;height:1.5px;
   background:var(--accent);opacity:.65;transition:width .3s linear;
@@ -148,30 +163,56 @@
 .objective.done .objective-text{color:#8bff9b;text-decoration:line-through;opacity:.8}
 .objective.done .objective-fill{background:#8bff9b;opacity:1}
 
-/* ---- Mission ------------------------------------------------------------ */
+/* ---- Mission ------------------------------------------------------------
+   The clock is the line that is read constantly, so it gets the size and the
+   top line. The contract name and the phase share the row under it — they used
+   to be a row each, with the name competing with the clock for the same one. */
 
-.mission{text-align:center;justify-self:center;min-width:230px;max-width:100%}
-.mission-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:10px;letter-spacing:.1em}
-.timer-group{display:flex;flex-direction:column;gap:2px;align-items:center}
-.mission-head #timerValue{font-size:17px;color:#eafffc;font-variant-numeric:tabular-nums}
-.mission-head #timerValue.urgent{color:var(--gold);animation:timer-pulse 1s ease-in-out infinite}
-.extraction-label{font-size:9px;color:var(--gold);letter-spacing:.1em;font-weight:normal}
-.extraction-label b{font-size:13px;font-variant-numeric:tabular-nums;animation:timer-pulse 1s ease-in-out infinite}
+.mission{text-align:center;justify-self:center;min-width:200px;max-width:100%}
+.timer-group{display:flex;flex-direction:column;gap:1px;align-items:center;line-height:1.05}
+.mission #timerValue{font-size:19px;color:#eafffc;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.mission #timerValue.urgent{color:var(--gold);animation:timer-pulse 1s ease-in-out infinite}
+.extraction-label{font-size:8.5px;color:var(--gold);letter-spacing:.1em;font-weight:normal}
+.extraction-label b{font-size:12px;font-variant-numeric:tabular-nums;animation:timer-pulse 1s ease-in-out infinite}
 @keyframes timer-pulse{50%{opacity:.55}}
-.phase{margin-top:4px;font-size:8.5px;letter-spacing:.22em;color:#86aaa9}
-.mission-bar{height:2px;background:rgba(118,231,212,.12);margin-top:6px}
+.mission-sub{
+  display:flex;align-items:baseline;justify-content:center;gap:7px;
+  margin-top:3px;font-size:8px;letter-spacing:.18em;
+  white-space:nowrap;overflow:hidden;
+}
+.mission-sub #mapName{color:#a8c4c3;text-overflow:ellipsis;overflow:hidden}
+.mission-sub em{font-style:normal;color:#6f9291}
+/* The separator is drawn rather than typed, so it disappears with the phase
+   label instead of being left stranded at the end of the contract name. */
+.mission-sub em::before{content:'';display:inline-block;
+  width:3px;height:3px;margin-right:7px;vertical-align:middle;
+  background:rgba(118,231,212,.4)}
+.mission-bar{height:2px;background:rgba(118,231,212,.12);margin-top:5px}
 .mission-bar>i{display:block;height:100%;background:var(--accent);transition:width .4s linear}
 
-/* ---- Tally -------------------------------------------------------------- */
+/* ---- Tally --------------------------------------------------------------
+   No panel: three counters that are checked between fights, not during one.
+   One line rather than three stacked rows. */
 
-.tally{justify-self:end;display:flex;flex-direction:column;gap:2px;min-width:110px}
-.tally-row{display:flex;justify-content:space-between;gap:12px;font-size:10px}
-.tally-row span{color:var(--muted);letter-spacing:.1em}
-.tally-row b{color:#eafffc;font-variant-numeric:tabular-nums}
-.combo{
-  margin-top:4px;text-align:right;font-size:13px;
-  color:var(--gold);letter-spacing:.06em;min-height:16px;
+.tally{
+  justify-self:end;display:flex;align-items:baseline;
+  gap:10px;flex-wrap:wrap;justify-content:flex-end;
+  /* A wash rather than a border: the numbers have to survive snow and muzzle
+     flash, but they do not need a fourth box drawn round them. */
+  padding:3px 7px;
+  background:linear-gradient(90deg,transparent,rgba(3,10,14,.62) 22%);
 }
+.tally-row{display:flex;align-items:baseline;gap:4px;font-size:9px}
+.tally-row span{color:var(--muted);letter-spacing:.12em;font-size:8px}
+.tally-row b{
+  color:#dceef2;font-variant-numeric:tabular-nums;font-size:11px;
+  text-shadow:0 1px 3px rgba(0,0,0,.9);
+}
+.combo{
+  font-size:12px;color:var(--gold);letter-spacing:.06em;
+  text-shadow:0 1px 3px rgba(0,0,0,.9);
+}
+.combo:empty{display:none}
 .combo.hot{color:#ff8a4c;text-shadow:0 0 12px rgba(255,138,76,.6)}
 
 /* ---- Boss bar ----------------------------------------------------------- */
@@ -188,16 +229,29 @@
 
 /* ---- Bottom bar --------------------------------------------------------- */
 
+/* Nothing down here is positioned at a hand-set offset from the bottom edge any
+   more: both corners are flow columns, so a change to the height of one row can
+   no longer land it on top of another. */
+.hud-bottom-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 0 auto}
+
 .hud-bottom{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
 
-.loadout{display:flex;flex-wrap:wrap;gap:6px;align-items:center;max-width:62vw}
-.slot{
-  display:flex;align-items:center;gap:7px;
-  background:linear-gradient(135deg,rgba(4,12,18,.9),rgba(7,26,29,.78));
-  border:1px solid rgba(118,231,212,.22);
-  padding:5px 8px;position:relative;overflow:hidden;
+/* Radio traffic, and the loadout readout when it is switched on. Capped in
+   width so a long transmission wraps into the corner instead of running along
+   the whole bottom edge. */
+.hud-bottom-left{
+  display:flex;flex-direction:column;justify-content:flex-end;gap:6px;
+  min-width:0;flex:1 1 auto;max-width:min(430px,44vw);
 }
-.slot.weapon{min-width:132px}
+
+.loadout{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.slot{
+  display:flex;align-items:center;gap:6px;
+  background:linear-gradient(135deg,rgba(4,12,18,.86),rgba(7,26,29,.72));
+  border:1px solid rgba(118,231,212,.18);
+  padding:4px 7px;position:relative;overflow:hidden;
+}
+.slot.weapon{min-width:118px}
 .slot.weapon::after{
   content:'';position:absolute;left:0;right:0;bottom:0;height:2px;
   background:linear-gradient(90deg,var(--accent),transparent);
@@ -206,22 +260,22 @@
 .slot.evolved::after{background:linear-gradient(90deg,var(--gold),transparent)}
 
 .slot-icon{
-  width:28px;height:28px;flex-shrink:0;
+  width:24px;height:24px;flex-shrink:0;
   display:grid;place-items:center;
   border:1px solid rgba(118,231,212,.22);
   background:rgba(118,231,212,.07);
-  color:#8ffff0;font-size:9px;letter-spacing:.03em;
+  color:#8ffff0;font-size:8.5px;letter-spacing:.03em;
 }
-.slot-icon.small{font-size:15px;width:24px;height:24px}
+.slot-icon.small{font-size:14px;width:22px;height:22px}
 .slot-meta{display:flex;flex-direction:column;line-height:1.2;min-width:0}
-.slot-meta b{font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:96px}
-.slot-meta i{font-style:normal;font-size:8.5px;color:#7ec7c1}
+.slot-meta b{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:86px}
+.slot-meta i{font-style:normal;font-size:8px;color:#7ec7c1}
 .slot-level{display:none}
-.slot.passive{padding:4px 6px}
-.slot-rank{font-size:9px;color:var(--accent)}
-.slot-divider{width:1px;height:26px;background:rgba(118,231,212,.2);margin:0 2px}
+.slot.passive{padding:3px 5px}
+.slot-rank{font-size:8.5px;color:var(--accent)}
+.slot-divider{width:1px;height:22px;background:rgba(118,231,212,.2);margin:0 2px}
 
-.hud-actions{display:flex;gap:8px;align-items:flex-end;pointer-events:auto}
+.hud-actions{display:flex;gap:7px;align-items:flex-end;pointer-events:auto;flex:0 0 auto}
 
 .ability-btn,.dash-btn{
   position:relative;overflow:hidden;
@@ -231,10 +285,10 @@
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
   transition:border-color .16s,box-shadow .16s;
 }
-.ability-btn{min-width:110px;height:56px;padding:6px 10px}
-.dash-btn{min-width:70px;height:56px;padding:6px 8px;font-size:9px;letter-spacing:.14em}
-.ability-name{font-size:9px;letter-spacing:.12em;text-align:center;line-height:1.15}
-.ability-state{font-size:11px;color:var(--accent);font-variant-numeric:tabular-nums}
+.ability-btn{min-width:96px;height:50px;padding:5px 9px}
+.dash-btn{min-width:62px;height:50px;padding:5px 7px;font-size:8.5px;letter-spacing:.14em}
+.ability-name{font-size:8.5px;letter-spacing:.12em;text-align:center;line-height:1.15}
+.ability-state{font-size:10.5px;color:var(--accent);font-variant-numeric:tabular-nums}
 .ability-fill,.dash-fill{
   position:absolute;left:0;bottom:0;width:100%;height:3px;
   background:var(--accent);transform-origin:left center;
@@ -247,8 +301,8 @@
 .ability-btn.ready .ability-state{color:#d8fff8}
 
 .icon-btn{
-  width:48px;height:48px;padding:0;
-  display:grid;place-items:center;font-size:14px;
+  width:42px;height:42px;padding:0;
+  display:grid;place-items:center;font-size:13px;
   border:1px solid rgba(118,231,212,.24);
   background:rgba(4,12,18,.86);color:var(--ink);cursor:pointer;
 }
@@ -256,9 +310,9 @@
 
 /* ---- Turret kit button -------------------------------------------------- */
 
-.turret-btn{position:relative;min-width:78px}
+.turret-btn{position:relative;min-width:70px}
 .turret-count{
-  font-style:normal;font-size:11px;letter-spacing:.06em;
+  font-style:normal;font-size:10.5px;letter-spacing:.06em;
   color:var(--muted);font-variant-numeric:tabular-nums;
 }
 .turret-btn.ready .turret-count{color:var(--gold)}
@@ -278,7 +332,7 @@
 /* Kit cycle. Deliberately small and adjacent: it changes what the next plant
    is, never plants anything, so it must not be mistakable for the deploy. */
 .kit-btn{
-  width:30px;height:56px;font-size:13px;
+  width:26px;height:50px;font-size:12px;
   border-color:color-mix(in srgb,var(--kit-color,var(--accent)) 30%,transparent);
   align-self:flex-end;
 }
@@ -288,9 +342,9 @@
    warning colour rather than its accent: the point is that what is on screen
    is not a contract in progress. */
 .replay-badge{
-  grid-area:2/3;justify-self:end;
+  justify-self:end;
   display:flex;align-items:center;gap:7px;
-  padding:6px 10px;
+  padding:5px 9px;
   font-size:9px;letter-spacing:.2em;color:#ffd166;
   border:1px solid rgba(255,209,102,.4);
   background:rgba(26,18,4,.82);
@@ -309,16 +363,19 @@
 
 /* ---- Status strip ------------------------------------------------------- */
 
+/* A flow row above the action buttons, which are the controls the pills are
+   mostly about. Empty for most of a contract, and the gap it would otherwise
+   leave behind goes with it. */
 .status-strip{
-  position:absolute;left:50%;bottom:86px;transform:translateX(-50%);
-  display:flex;gap:6px;flex-wrap:wrap;justify-content:center;
-  pointer-events:none;max-width:80vw;
+  display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;
+  pointer-events:none;max-width:60vw;
 }
+.status-strip:empty{display:none}
 .status-pill{
   border:1px solid var(--c,var(--accent));
   background:rgba(4,12,18,.8);
   color:var(--c,var(--accent));
-  padding:3px 9px;font-size:9px;letter-spacing:.12em;
+  padding:3px 9px;font-size:8.5px;letter-spacing:.12em;
 }
 
 /* ---- Overlays ----------------------------------------------------------- */
@@ -494,35 +551,38 @@
 }
 
 /* ---- Codec --------------------------------------------------------------
-   Radio traffic, under the mission timer at the top of the screen. Never
-   interactive: it sits over the play area, so the panel must let every touch
-   and click straight through to what is behind it. */
+   Radio traffic, in the bottom-left corner. It used to hang under the mission
+   clock in the middle of the top edge — the busiest part of the screen and the
+   part you are shooting into. Never interactive: it sits over the play area, so
+   the panel must let every touch and click straight through to what is behind
+   it. */
 .codec{
   display:flex;align-items:stretch;gap:0;
-  min-width:0;
+  width:100%;min-width:0;
   pointer-events:none;
   border:1px solid var(--c,var(--accent));
   border-left:3px solid var(--c,var(--accent));
   background:linear-gradient(100deg,rgba(3,10,14,.94),rgba(4,16,20,.86));
-  box-shadow:0 0 34px rgba(0,0,0,.6);
+  box-shadow:0 0 30px rgba(0,0,0,.6);
 }
+.codec[hidden]{display:none}
 .codec.open{animation:codec-in .26s cubic-bezier(.2,.9,.3,1) both}
-/* Drops in from behind the mission panel it hangs under. */
+/* Slides up out of the bottom edge it now sits on. */
 @keyframes codec-in{
-  from{opacity:0;transform:translateY(-14px)}
+  from{opacity:0;transform:translateY(12px)}
   to{opacity:1;transform:none}
 }
 
 .codec-portrait{
   position:relative;flex:0 0 auto;
-  width:64px;height:64px;overflow:hidden;
+  width:52px;height:52px;overflow:hidden;
   border-right:1px solid var(--c,var(--accent));
   background:#050b0d;
 }
 .codec-portrait img{
   display:block;width:100%;height:100%;object-fit:cover;
-  /* The roster crop is head and shoulders; at 64px the face needs to be most
-     of the frame, so it is pushed in and up to sit on the eyes. */
+  /* The roster crop is head and shoulders; at this size the face needs to be
+     most of the frame, so it is pushed in and up to sit on the eyes. */
   object-position:50% 26%;
   transform:scale(1.3);
   filter:saturate(.6) contrast(1.15) brightness(1.05);
@@ -536,39 +596,33 @@
   mix-blend-mode:screen;opacity:.55;
 }
 
-.codec-body{display:flex;flex-direction:column;justify-content:center;gap:4px;padding:9px 14px;min-width:0}
+.codec-body{display:flex;flex-direction:column;justify-content:center;gap:3px;padding:7px 11px;min-width:0}
 .codec-head{display:flex;align-items:baseline;gap:8px}
-.codec-head b{font-size:13px;letter-spacing:.16em;color:var(--c,var(--accent))}
-.codec-head span{font-size:10px;letter-spacing:.14em;color:var(--muted)}
+.codec-head b{font-size:11px;letter-spacing:.16em;color:var(--c,var(--accent))}
+.codec-head span{font-size:8.5px;letter-spacing:.14em;color:var(--muted)}
 /* Radio traffic is dialogue, and dialogue that cannot be read during a
-   firefight may as well not have been written. This was 11px, and 10px on a
-   phone — the size of a footnote, on the screen this game is actually played
-   on, competing with everything else happening. The line height and the shadow
-   matter as much as the size: the panel sits over the play area, so the text
-   has to hold up against whatever is moving behind it. */
+   firefight may as well not have been written — so the type stays large even
+   as everything around it comes down. The line height and the shadow matter as
+   much as the size: the panel sits over the play area, so the text has to hold
+   up against whatever is moving behind it. Held to three lines, because a
+   fourth would start climbing back into the sector. */
 .codec-text{
-  font-size:15px;line-height:1.45;color:var(--ink);
+  font-size:14px;line-height:1.4;color:var(--ink);
   font-weight:500;
   text-shadow:0 1px 3px rgba(0,0,0,.85);
   overflow-wrap:break-word;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;
+  line-clamp:3;overflow:hidden;
 }
 
-/* The phone layout for the whole top row lives in responsive.css with the rest
-   of it; this is only the type scale that goes with it. */
+/* The phone layout for the bottom bar lives in responsive.css with the rest of
+   it; this is only the type scale that goes with it. */
 @media(max-width:760px){
-  /* Held at arm's length rather than sat in front of, so the type goes up on a
-     phone rather than down. The portrait shrinks a little to pay for it. */
-  .codec-portrait{width:52px;height:52px}
-  .codec-body{padding:8px 11px;gap:3px}
-  .codec-head b{font-size:12px}
-  .codec-head span{font-size:9px}
-  .codec-text{font-size:15px;line-height:1.38}
-}
-/* Narrow phones in portrait: the panel spans the full width there (see
-   responsive.css), so there is room for the type to stay large. */
-@media(max-width:430px){
-  .codec-portrait{width:46px;height:46px}
-  .codec-text{font-size:14.5px}
+  .codec-portrait{width:44px;height:44px}
+  .codec-body{padding:6px 9px;gap:2px}
+  .codec-head b{font-size:10.5px}
+  .codec-head span{font-size:8px}
+  .codec-text{font-size:13.5px;line-height:1.35;-webkit-line-clamp:2;line-clamp:2}
 }
 
 /* The panel is the flash, so reduced-flashing keeps the wash but drops the
@@ -576,16 +630,17 @@
 .reduced-flashing .codec-scan{opacity:.34}
 
 /* ---- Squad strip --------------------------------------------------------
-   The second operative's condition, under the tally on the right so it does
+   The rest of the squad's condition, under the tally on the right so it does
    not compete with the objective list. Never interactive. */
 .squad-strip{
-  position:absolute;right:0;top:132px;
-  display:flex;flex-direction:column;gap:5px;align-items:flex-end;
+  justify-self:end;
+  display:flex;flex-direction:column;gap:4px;align-items:flex-end;
   pointer-events:none;
 }
+.squad-strip[hidden]{display:none}
 .squad-chip{
-  min-width:104px;
-  padding:5px 8px 6px;
+  min-width:96px;
+  padding:4px 7px 5px;
   border:1px solid var(--c,var(--accent));
   border-right-width:3px;
   background:rgba(4,12,18,.82);
@@ -608,7 +663,6 @@
 @keyframes squad-pulse{0%,100%{opacity:.45}50%{opacity:1}}
 
 @media(max-width:760px){
-  .squad-strip{top:auto;bottom:150px;gap:4px}
   .squad-chip{min-width:84px;padding:4px 6px 5px}
   .squad-chip b{font-size:8.5px}
 }

@@ -25,19 +25,21 @@ const template=(operative,ability,engine)=>`
       <div class="xp-row">
         <span class="lvl">LV <b id="levelValue">1</b></span>
         <div class="bar xp"><i id="xpBar"></i></div>
-        <span class="xp-text" id="xpText">0/22</span>
       </div>
     </div>
 
+    <!-- Clock first, contract underneath it. The name and the phase are read
+         once; the clock is read constantly, so it gets the size and they get
+         one shared line instead of two panels' worth of rows. -->
     <div class="hud-panel mission">
-      <div class="mission-head">
-        <span id="mapName">—</span>
-        <div class="timer-group">
-          <b id="timerValue">00:00</b>
-          <span id="extractionTimer" class="extraction-label" hidden>EXTRACT <b>00:00</b></span>
-        </div>
+      <div class="timer-group">
+        <b id="timerValue">00:00</b>
+        <span id="extractionTimer" class="extraction-label" hidden>EXTRACT <b>00:00</b></span>
       </div>
-      <div class="phase" id="phaseValue">INFILTRATION</div>
+      <div class="mission-sub">
+        <span id="mapName">—</span>
+        <em id="phaseValue">INFILTRATION</em>
+      </div>
       <div class="mission-bar"><i id="missionBar"></i></div>
     </div>
 
@@ -49,18 +51,20 @@ const template=(operative,ability,engine)=>`
       <em id="replayProgress">0%</em>
     </div>`:''}
 
-    <div class="hud-panel tally">
-      <div class="tally-row"><span>ELIM</span><b id="killsValue">0</b></div>
-      <div class="tally-row"><span>CR</span><b id="creditsValue">0</b></div>
-      <div class="tally-row"><span>JP</span><b id="jpValue">0</b></div>
-      <div class="combo" id="comboValue"></div>
+    <!-- One line, not three stacked rows. These are a glance-at-the-end
+         readout during a contract; they do not need a panel of their own. -->
+    <div class="tally">
+      <span class="tally-row"><span>ELIM</span><b id="killsValue">0</b></span>
+      <span class="tally-row"><span>CR</span><b id="creditsValue">0</b></span>
+      <span class="tally-row"><span>JP</span><b id="jpValue">0</b></span>
+      <span class="combo" id="comboValue"></span>
     </div>
 
-    <!-- Second row: the objective stack on the left, radio traffic beside it
-         in the middle track so it lands directly under the timer. Both are
-         real grid items, so neither can ever sit on top of the other. -->
+    <!-- Second row: the objective stack on the left, the signature's health
+         in the middle track under the clock. Both are real grid items, so
+         neither can ever sit on top of the other. -->
     <div class="hud-column hud-top-left">
-    <div class="hud-panel mission-objective" id="missionObjective" hidden>
+    <div class="hud-chip mission-objective" id="missionObjective" hidden>
       <span class="mission-objective-label" id="missionObjectiveLabel">OBJECTIVE</span>
       <b class="mission-objective-value" id="missionObjectiveValue">—</b>
     </div>
@@ -70,8 +74,8 @@ const template=(operative,ability,engine)=>`
          for the whole contract, which on a phone is a tenth of the screen spent
          on text that changes once a minute. It opens itself whenever a count
          moves and closes again a few seconds later. -->
-    <div class="hud-panel objectives" id="objectivePanel">
-      <span class="objectives-head">FIELD OBJECTIVES
+    <div class="hud-chip objectives" id="objectivePanel">
+      <span class="objectives-head">OBJECTIVES
         <b id="objectivesCleared">0/0</b>
         <i class="objectives-bar"><u id="objectivesFill"></u></i>
       </span>
@@ -79,55 +83,72 @@ const template=(operative,ability,engine)=>`
     </div>
     </div>
 
-    <div class="codec" id="codec" hidden aria-live="polite">
-      <div class="codec-portrait">
-        <img id="codecPortrait" alt="" decoding="async">
-        <span class="codec-scan"></span>
-      </div>
-      <div class="codec-body">
-        <div class="codec-head">
-          <b id="codecName">—</b>
-          <span id="codecChannel">CHANNEL 00</span>
-        </div>
-        <p class="codec-text" id="codecText"></p>
-      </div>
-    </div>
-
     <div class="boss-bar" id="bossBar" hidden>
       <div class="boss-name"><span id="bossName"></span><em id="bossPhase"></em></div>
       <div class="bar boss"><i id="bossHp"></i></div>
     </div>
+
+    <!-- The rest of the squad, in the tally's column. A real grid item like
+         everything else in this block: it used to be positioned absolutely at a
+         hand-set offset that had to be re-guessed per breakpoint, and on a
+         phone it landed on the radio traffic. -->
+    <div class="squad-strip" id="squadStrip" hidden></div>
   </div>
 
 
   <div class="hud-bottom">
-    <div class="loadout" id="loadoutStrip"></div>
-    <div class="hud-actions">
-      <button class="ability-btn" id="abilityBtn" type="button" title="${ability.desc}">
-        <span class="ability-name">${ability.name}</span>
-        <span class="ability-state" id="abilityState">READY</span>
-        <i class="ability-fill" id="abilityFill"></i>
-      </button>
-      ${engine.ordnance?`<button class="dash-btn ordnance-btn" id="ordnanceBtn" type="button" title="${engine.ordnance.desc}">
-        <span>${engine.ordnance.short}</span>
-        <i class="dash-fill" id="ordnanceFill"></i>
-      </button>`:''}
-      <button class="dash-btn turret-btn" id="turretBtn" type="button" title="Deploy field kit (F)">
-        <span id="kitName">SENTRY</span>
-        <em class="turret-count" id="turretCount">0/1</em>
-        <i class="dash-fill" id="turretFill"></i>
-      </button>
-      <button class="icon-btn kit-btn" id="kitBtn" type="button" title="Cycle field kit (G)">⟳</button>
-      <button class="dash-btn" id="dashBtn" type="button" title="Dash">
-        <span>DASH</span><i class="dash-fill" id="dashFill"></i>
-      </button>
-      <button class="icon-btn" id="pauseBtn" type="button" title="Pause">❚❚</button>
+    <!-- Radio traffic lives down here now. It used to hang under the clock in
+         the middle of the top edge, directly over the sector you are shooting
+         into; at the bottom corner it is still read at a glance and covers
+         ground you are moving away from rather than towards. -->
+    <div class="hud-bottom-left">
+      <div class="codec" id="codec" hidden aria-live="polite">
+        <div class="codec-portrait">
+          <img id="codecPortrait" alt="" decoding="async">
+          <span class="codec-scan"></span>
+        </div>
+        <div class="codec-body">
+          <div class="codec-head">
+            <b id="codecName">—</b>
+            <span id="codecChannel">CHANNEL 00</span>
+          </div>
+          <p class="codec-text" id="codecText"></p>
+        </div>
+      </div>
+      <!-- Off by default. The full readout is on the pause screen, which is
+           where you actually compare numbers; on the field it was four named
+           cards parked over the bottom-left quarter of the sector. -->
+      ${engine.settings?.hudLoadout?'<div class="loadout" id="loadoutStrip"></div>':''}
+    </div>
+    <!-- Active effects sit directly above the buttons whose state they are
+         about, as a flow row. They used to be centred and positioned at a
+         hand-set offset from the bottom edge, so every change to the height of
+         anything down here landed the pills on top of it. -->
+    <div class="hud-bottom-right">
+      <div class="status-strip" id="statusStrip"></div>
+      <div class="hud-actions">
+        <button class="ability-btn" id="abilityBtn" type="button" title="${ability.desc}">
+          <span class="ability-name">${ability.name}</span>
+          <span class="ability-state" id="abilityState">READY</span>
+          <i class="ability-fill" id="abilityFill"></i>
+        </button>
+        ${engine.ordnance?`<button class="dash-btn ordnance-btn" id="ordnanceBtn" type="button" title="${engine.ordnance.desc}">
+          <span>${engine.ordnance.short}</span>
+          <i class="dash-fill" id="ordnanceFill"></i>
+        </button>`:''}
+        <button class="dash-btn turret-btn" id="turretBtn" type="button" title="Deploy field kit (F)">
+          <span id="kitName">SENTRY</span>
+          <em class="turret-count" id="turretCount">0/1</em>
+          <i class="dash-fill" id="turretFill"></i>
+        </button>
+        <button class="icon-btn kit-btn" id="kitBtn" type="button" title="Cycle field kit (G)">⟳</button>
+        <button class="dash-btn" id="dashBtn" type="button" title="Dash">
+          <span>DASH</span><i class="dash-fill" id="dashFill"></i>
+        </button>
+        <button class="icon-btn" id="pauseBtn" type="button" title="Pause">❚❚</button>
+      </div>
     </div>
   </div>
-
-  <div class="squad-strip" id="squadStrip" hidden></div>
-
-  <div class="status-strip" id="statusStrip"></div>
 </div>
 
 <div class="stick stick-move" id="stickMove"><span class="stick-ring"></span><span class="stick-knob" id="knobMove"></span></div>
@@ -150,7 +171,7 @@ export class Hud{
     this.el={
       screen:$('gameScreen'),canvas:$('gameCanvas'),
       hpValue:$('hpValue'),hpMax:$('hpMax'),hpBar:$('hpBar'),hpGhost:$('hpGhost'),
-      levelValue:$('levelValue'),xpBar:$('xpBar'),xpText:$('xpText'),
+      levelValue:$('levelValue'),xpBar:$('xpBar'),
       mapName:$('mapName'),timerValue:$('timerValue'),extractionTimer:$('extractionTimer'),phaseValue:$('phaseValue'),
       missionBar:$('missionBar'),
       objectiveList:$('objectiveList'),objectivesCleared:$('objectivesCleared'),
@@ -205,7 +226,6 @@ export class Hud{
 
     this.set('level',el.levelValue,String(engine.level));
     el.xpBar.style.width=`${clamp(engine.xp/engine.xpNeeded,0,1)*100}%`;
-    this.set('xpText',el.xpText,`${Math.floor(engine.xp)}/${engine.xpNeeded}`);
 
     // Mission.
     if(engine.extraction){
@@ -421,8 +441,11 @@ export class Hud{
     }).join('');
   }
 
+  // Only built when the loadout readout is switched on in settings; the
+  // pause screen carries the full version either way.
   updateLoadout(){
     const engine=this.engine;
+    if(!this.el.loadoutStrip)return;
     // Rebuild only when the loadout composition changes.
     const signature=engine.loadout.weapons.map(w=>`${w.id}:${w.level}`).join(',')+
       '|'+[...engine.loadout.passives].map(([id,rank])=>`${id}:${rank}`).join(',');

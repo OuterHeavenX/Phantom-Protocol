@@ -47,6 +47,10 @@ export function defaultSettings(){
     master:.85,music:.38,sfx:1,muted:false,audioMix:AUDIO_MIX,
     screenShake:1,damageNumbers:true,particles:'high',
     showMinimap:true,showHealthBars:true,showThreatIndicators:true,
+    // Off by default: the pause screen carries the full loadout readout, and on
+    // the field the strip was four named cards parked over the bottom-left
+    // corner of the sector.
+    hudLoadout:false,
     autoAim:true,holdToFire:false,
     codec:true,
     uiScale:1,touchSize:1,leftHanded:false,
