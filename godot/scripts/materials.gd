@@ -61,7 +61,17 @@ static func build() -> Dictionary:
         # dielectric, and a direct cause of the clipped highlights measured in
         # the first round. Sunlit limestone is about 0.45-0.55 albedo and
         # weathered concrete 0.30-0.40, so these sit where real surfaces do.
+        # Four facade tones rather than one.
+        #
+        # A whole sector in a single stone colour reads as one extruded object
+        # however well it is lit; the references get most of their depth from
+        # neighbouring buildings being visibly different materials. These are
+        # assigned per wall from the plan's own seeded `variant`, so the
+        # arrangement is deterministic and the same on every load.
         "wall": pbr("sandstone", 0.45, Color(0.82, 0.79, 0.74)),
+        "wall_1": pbr("plaster", 0.34, Color(0.84, 0.82, 0.76)),
+        "wall_2": pbr("sandstone", 0.38, Color(0.70, 0.71, 0.72)),
+        "wall_3": pbr("plaster", 0.30, Color(0.66, 0.70, 0.74)),
         "perimeter": pbr("sandstone", 0.40, Color(0.74, 0.71, 0.66)),
         "vault": pbr("steel", 0.80, Color(0.80, 0.78, 0.74), 0.20),
         "pillar": pbr("plaster", 0.30, Color(0.80, 0.78, 0.73)),

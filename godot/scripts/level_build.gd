@@ -219,7 +219,7 @@ func _build_solids() -> void:
         var tall := _height_for(o)
         var pos := Vector3(level.metres(float(o["x"])), tall * 0.5, level.metres(float(o["y"])))
         var kind := String(o.get("type", "wall"))
-        _box(Vector3(ow, tall, oh), pos, _mat(_material_for(kind)), true)
+        _box(Vector3(ow, tall, oh), pos, _mat(_material_for_object(o)), true)
         # A cornice caps every facade. It is the cheapest single thing that
         # stops a wall reading as an extruded rectangle: it gives the top edge
         # a shadow line and a change of material, which is what the eye uses
@@ -234,6 +234,14 @@ func _build_solids() -> void:
             var cap := _box(Vector3(ow + 0.56, 0.45, oh + 0.56),
                 Vector3(pos.x, tall + 0.225, pos.z), _mat("cornice"), false)
             cap.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+
+## Per-object material, so neighbouring facades differ.
+func _material_for_object(o: Dictionary) -> String:
+    var kind := String(o.get("type", "wall"))
+    if kind == "masonry" or kind == "wall":
+        var v := int(o.get("variant", 0)) % 4
+        return "wall" if v == 0 else "wall_%d" % v
+    return _material_for(kind)
 
 func _material_for(kind: String) -> String:
     match kind:
@@ -355,6 +363,18 @@ func _windows(o: Dictionary, size: Vector3, pos: Vector3) -> void:
 
 ## Props are loaded once and reused as instances.
 const PROP_DIR := "res://art/models/prop_%s.glb"
+
+## How far each prop reaches along the wall it is mounted on, in metres.
+##
+## Without this a 5.6 m pipe run placed near the end of a 9 m wall hangs half
+## its length out over the doorway next to it, held up by nothing. Placement
+## clamps the offset so the whole prop stays on its face, and skips the prop
+## entirely where the face is too short to hold it.
+const PROP_HALF_LENGTH := {
+    "pipe_run": 2.85, "awning": 1.35, "ac_unit": 0.55, "sign": 0.32,
+    "dish": 0.55, "conduit": 0.22, "shutter": 0.50, "wall_lamp": 0.10,
+    "drum": 0.32, "crate_stack": 0.45,
+}
 var _prop_cache: Dictionary = {}
 
 func _prop(name: String) -> Node3D:
@@ -472,7 +492,11 @@ func _dress_walls() -> void:
                 y = minf(y, tall - 2.2)
                 if y < 1.8:
                     continue
-                var offset: float = span * float(slot["t"])
+                var reach: float = float(PROP_HALF_LENGTH.get(name, 0.5))
+                var room: float = span * 0.5 - reach - 0.35
+                if room <= 0.0:
+                    continue
+                var offset: float = clampf(span * float(slot["t"]), -room, room)
                 _mount(name, base + axis * offset + Vector3(0.0, y, 0.0), face["yaw"])
 
 ## Lamp bodies at the level's own light positions.
