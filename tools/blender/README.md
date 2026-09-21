@@ -1,6 +1,6 @@
 # Blender asset pipeline — production source for the entity art
 
-    pip install bpy==4.5.13
+    sh tools/env/install-tools.sh          # bpy 4.5.13 + `blender` shim + Godot 4.5
     python3 tools/blender/render.py all assets/sprites/entities/   # all 26, at frame size
     python3 tools/blender/render.py heavy heavy.png 96
 
