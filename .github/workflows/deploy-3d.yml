@@ -128,8 +128,23 @@ jobs:
           url="${{ steps.deploy.outputs.url }}"
           [ -n "$url" ] || { echo "no deploy URL was printed" >&2; exit 1; }
           want=$(stat -c%s build/web/index.wasm)
-          got=$(curl -sS --compressed --retry 5 --retry-delay 5 \
-                  "$url/index.wasm" | wc -c | tr -d ' ')
+
+          # A freshly created pages.dev subdomain answers before its TLS
+          # certificate exists, so the first request after a deploy fails the
+          # handshake outright. curl's --retry does not cover handshake
+          # failures without --retry-all-errors, which is why the first run
+          # reported zero bytes a tenth of a second after a deploy that had
+          # in fact succeeded.
+          if ! curl -sS --compressed --fail \
+                 --retry 12 --retry-delay 10 --retry-all-errors --retry-connrefused \
+                 -o /tmp/served.wasm "$url/index.wasm"; then
+            echo "FAIL: could not fetch $url/index.wasm at all." >&2
+            echo "      The deploy itself succeeded -- this is the check" >&2
+            echo "      failing to reach it, not a bad build." >&2
+            exit 1
+          fi
+
+          got=$(stat -c%s /tmp/served.wasm)
           if [ "$got" != "$want" ]; then
             echo "FAIL: served wasm decoded to $got bytes, expected $want." >&2
             echo "      Cloudflare is not honouring Content-Encoding here, so" >&2
@@ -141,5 +156,7 @@ jobs:
           {
             echo "### 3D build deployed"
             echo
-            echo "Play at $url"
+            echo "Play at https://${PAGES_PROJECT}.pages.dev"
+            echo
+            echo "This deployment: $url"
           } >> "$GITHUB_STEP_SUMMARY"
