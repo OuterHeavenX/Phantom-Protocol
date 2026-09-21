@@ -110,6 +110,13 @@ func _build_environment() -> void:
     # reference its long shadows and its warm/cool split: lit faces go amber,
     # shadowed faces take their colour from the sky.
     sun = DirectionalLight3D.new()
+    # A review read this key as sitting on the camera axis and asked for it
+    # to be swung across the lane. Tried at 158 and again at 143, and both
+    # were worse in the frame than the bearing they replaced: the sun moved
+    # behind the buildings at the camera's back and dropped the entire
+    # foreground into their shadow, leaving no sunlit ground anywhere. At 128
+    # the facades already show a lit front and a turned shadow return, which
+    # was what the note was actually asking for. Left where it was.
     sun.rotation_degrees = Vector3(-42.0, 128.0, 0.0)
     sun.light_color = Color(1.0, 0.94, 0.83)
     # The sun spent three rounds at around 1.1 while sky ambient sat near 6.5,
@@ -136,28 +143,41 @@ func _build_environment() -> void:
     add_child(sun)
 
     var env := Environment.new()
-    var sky_mat := ProceduralSkyMaterial.new()
     # The sky is both the backdrop and the fill light. Left at full energy it
     # blew out to white paper behind the rooflines and still lit the shaded
     # faces poorly, because what reaches them is the horizon colour rather
     # than the zenith. Pulling energy down and deepening the gradient fixes
     # both: a blue sky above the cornices, and blue bounce in the shadows.
-    # The references' sky is a pale, nearly neutral haze at about 0.10
-    # saturation. The first correction for the blown-white sky overshot into a
-    # cobalt poster at 0.55, which also dragged the whole frame's saturation to
-    # 0.41 against their 0.28.
-    sky_mat.sky_top_color = Color(0.36, 0.50, 0.72)
-    sky_mat.sky_horizon_color = Color(0.80, 0.82, 0.85)
-    sky_mat.sky_curve = 0.20
-    sky_mat.sky_energy_multiplier = 1.1
-    sky_mat.ground_bottom_color = Color(0.30, 0.28, 0.25)
-    sky_mat.ground_horizon_color = Color(0.58, 0.55, 0.50)
-    sky_mat.ground_energy_multiplier = 0.7
-    # A 6-degree disc with a near-zero curve does not draw a sun, it smears the
-    # sun's white across the whole upper hemisphere: the sky measured 0.82 to
-    # 0.99 edge to edge and was blue nowhere.
-    sky_mat.sun_angle_max = 1.5
-    sky_mat.sun_curve = 0.15
+    # A baked panorama replaces the procedural gradient.
+    #
+    # ProceduralSkyMaterial gives a clean two-stop ramp and nothing else, so
+    # the strip of sky above the rooflines was the flattest region in the
+    # frame. It matters beyond that strip: the environment takes its ambient
+    # term straight from the sky's radiance, so a sky with no structure lights
+    # every shadowed surface in the sector with the same wash from every
+    # direction. The panorama carries cumulus, a horizon haze band and a sun
+    # glow placed at the key light's own bearing.
+    var pano := load("res://art/textures/sky_panorama.png")
+    var sky_mat: Material
+    if pano != null:
+        var pm := PanoramaSkyMaterial.new()
+        pm.panorama = pano
+        pm.energy_multiplier = 1.0
+        sky_mat = pm
+    else:
+        # Kept as a fallback so a missing texture degrades to the old look
+        # rather than to a black void.
+        var proc := ProceduralSkyMaterial.new()
+        proc.sky_top_color = Color(0.36, 0.50, 0.72)
+        proc.sky_horizon_color = Color(0.80, 0.82, 0.85)
+        proc.sky_curve = 0.20
+        proc.sky_energy_multiplier = 1.1
+        proc.ground_bottom_color = Color(0.30, 0.28, 0.25)
+        proc.ground_horizon_color = Color(0.58, 0.55, 0.50)
+        proc.ground_energy_multiplier = 0.7
+        proc.sun_angle_max = 1.5
+        proc.sun_curve = 0.15
+        sky_mat = proc
     var sky := Sky.new()
     sky.sky_material = sky_mat
     env.background_mode = Environment.BG_SKY
