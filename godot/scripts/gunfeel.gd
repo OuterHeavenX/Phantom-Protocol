@@ -20,10 +20,16 @@ extends Node3D
 const AUDIO_DIR := "res://art/audio/weapons/%s-%d.ogg"
 const ROUNDS_PER_VOICE := 3
 
-## Muzzle to target in this long. Short enough to read as a streak rather than
-## a laser, long enough to catch the eye at the edge of vision.
-const TRACER_LIFE := 0.055
-const FLASH_LIFE := 0.045
+## How long the streak and the flash stay up.
+##
+## These are in seconds but what matters is frames. The first values, 55 and
+## 45 ms, are a frame and a half at 30 fps, so on a phone a shot could land
+## entirely between two rendered frames and never be seen at all -- which is
+## the exact complaint this whole file exists to answer. Roughly 90 and 70 ms
+## puts both across two to three frames at 30 and still reads as a streak
+## rather than a beam; Counter-Strike's own tracers sit near 100 ms.
+const TRACER_LIFE := 0.09
+const FLASH_LIFE := 0.07
 
 var muzzle: Node3D = null
 
