@@ -1,0 +1,58 @@
+<script>
+// Decompress the engine in the page, rather than relying on the host.
+//
+// Cloudflare Pages refuses any asset over 25 MiB and Godot 4.5's release wasm
+// is 36.3 MiB, with no smaller template. The first attempt at this stored the
+// wasm gzipped under its own name and used a _headers rule to declare
+// Content-Encoding, which works locally but not on Pages: the deployed asset
+// came back as 9,256,790 raw bytes, exactly the compressed size, so the header
+// never reached the client and the browser would have handed gzip to
+// WebAssembly and failed on the magic number.
+//
+// So nothing is asked of the host any more. The engine ships as an ordinary
+// asset named index.wasm.gz, well under the limit and with no special headers,
+// and this decompresses it here using DecompressionStream, which is standard
+// in every current browser and on iOS from 16.4.
+//
+// Godot fetches its own wasm from inside Emscripten, so rather than replace
+// the shell -- which would mean maintaining a copy of it per engine version --
+// fetch is wrapped for the one URL that matters. Everything else passes
+// straight through untouched.
+(function () {
+	var real = window.fetch.bind(window);
+	var pending = null;
+
+	function engineBytes() {
+		if (pending) return pending;
+		if (typeof DecompressionStream === "undefined") {
+			pending = Promise.reject(new Error(
+				"This browser cannot decompress the engine. It needs " +
+				"DecompressionStream, which means Safari 16.4 or later, or any " +
+				"current Chrome, Edge or Firefox."));
+			return pending;
+		}
+		pending = real("index.wasm.gz").then(function (res) {
+			if (!res.ok) throw new Error("index.wasm.gz: HTTP " + res.status);
+			return new Response(
+				res.body.pipeThrough(new DecompressionStream("gzip"))
+			).arrayBuffer();
+		});
+		return pending;
+	}
+
+	window.fetch = function (input, init) {
+		var url = typeof input === "string" ? input
+			: (input && input.url) ? input.url : "";
+		if (url.indexOf("index.wasm") !== -1 && url.indexOf(".gz") === -1) {
+			return engineBytes().then(function (buf) {
+				// instantiateStreaming checks the MIME type, so the synthesised
+				// response has to claim to be wasm or it refuses the stream.
+				return new Response(buf, {
+					headers: { "Content-Type": "application/wasm" },
+				});
+			});
+		}
+		return real(input, init);
+	};
+})();
+</script>

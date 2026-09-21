@@ -12,17 +12,15 @@
 # Or run `npx wrangler login` once, which opens a browser and stores an OAuth
 # token, and skip the two variables.
 #
-# The deploy is followed by a check, because this bundle depends on something
-# Cloudflare could in principle change under it. Godot 4.5's release wasm is
-# 36.3 MiB and Pages refuses any asset over 25 MiB, with no smaller template
-# to fall back on, so the wasm is stored gzipped under its uncompressed name
-# and _headers declares the encoding. If Cloudflare ever stops honouring that
-# header -- or re-encodes the body -- the page goes white with a magic-number
-# error and nothing else says why. The check fetches the deployed wasm and
-# confirms it decodes to the same byte count that went up.
+# The deploy is followed by a check, because the last arrangement failed
+# silently. Godot 4.5's release wasm is 36.3 MiB and Pages refuses anything
+# over 25 MiB, so the engine ships gzipped and is decompressed in the page.
+# If that upload is ever truncated or corrupt the site simply will not start,
+# and the deploy says nothing, so the compressed engine is fetched back and
+# inflated to confirm it matches what went up.
 set -e
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
-PROJECT=${1:-red-static}
+PROJECT=${1:-red-static-3d}
 
 sh "$ROOT/tools/godot/export.sh" Web
 sh "$ROOT/tools/godot/pages-bundle.sh"
@@ -42,14 +40,13 @@ echo
 echo "verifying $URL ..."
 WANT=$(stat -c%s "$ROOT/build/web/index.wasm" 2>/dev/null \
        || stat -f%z "$ROOT/build/web/index.wasm")
-GOT=$(curl -sS --compressed "$URL/index.wasm" | wc -c | tr -d ' ')
+GOT=$(curl -sS --fail --retry 12 --retry-delay 10 --retry-all-errors \
+        "$URL/index.wasm.gz" | gzip -dc | wc -c | tr -d ' ')
 if [ "$GOT" != "$WANT" ]; then
-  echo "FAIL: the served wasm decoded to $GOT bytes, expected $WANT." >&2
-  echo "      Cloudflare is not honouring Content-Encoding on this asset," >&2
-  echo "      so the build will not start. Serve index.wasm from an R2" >&2
-  echo "      public bucket instead and point the shell at it." >&2
+  echo "FAIL: the served engine inflated to $GOT bytes, expected $WANT." >&2
+  echo "      The upload is truncated or corrupt; the page will not start." >&2
   exit 1
 fi
-echo "ok: wasm decodes to $GOT bytes"
+echo "ok: the served engine inflates to $GOT bytes"
 echo
 echo "play at $URL"

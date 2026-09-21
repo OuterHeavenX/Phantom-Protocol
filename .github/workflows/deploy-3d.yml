@@ -131,28 +131,30 @@ jobs:
 
           # A freshly created pages.dev subdomain answers before its TLS
           # certificate exists, so the first request after a deploy fails the
-          # handshake outright. curl's --retry does not cover handshake
-          # failures without --retry-all-errors, which is why the first run
-          # reported zero bytes a tenth of a second after a deploy that had
-          # in fact succeeded.
-          if ! curl -sS --compressed --fail \
+          # handshake outright, and curl's --retry does not cover handshake
+          # failures without --retry-all-errors.
+          # Fetch the compressed engine and confirm it inflates to the byte
+          # count that went up. This is the check that caught the previous
+          # arrangement: the deploy reported success while Cloudflare served
+          # 9,256,790 raw bytes, the compressed size, because the
+          # Content-Encoding rule in _headers never reached the client.
+          if ! curl -sS --fail \
                  --retry 12 --retry-delay 10 --retry-all-errors --retry-connrefused \
-                 -o /tmp/served.wasm "$url/index.wasm"; then
-            echo "FAIL: could not fetch $url/index.wasm at all." >&2
+                 -o /tmp/served.gz "$url/index.wasm.gz"; then
+            echo "FAIL: could not fetch $url/index.wasm.gz at all." >&2
             echo "      The deploy itself succeeded -- this is the check" >&2
             echo "      failing to reach it, not a bad build." >&2
             exit 1
           fi
 
-          got=$(stat -c%s /tmp/served.wasm)
+          got=$(gzip -dc /tmp/served.gz | wc -c | tr -d ' ')
           if [ "$got" != "$want" ]; then
-            echo "FAIL: served wasm decoded to $got bytes, expected $want." >&2
-            echo "      Cloudflare is not honouring Content-Encoding here, so" >&2
-            echo "      the build will not start. Serve index.wasm from an R2" >&2
-            echo "      public bucket instead and point the shell at it." >&2
+            echo "FAIL: the served engine inflated to $got bytes, expected $want." >&2
+            echo "      The upload is truncated or corrupt; the page will not" >&2
+            echo "      start." >&2
             exit 1
           fi
-          echo "ok: wasm decodes to $got bytes"
+          echo "ok: the served engine inflates to $got bytes"
           {
             echo "### 3D build deployed"
             echo
