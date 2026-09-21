@@ -30,7 +30,16 @@ dash={"deadzone":0.2,"events":[{"resource_local_to_scene":false,"type":"InputEve
 ability={"deadzone":0.2,"events":[{"resource_local_to_scene":false,"type":"InputEventKey","physical_keycode":81}]}
 
 [rendering]
+; The Web platform refuses to export unless ETC2/ASTC compression is imported,
+; because WebGL2 carries no guarantee of S3TC. Enabling it re-imports every
+; texture in a second format, which costs build time and package size but is
+; not optional for a browser build.
+textures/vram_compression/import_etc2_astc=true
 renderer/rendering_method="forward_plus"
+; Browsers have no Vulkan, so the web build runs the Compatibility backend
+; over WebGL2. Desktop keeps Forward+. Godot picks the override by platform
+; feature tag, so one project serves both without a branch in the scripts.
+renderer/rendering_method.web="gl_compatibility"
 textures/default_filters/anisotropic_filtering_level=16
 lights_and_shadows/directional_shadow/size=4096
 lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
