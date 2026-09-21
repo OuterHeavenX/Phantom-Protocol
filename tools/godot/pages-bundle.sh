@@ -48,12 +48,19 @@ cat > "$OUT/_headers" <<'HDR'
   Cache-Control: public, max-age=0, must-revalidate
 HDR
 
+# stat's flags differ between GNU and BSD, and this script runs both on a
+# Linux CI runner and on a developer's Mac. awk does the arithmetic rather
+# than bc, which is not installed on the GitHub runner images.
+filesize() {
+  stat -c%s "$1" 2>/dev/null || stat -f%z "$1"
+}
+
 over=0
 for f in "$OUT"/*; do
   [ -f "$f" ] || continue
-  size=$(stat -c%s "$f")
+  size=$(filesize "$f")
   if [ "$size" -gt "$LIMIT" ]; then
-    printf '  OVER LIMIT %7.1f MiB  %s\n' "$(echo "$size/1048576" | bc -l)" "$(basename "$f")"
+    echo "$size $(basename "$f")" | awk '{printf "  OVER LIMIT %7.1f MiB  %s\n", $1/1048576, $2}'
     over=1
   fi
 done
@@ -63,4 +70,7 @@ if [ "$over" -ne 0 ]; then
 fi
 
 echo "bundle in $OUT ($(du -sh "$OUT" | cut -f1))"
-ls -l "$OUT" | awk 'NR>1 {printf "  %7.2f MiB  %s\n", $5/1048576, $9}' | sort -rn
+for f in "$OUT"/*; do
+  [ -f "$f" ] || continue
+  echo "$(filesize "$f") $(basename "$f")"
+done | sort -rn | awk '{printf "  %7.2f MiB  %s\n", $1/1048576, $2}' 
