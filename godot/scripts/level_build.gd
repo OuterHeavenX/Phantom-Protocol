@@ -239,8 +239,22 @@ func _build_solids() -> void:
 func _material_for_object(o: Dictionary) -> String:
     var kind := String(o.get("type", "wall"))
     if kind == "masonry" or kind == "wall":
-        var v := int(o.get("variant", 0)) % 4
-        return "wall" if v == 0 else "wall_%d" % v
+        # The plan's `variant` only runs 0-3 and there are five facade
+        # surfaces, so the wall's own position is mixed in to reach the fifth.
+        # The mix has to scramble: a plain sum of the coordinates gave
+        # neighbouring walls neighbouring seeds, so the two largest facades in
+        # the opening view drew the same material and the sector came out one
+        # colour again, just a different one. It stays a pure function of the
+        # plan, so the layout is identical on every load.
+        var seed := int(o.get("variant", 0)) * 2246822519
+        seed += int(round(float(o.get("x", 0.0)) * 0.37)) * 2654435761
+        seed += int(round(float(o.get("y", 0.0)) * 0.37)) * 3266489917
+        var v := posmod(seed >> 13, 8)
+        # Warm stone takes half. The references are warm-dominant: tan and
+        # terracotta carry the sector and grey concrete punctuates it, and
+        # reversing that reads as an industrial estate rather than a town.
+        var order := ["wall", "wall", "wall", "wall", "wall_2", "wall_1", "wall_3", "wall_4"]
+        return order[v]
     return _material_for(kind)
 
 func _material_for(kind: String) -> String:

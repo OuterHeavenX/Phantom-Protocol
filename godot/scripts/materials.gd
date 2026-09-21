@@ -56,31 +56,35 @@ static func pbr(name: String, uv_scale: float, tint: Color = Color.WHITE, metal_
 ## paving setts about 18 cm, container corrugations about 6 cm.
 static func build() -> Dictionary:
     return {
-        # Tints are all at or below 0.85 per channel. Several were above 1.0,
-        # which multiplies the texture past unity: physically impossible for a
-        # dielectric, and a direct cause of the clipped highlights measured in
-        # the first round. Sunlit limestone is about 0.45-0.55 albedo and
+        # Tints stay at or below 0.85 per channel. Anything above 1.0
+        # multiplies the texture past unity, which is impossible for a
+        # dielectric and was a direct cause of the clipped highlights measured
+        # in the first round. Sunlit limestone is about 0.45-0.55 albedo and
         # weathered concrete 0.30-0.40, so these sit where real surfaces do.
-        # Four facade tones rather than one.
         #
-        # A whole sector in a single stone colour reads as one extruded object
-        # however well it is lit; the references get most of their depth from
-        # neighbouring buildings being visibly different materials. These are
-        # assigned per wall from the plan's own seeded `variant`, so the
-        # arrangement is deterministic and the same on every load.
-        "wall": pbr("sandstone", 0.45, Color(0.82, 0.79, 0.74)),
-        "wall_1": pbr("plaster", 0.34, Color(0.84, 0.82, 0.76)),
-        "wall_2": pbr("sandstone", 0.38, Color(0.70, 0.71, 0.72)),
-        "wall_3": pbr("plaster", 0.30, Color(0.66, 0.70, 0.74)),
-        "perimeter": pbr("sandstone", 0.40, Color(0.74, 0.71, 0.66)),
+        # Hue now comes from the texture, not from the tint, because a tint is
+        # a multiply: a blue tint over a tan albedo gives darker tan. Five
+        # facade surfaces are baked with their own colour ramps, and the plan's
+        # seeded `variant` hands them out per wall, so the arrangement is
+        # deterministic and identical on every load. Warm stone stays the
+        # majority, as in the references, with the others breaking it up.
+        "wall": pbr("sandstone", 0.45, Color(0.84, 0.81, 0.76)),
+        "wall_1": pbr("whitewash", 0.34, Color(0.86, 0.85, 0.83)),
+        "wall_2": pbr("blockwork", 0.38, Color(0.82, 0.83, 0.82)),
+        "wall_3": pbr("paintwork", 0.30, Color(0.82, 0.84, 0.84)),
+        "wall_4": pbr("brick", 0.42, Color(0.84, 0.80, 0.78)),
+        "perimeter": pbr("blockwork", 0.40, Color(0.78, 0.78, 0.76)),
         "vault": pbr("steel", 0.80, Color(0.80, 0.78, 0.74), 0.20),
-        "pillar": pbr("plaster", 0.30, Color(0.80, 0.78, 0.73)),
+        "pillar": pbr("concrete", 0.36, Color(0.82, 0.81, 0.79)),
         "machinery": pbr("steel", 0.85, Color(0.80, 0.79, 0.76), 0.18),
         "container": pbr("crate", 0.50, Color(0.76, 0.72, 0.66), 0.12),
         "floor": pbr("concrete", 0.45, Color(0.74, 0.73, 0.70)),
-        "ground": pbr("cobble", 0.36, Color(0.78, 0.75, 0.71)),
-        "trim": pbr("plaster", 0.30, Color(0.80, 0.77, 0.71)),
-        "cornice": pbr("plaster", 0.34, Color(0.70, 0.67, 0.62)),
+        # The courtyard used to be one warm paving edge to edge, which both
+        # made the frame monochrome and put the brightest surface in the scene
+        # directly under the camera. Grey setts leave the warmth to the walls.
+        "ground": pbr("cobble", 0.36, Color(0.66, 0.66, 0.65)),
+        "trim": pbr("whitewash", 0.30, Color(0.84, 0.83, 0.80)),
+        "cornice": pbr("concrete", 0.34, Color(0.76, 0.75, 0.72)),
         "kerb": pbr("concrete", 0.55, Color(0.62, 0.61, 0.58)),
         "glass": glass(),
     }

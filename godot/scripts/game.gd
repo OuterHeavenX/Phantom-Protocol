@@ -77,9 +77,12 @@ func _ready() -> void:
         _run_simtest()
         return
     if capture_path != "":
-        # Step the contract briefly before capturing so the HUD has a live
-        # clock and hostile count rather than an opening-frame zero.
-        sim.advance(2.0)
+        # Step the contract forward before capturing, so the HUD shows a live
+        # clock rather than an opening-frame zero. The combat viewpoint runs
+        # much further, because the director's first wave is scheduled after a
+        # three second lull and deploys 520 units out: a capture taken at t=0
+        # shows an empty sector and proves nothing about the game.
+        _advance_for_capture(70.0 if capture_view == "combat" else 2.0)
         _run_capture()
 
 func _parse_args() -> void:
@@ -105,22 +108,23 @@ func _build_environment() -> void:
     sun = DirectionalLight3D.new()
     sun.rotation_degrees = Vector3(-42.0, 128.0, 0.0)
     sun.light_color = Color(1.0, 0.94, 0.83)
-    # Measured against the references: the build sat about 1.2 stops hot, with
-    # 5.7% of pixels clipped against their 0.02%, and a lit-to-shade ground
-    # ratio of 5.3:1 against their 2.1:1. Sun down, fill up.
-    sun.light_energy = 1.10
+    # The sun spent three rounds at around 1.1 while sky ambient sat near 6.5,
+    # which is a six-to-one fill: every surface was lit from everywhere, so
+    # nothing cast a shadow onto anything and the whole courtyard read flat.
+    # Key and fill swap places here.
+    sun.light_energy = 2.8
     sun.shadow_enabled = true
-    sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-    # 45 m instead of 120. Nothing past that needs a crisp shadow, and the
-    # splits it buys back are spent on letting the dressing cast again --
-    # a prop that throws no shadow onto the wall behind it reads as a sticker.
-    sun.directional_shadow_max_distance = 45.0
+    sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+    # Four splits over 60 m. Two splits over 45 gave neither: the near split
+    # was too coarse for prop contact shadows and the range stopped short of
+    # the far wall, so the frame had no cast shadows at any distance.
+    sun.directional_shadow_max_distance = 60.0
     sun.directional_shadow_blend_splits = true
     # A 4096 atlas over four splits affords a much tighter bias. The old values
     # pushed every contact shadow away from the base of its wall, which is a
     # large part of why the boxes looked like they were floating.
     sun.shadow_bias = 0.02
-    sun.shadow_normal_bias = 0.6
+    sun.shadow_normal_bias = 0.15
     sun.light_angular_distance = 0.6
     add_child(sun)
 
@@ -161,12 +165,12 @@ func _build_environment() -> void:
     # Exposure was the wrong lever for clipped highlights: it moved the whole
     # curve down and left 30% of the frame crushed under 0.06. The ratio is
     # what was actually wrong, so the fill comes up and the key comes down.
-    env.ambient_light_energy = 6.5
+    env.ambient_light_energy = 1.8
     env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 
     env.tonemap_mode = Environment.TONE_MAPPER_ACES
     env.tonemap_exposure = 0.95
-    env.tonemap_white = 10.0
+    env.tonemap_white = 3.0
 
     env.ssao_enabled = true
     # SSAO multiplies the ambient term, and ambient is the only fill in shadow,
@@ -182,7 +186,7 @@ func _build_environment() -> void:
     # Bounce off sunlit stone is what makes a real shadow warm rather than
     # blue. This build's darks were at 0.008/0.029/0.071: nearly black, and the
     # wrong colour besides.
-    env.ssil_intensity = 1.1
+    env.ssil_intensity = 0.6
 
     env.glow_enabled = true
     env.glow_intensity = 0.18
@@ -225,7 +229,7 @@ func _build_environment() -> void:
     var bounce := DirectionalLight3D.new()
     bounce.rotation_degrees = Vector3(-18.0, -52.0, 0.0)
     bounce.light_color = Color(1.0, 0.86, 0.68)
-    bounce.light_energy = 0.70
+    bounce.light_energy = 0.35
     bounce.shadow_enabled = false
     add_child(bounce)
 
@@ -298,6 +302,11 @@ func _viewpoint(name: String) -> Array:
         "extract":
             # Approaching the beacon in LABORATORY / 06.
             return [Vector2(1420.0, 1050.0), -90.0, -1.0]
+        "combat":
+            # Same standpoint as `corridor`, but the contract has been run
+            # forward so there are hostiles on the ground. Chosen by the
+            # capture path below, which then aims at the nearest one.
+            return [Vector2(1050.0, 1750.0), 0.0, -1.0]
         _:
             return [Vector2(level.width * 0.5, level.height * 0.5), 0.0, 0.0]
 
@@ -488,3 +497,20 @@ func _run_simtest() -> void:
         sim.kills, sim.player_level, sim.weapon_level, sim.player_hp, sim.player_max_hp,
         sim.extraction_active, sim.extraction_hold])
     get_tree().quit()
+
+## Run the contract forward with the operative held in place, syncing the
+## hostile nodes as it goes so they are where the simulation says they are.
+func _advance_for_capture(seconds: float) -> void:
+    var step := Sim.FIXED_STEP
+    var vp := _viewpoint(capture_view)
+    sim.player_pos = vp[0]
+    for i in range(int(seconds / step)):
+        if sim.finished:
+            break
+        sim._step(step)
+        # The capture operative stands still by definition, so they take every
+        # contact hit and are dead inside a minute. A screenshot is not a
+        # playthrough; hold them up rather than photographing a corpse.
+        sim.player_hp = sim.player_max_hp
+        sim.player_pos = vp[0]
+    _sync_enemies()

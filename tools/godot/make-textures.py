@@ -140,8 +140,16 @@ def stripes(period, width, axis=0, jitter=None):
 
 # ---------------------------------------------------------------------------
 
-def mat_sandstone(out):
-    """Sunlit stucco over block courses — the dominant wall surface."""
+def mat_sandstone(out, name="sandstone", lo=(150, 128, 100), hi=(214, 196, 165),
+                  spall_col=(0.13, 0.10, 0.07)):
+    """Block-coursed masonry — the dominant wall surface.
+
+    The ramp is a parameter because a sector rendered in one stone colour reads
+    as a single extruded object no matter how well it is lit. A multiply tint
+    in the material cannot fix that: multiplying a tan texture by a blue tint
+    gives a darker tan, never a blue wall. Hue has to come from the ramp, so
+    the same masonry generator is run several times into differently coloured
+    surfaces and the plan hands them out per wall."""
     grain = fbm(6, 6)
     blotch = fbm(3, 2)
     # Block courses: horizontal beds with staggered vertical joints.
@@ -169,22 +177,22 @@ def mat_sandstone(out):
     # the colour ramp, or the jitter is applied twice and the wall reads as a
     # randomised patchwork rather than as masonry.
     base = norm01(grain * 0.46 + blotch * 0.54)
-    alb = tint(base, (150, 128, 100), (214, 196, 165))
+    alb = tint(base, lo, hi)
     # +/-5% per block. The measured per-block deviation at +/-12% was 0.053
     # against reference walls that are close to uniform in value: the right
     # diagnosis at more than twice the right dose.
     alb = alb * (0.95 + 0.10 * blocks)[..., None]
     alb = alb * (1 - 0.30 * mortar[..., None])
-    alb = alb * (1 - 0.18 * spall[..., None]) + np.array([0.13, 0.10, 0.07]) * spall[..., None]
+    alb = alb * (1 - 0.18 * spall[..., None]) + np.array(spall_col) * spall[..., None]
     alb = alb * (0.94 + 0.12 * fine)[..., None]
     # A wide roughness range: weathered faces are matte, but the arris and the
     # wind-polished faces catch a sheen, and a uniformly matte wall has no
     # specular information at all.
     rough = 0.45 + 0.42 * norm01(grain) + 0.10 * mortar + 0.05 * fine
-    write_material(out, "sandstone", alb, h, rough)
+    write_material(out, name, alb, h, rough)
 
-def mat_plaster(out):
-    """Warm plaster -- trim, plinths, cornices, window surrounds.
+def mat_plaster(out, name="plaster", lo=(168, 152, 128), hi=(226, 214, 192)):
+    """Rendered plaster -- trim, plinths, cornices, window surrounds.
 
     This started blue-grey, and materials.gd puts it on every plinth, cornice,
     lintel and window frame in the sector. The effect was cold blue trim
@@ -197,10 +205,10 @@ def mat_plaster(out):
     fine = grain_fn()
     h = norm01(grain * 0.42 + wear * 0.26 + drip * 0.34 + fine * 0.16)
     base = norm01(grain * 0.34 + wear * 0.50 + fine * 0.16)
-    alb = tint(base, (168, 152, 128), (226, 214, 192))
+    alb = tint(base, lo, hi)
     alb = alb * (1 - 0.35 * drip[..., None]) + np.array([0.22, 0.20, 0.17]) * drip[..., None]
     rough = 0.55 + 0.25 * norm01(wear) + 0.15 * drip + 0.06 * fine
-    write_material(out, "plaster", alb, h, rough)
+    write_material(out, name, alb, h, rough)
 
 def mat_concrete(out):
     """Poured slab with form seams and aggregate — the interior floor."""
@@ -297,4 +305,19 @@ if __name__ == "__main__":
     os.makedirs(out, exist_ok=True)
     mat_sandstone(out); mat_plaster(out); mat_concrete(out)
     mat_cobble(out); mat_steel(out); mat_crate(out)
+    # The facade palette. Warm stone stays the majority surface, as it is in
+    # the references, but it is no longer the only one: grey breeze block,
+    # whitewash, a faded institutional blue-grey and a dull red brick give the
+    # neighbouring walls something to be different from.
+    mat_sandstone(out, "blockwork", (108, 110, 108), (170, 172, 168),
+                  spall_col=(0.10, 0.10, 0.10))
+    # Muted terracotta, not postbox red. The first pass ramped to a saturated
+    # red that took over every wall it landed on; weathered brick in the
+    # references is closer to grey than it is to its own pigment.
+    mat_sandstone(out, "brick", (118, 92, 80), (162, 130, 114),
+                  spall_col=(0.14, 0.11, 0.09))
+    # Whitewash ramped to 0.93 albedo, which is brighter than any real painted
+    # surface and was clipping under the key light. Chalky, not paper.
+    mat_plaster(out, "whitewash", (152, 150, 142), (198, 196, 186))
+    mat_plaster(out, "paintwork", (112, 124, 126), (164, 174, 174))
     print("done ->", out)

@@ -17,6 +17,10 @@ W=${RES%x*}
 H=${RES#*x}
 ROOT=$(cd "$(dirname "$0")/../../godot" && pwd)
 mkdir -p "$(dirname "$OUT")"
+# Godot runs with its own project directory as the working directory, so a
+# relative output path would be written somewhere inside godot/ and the check
+# below would report a failure for a frame that rendered perfectly well.
+OUT=$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")
 rm -f "$OUT"
 xvfb-run -a --server-args="-screen 0 ${W}x${H}x24" \
   env VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.json \
