@@ -1,0 +1,44 @@
+[
+ {
+  "minutes": 5,
+  "label": "5 MINUTES",
+  "tag": "PROBE",
+  "jpMult": 0.6,
+  "desc": "Fast reconnaissance contract. One command signature at the close."
+ },
+ {
+  "minutes": 10,
+  "label": "10 MINUTES",
+  "tag": "STANDARD",
+  "jpMult": 1,
+  "desc": "Standard operation length. Balanced escalation curve."
+ },
+ {
+  "minutes": 15,
+  "label": "15 MINUTES",
+  "tag": "EXTENDED",
+  "jpMult": 1.5,
+  "desc": "Extended contract. Miniboss encounters begin appearing."
+ },
+ {
+  "minutes": 20,
+  "label": "20 MINUTES",
+  "tag": "DEEP",
+  "jpMult": 2.1,
+  "desc": "Deep insertion. Two command signatures and sustained elite pressure."
+ },
+ {
+  "minutes": 25,
+  "label": "25 MINUTES",
+  "tag": "PROLONGED",
+  "jpMult": 2.8,
+  "desc": "Prolonged denial operation. Hostile density approaches saturation."
+ },
+ {
+  "minutes": 30,
+  "label": "30 MINUTES",
+  "tag": "ENDURANCE",
+  "jpMult": 3.6,
+  "desc": "Full endurance contract. Everything the theatre has, in order."
+ }
+]

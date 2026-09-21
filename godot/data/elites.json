@@ -1,0 +1,121 @@
+[
+ {
+  "id": "nullhunter",
+  "name": "Null Hunter",
+  "base": "hunter",
+  "ai": "diveBomber",
+  "render": "drone",
+  "hpMult": 7,
+  "damageMult": 2,
+  "speedMult": 1.2,
+  "radiusMult": 1.5,
+  "xp": 40,
+  "credits": 26,
+  "jp": 3,
+  "color": "#ff6d65",
+  "modifiers": [
+   "splitOnDeath"
+  ],
+  "desc": "Elite interceptor. Splits into two smaller drones when destroyed."
+ },
+ {
+  "id": "ironvicar",
+  "name": "Iron Vicar",
+  "base": "breacher",
+  "ai": "juggernaut",
+  "render": "heavy",
+  "hpMult": 9,
+  "damageMult": 1.8,
+  "speedMult": 1.05,
+  "radiusMult": 1.5,
+  "xp": 46,
+  "credits": 30,
+  "jp": 4,
+  "color": "#ff8b68",
+  "modifiers": [
+   "shockwaveOnCharge",
+   "armored"
+  ],
+  "desc": "Elite breacher. Its charge terminates in a ground-shattering shockwave."
+ },
+ {
+  "id": "signalwarden",
+  "name": "Signal Warden",
+  "base": "jammer",
+  "ai": "support",
+  "render": "jammer",
+  "hpMult": 6,
+  "damageMult": 1.4,
+  "speedMult": 1.1,
+  "radiusMult": 1.4,
+  "xp": 42,
+  "credits": 28,
+  "jp": 3,
+  "color": "#c895ff",
+  "modifiers": [
+   "summonsEscort",
+   "jamsHud"
+  ],
+  "desc": "Elite electronic warfare platform. Calls escorts and corrupts your HUD."
+ },
+ {
+  "id": "glasshound",
+  "name": "Glass Hound",
+  "base": "crawler",
+  "ai": "swarmer",
+  "render": "crawler",
+  "hpMult": 5,
+  "damageMult": 1.9,
+  "speedMult": 1.5,
+  "radiusMult": 1.5,
+  "xp": 38,
+  "credits": 24,
+  "jp": 3,
+  "color": "#77e6ff",
+  "modifiers": [
+   "leapAttack",
+   "fragile"
+  ],
+  "desc": "Elite pursuit unit. Extremely fast, extremely aggressive, not especially durable."
+ },
+ {
+  "id": "redauditor",
+  "name": "Red Auditor",
+  "base": "rifle",
+  "ai": "sniper",
+  "render": "sniper",
+  "hpMult": 7,
+  "damageMult": 2.2,
+  "speedMult": 1.1,
+  "radiusMult": 1.4,
+  "xp": 44,
+  "credits": 32,
+  "jp": 4,
+  "color": "#ff535b",
+  "modifiers": [
+   "markTarget",
+   "suppressiveFire"
+  ],
+  "desc": "Elite marksman. Marks you for the entire hostile force before it fires."
+ },
+ {
+  "id": "palewitness",
+  "name": "Pale Witness",
+  "base": "veil",
+  "ai": "ambusher",
+  "render": "veil",
+  "hpMult": 6,
+  "damageMult": 2.4,
+  "speedMult": 1.35,
+  "radiusMult": 1.35,
+  "xp": 48,
+  "credits": 34,
+  "jp": 5,
+  "color": "#e6e0ff",
+  "modifiers": [
+   "permacloak",
+   "teleportStrike"
+  ],
+  "desc": "Elite infiltrator. Effectively invisible until the moment it is already on you."
+ }
+]

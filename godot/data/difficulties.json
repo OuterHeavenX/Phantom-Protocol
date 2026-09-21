@@ -1,0 +1,94 @@
+[
+ {
+  "id": 0,
+  "name": "RECRUIT",
+  "hpMult": 0.7,
+  "damageMult": 0.65,
+  "densityMult": 0.85,
+  "speedMult": 0.92,
+  "jpMult": 0.7,
+  "xpMult": 1.45,
+  "desc": "Training parameters. Reduced hostile durability and output.",
+  "unlocked": true
+ },
+ {
+  "id": 1,
+  "name": "OPERATIVE",
+  "hpMult": 1,
+  "damageMult": 1,
+  "densityMult": 1,
+  "speedMult": 1,
+  "jpMult": 1,
+  "xpMult": 1,
+  "desc": "Standard field conditions.",
+  "unlocked": true
+ },
+ {
+  "id": 2,
+  "name": "VETERAN",
+  "hpMult": 1.4,
+  "damageMult": 1.3,
+  "densityMult": 1.25,
+  "speedMult": 1.06,
+  "jpMult": 1.4,
+  "xpMult": 0.95,
+  "desc": "Hardened response. Hostiles are tougher, faster and more numerous.",
+  "unlock": {
+   "type": "stat",
+   "stat": "wins",
+   "value": 1,
+   "label": "Complete 1 operation"
+  }
+ },
+ {
+  "id": 3,
+  "name": "GHOST",
+  "hpMult": 2,
+  "damageMult": 1.7,
+  "densityMult": 1.5,
+  "speedMult": 1.12,
+  "jpMult": 2,
+  "xpMult": 0.9,
+  "desc": "Full counter-operative doctrine. Elites spawn from the opening minute.",
+  "unlock": {
+   "type": "stat",
+   "stat": "wins",
+   "value": 5,
+   "label": "Complete 5 operations"
+  }
+ },
+ {
+  "id": 4,
+  "name": "NIGHTMARE",
+  "hpMult": 3,
+  "damageMult": 2.2,
+  "densityMult": 1.85,
+  "speedMult": 1.2,
+  "jpMult": 3,
+  "xpMult": 0.85,
+  "desc": "No margin. Hostile reinforcement is effectively unlimited.",
+  "unlock": {
+   "type": "stat",
+   "stat": "bosses",
+   "value": 10,
+   "label": "Defeat 10 command signatures"
+  }
+ },
+ {
+  "id": 5,
+  "name": "ARBITRATION",
+  "hpMult": 4.5,
+  "damageMult": 3,
+  "densityMult": 2.3,
+  "speedMult": 1.3,
+  "jpMult": 4.5,
+  "xpMult": 0.8,
+  "desc": "The network is running the engagement directly. It does not intend for you to leave.",
+  "unlock": {
+   "type": "stat",
+   "stat": "nightmareWins",
+   "value": 1,
+   "label": "Clear an operation on NIGHTMARE"
+  }
+ }
+]

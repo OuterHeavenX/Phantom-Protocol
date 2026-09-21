@@ -1,0 +1,43 @@
+{
+ "id": "op1",
+ "index": 1,
+ "act": 1,
+ "name": "COLD OPEN",
+ "map": "blacksite",
+ "duration": 5,
+ "difficulty": 0,
+ "objective": {
+  "type": "extract"
+ },
+ "tagline": "A routine sweep of a facility that should be empty.",
+ "briefing": [
+  {
+   "speaker": "VECTOR",
+   "text": "Blacksite Zero. Decommissioned nine months ago, power still drawn on the main bus. Walk it, confirm it is empty, come home."
+  },
+  {
+   "speaker": "OPERATIVE",
+   "text": "Empty facilities do not draw power."
+  },
+  {
+   "speaker": "VECTOR",
+   "text": "No. They do not."
+  }
+ ],
+ "debrief": [
+  {
+   "speaker": "VECTOR",
+   "text": "Contact volume was not consistent with a decommissioned site."
+  },
+  {
+   "speaker": "ARCHIVIST",
+   "text": "It is consistent with a staffed one. Someone filed the closure and nobody left."
+  }
+ ],
+ "document": {
+  "id": "doc_intake",
+  "name": "INTAKE VARIANCE",
+  "classification": "ADMIN // RECOVERED",
+  "body": "Facility closure was filed on schedule and countersigned. Personnel egress records for the same period list four departures against a standing complement of sixty-one. The remaining fifty-seven have continued to draw hazard pay at a site that does not, on paper, exist."
+ }
+}

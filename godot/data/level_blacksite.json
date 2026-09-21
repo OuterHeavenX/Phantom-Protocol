@@ -1,0 +1,1382 @@
+{
+ "seed": 1234,
+ "width": 2100,
+ "height": 2100,
+ "architecture": "blacksite",
+ "spawn": {
+  "x": 1050,
+  "y": 1050
+ },
+ "extraction": {
+  "x": 1750,
+  "y": 1050
+ },
+ "walls": [
+  {
+   "x": 1050,
+   "y": -30,
+   "w": 2220,
+   "h": 60,
+   "type": "perimeter",
+   "height": 90,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1050,
+   "y": 2130,
+   "w": 2220,
+   "h": 60,
+   "type": "perimeter",
+   "height": 90,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": -30,
+   "y": 1050,
+   "w": 60,
+   "h": 2220,
+   "type": "perimeter",
+   "height": 90,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 2130,
+   "y": 1050,
+   "w": 60,
+   "h": 2220,
+   "type": "perimeter",
+   "height": 90,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 700,
+   "y": 130,
+   "w": 42,
+   "h": 260,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 700,
+   "y": 570,
+   "w": 42,
+   "h": 260,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 130,
+   "y": 700,
+   "w": 260,
+   "h": 42,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 570,
+   "y": 700,
+   "w": 260,
+   "h": 42,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1400,
+   "y": 130,
+   "w": 42,
+   "h": 260,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1400,
+   "y": 570,
+   "w": 42,
+   "h": 260,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 830,
+   "y": 700,
+   "w": 260,
+   "h": 42,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1270,
+   "y": 700,
+   "w": 260,
+   "h": 42,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1530,
+   "y": 700,
+   "w": 260,
+   "h": 42,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1970,
+   "y": 700,
+   "w": 260,
+   "h": 42,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 700,
+   "y": 830,
+   "w": 42,
+   "h": 260,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 700,
+   "y": 1270,
+   "w": 42,
+   "h": 260,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 130,
+   "y": 1400,
+   "w": 260,
+   "h": 42,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 570,
+   "y": 1400,
+   "w": 260,
+   "h": 42,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1400,
+   "y": 830,
+   "w": 42,
+   "h": 260,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1400,
+   "y": 1270,
+   "w": 42,
+   "h": 260,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 830,
+   "y": 1400,
+   "w": 260,
+   "h": 42,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1270,
+   "y": 1400,
+   "w": 260,
+   "h": 42,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1530,
+   "y": 1400,
+   "w": 260,
+   "h": 42,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1970,
+   "y": 1400,
+   "w": 260,
+   "h": 42,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 700,
+   "y": 1530,
+   "w": 42,
+   "h": 260,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 700,
+   "y": 1970,
+   "w": 42,
+   "h": 260,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1400,
+   "y": 1530,
+   "w": 42,
+   "h": 260,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1400,
+   "y": 1970,
+   "w": 42,
+   "h": 260,
+   "type": "masonry",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 206,
+   "y": 1960,
+   "w": 16,
+   "h": 148,
+   "type": "vault",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 140,
+   "y": 2026,
+   "w": 148,
+   "h": 16,
+   "type": "vault",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 74,
+   "y": 1960,
+   "w": 16,
+   "h": 148,
+   "type": "vault",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1960,
+   "y": 1894,
+   "w": 148,
+   "h": 16,
+   "type": "vault",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 2026,
+   "y": 1960,
+   "w": 16,
+   "h": 148,
+   "type": "vault",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1960,
+   "y": 2026,
+   "w": 148,
+   "h": 16,
+   "type": "vault",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  }
+ ],
+ "cover": [
+  {
+   "x": 100,
+   "y": 108,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 130,
+   "y": 205,
+   "w": 98,
+   "h": 48,
+   "type": "container",
+   "height": 46,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 600,
+   "y": 108,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 570,
+   "y": 205,
+   "w": 98,
+   "h": 48,
+   "type": "container",
+   "height": 46,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 800,
+   "y": 108,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 800,
+   "y": 592,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 830,
+   "y": 205,
+   "w": 98,
+   "h": 48,
+   "type": "machinery",
+   "height": 46,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1300,
+   "y": 108,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1300,
+   "y": 592,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1270,
+   "y": 205,
+   "w": 98,
+   "h": 48,
+   "type": "machinery",
+   "height": 46,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1500,
+   "y": 108,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1530,
+   "y": 205,
+   "w": 98,
+   "h": 48,
+   "type": "container",
+   "height": 46,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 2000,
+   "y": 108,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1970,
+   "y": 205,
+   "w": 98,
+   "h": 48,
+   "type": "container",
+   "height": 46,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 100,
+   "y": 808,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 100,
+   "y": 1292,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 130,
+   "y": 905,
+   "w": 98,
+   "h": 48,
+   "type": "container",
+   "height": 46,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 600,
+   "y": 808,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 600,
+   "y": 1292,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 570,
+   "y": 905,
+   "w": 98,
+   "h": 48,
+   "type": "container",
+   "height": 46,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 800,
+   "y": 808,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 800,
+   "y": 1292,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 830,
+   "y": 905,
+   "w": 98,
+   "h": 48,
+   "type": "machinery",
+   "height": 46,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1300,
+   "y": 808,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1300,
+   "y": 1292,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1270,
+   "y": 905,
+   "w": 98,
+   "h": 48,
+   "type": "machinery",
+   "height": 46,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1500,
+   "y": 808,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1500,
+   "y": 1292,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1530,
+   "y": 905,
+   "w": 98,
+   "h": 48,
+   "type": "container",
+   "height": 46,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 2000,
+   "y": 808,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 2000,
+   "y": 1292,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1970,
+   "y": 905,
+   "w": 98,
+   "h": 48,
+   "type": "container",
+   "height": 46,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 100,
+   "y": 1508,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 130,
+   "y": 1605,
+   "w": 98,
+   "h": 48,
+   "type": "container",
+   "height": 46,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 600,
+   "y": 1508,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 570,
+   "y": 1605,
+   "w": 98,
+   "h": 48,
+   "type": "container",
+   "height": 46,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 800,
+   "y": 1508,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 800,
+   "y": 1992,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 830,
+   "y": 1605,
+   "w": 98,
+   "h": 48,
+   "type": "machinery",
+   "height": 46,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1300,
+   "y": 1508,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1300,
+   "y": 1992,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1270,
+   "y": 1605,
+   "w": 98,
+   "h": 48,
+   "type": "machinery",
+   "height": 46,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1500,
+   "y": 1508,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1530,
+   "y": 1605,
+   "w": 98,
+   "h": 48,
+   "type": "container",
+   "height": 46,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 2000,
+   "y": 1508,
+   "w": 62,
+   "h": 62,
+   "type": "pillar",
+   "height": 92,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1970,
+   "y": 1605,
+   "w": 98,
+   "h": 48,
+   "type": "container",
+   "height": 46,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 140,
+   "y": 1894,
+   "w": 148,
+   "h": 16,
+   "type": "vaultSeal",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 1894,
+   "y": 1960,
+   "w": 16,
+   "h": 148,
+   "type": "vaultSeal",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": true
+  }
+ ],
+ "floorZones": [
+  {
+   "x": 350,
+   "y": 350,
+   "w": 658,
+   "h": 658,
+   "label": "ARCHIVE / 01",
+   "style": "room"
+  },
+  {
+   "x": 1050,
+   "y": 350,
+   "w": 658,
+   "h": 658,
+   "label": "REACTOR / 02",
+   "style": "room"
+  },
+  {
+   "x": 1750,
+   "y": 350,
+   "w": 658,
+   "h": 658,
+   "label": "CONTAINMENT / 03",
+   "style": "room"
+  },
+  {
+   "x": 350,
+   "y": 1050,
+   "w": 658,
+   "h": 658,
+   "label": "TRANSIT / 04",
+   "style": "room"
+  },
+  {
+   "x": 1050,
+   "y": 1050,
+   "w": 658,
+   "h": 658,
+   "label": "CONTROL / 05",
+   "style": "room"
+  },
+  {
+   "x": 1750,
+   "y": 1050,
+   "w": 658,
+   "h": 658,
+   "label": "LABORATORY / 06",
+   "style": "room"
+  },
+  {
+   "x": 350,
+   "y": 1750,
+   "w": 658,
+   "h": 658,
+   "label": "STORES / 07",
+   "style": "room"
+  },
+  {
+   "x": 1050,
+   "y": 1750,
+   "w": 658,
+   "h": 658,
+   "label": "INTAKE / 08",
+   "style": "room"
+  },
+  {
+   "x": 1750,
+   "y": 1750,
+   "w": 658,
+   "h": 658,
+   "label": "MEDICAL / 09",
+   "style": "room"
+  }
+ ],
+ "doorways": [
+  {
+   "x": 700,
+   "y": 350,
+   "w": 58,
+   "h": 180,
+   "vertical": true
+  },
+  {
+   "x": 350,
+   "y": 700,
+   "w": 180,
+   "h": 58,
+   "vertical": false
+  },
+  {
+   "x": 1400,
+   "y": 350,
+   "w": 58,
+   "h": 180,
+   "vertical": true
+  },
+  {
+   "x": 1050,
+   "y": 700,
+   "w": 180,
+   "h": 58,
+   "vertical": false
+  },
+  {
+   "x": 1750,
+   "y": 700,
+   "w": 180,
+   "h": 58,
+   "vertical": false
+  },
+  {
+   "x": 700,
+   "y": 1050,
+   "w": 58,
+   "h": 180,
+   "vertical": true
+  },
+  {
+   "x": 350,
+   "y": 1400,
+   "w": 180,
+   "h": 58,
+   "vertical": false
+  },
+  {
+   "x": 1400,
+   "y": 1050,
+   "w": 58,
+   "h": 180,
+   "vertical": true
+  },
+  {
+   "x": 1050,
+   "y": 1400,
+   "w": 180,
+   "h": 58,
+   "vertical": false
+  },
+  {
+   "x": 1750,
+   "y": 1400,
+   "w": 180,
+   "h": 58,
+   "vertical": false
+  },
+  {
+   "x": 700,
+   "y": 1750,
+   "w": 58,
+   "h": 180,
+   "vertical": true
+  },
+  {
+   "x": 1400,
+   "y": 1750,
+   "w": 58,
+   "h": 180,
+   "vertical": true
+  }
+ ],
+ "lights": [
+  {
+   "x": 92,
+   "y": 608,
+   "color": "#ffbf79",
+   "radius": 190
+  },
+  {
+   "x": 608,
+   "y": 608,
+   "color": "#ffbf79",
+   "radius": 190
+  },
+  {
+   "x": 700,
+   "y": 274,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 700,
+   "y": 426,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 274,
+   "y": 700,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 426,
+   "y": 700,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 792,
+   "y": 608,
+   "color": "#ffbf79",
+   "radius": 190
+  },
+  {
+   "x": 1308,
+   "y": 608,
+   "color": "#ffbf79",
+   "radius": 190
+  },
+  {
+   "x": 1400,
+   "y": 274,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 1400,
+   "y": 426,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 974,
+   "y": 700,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 1126,
+   "y": 700,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 1492,
+   "y": 608,
+   "color": "#ffbf79",
+   "radius": 190
+  },
+  {
+   "x": 2008,
+   "y": 608,
+   "color": "#ffbf79",
+   "radius": 190
+  },
+  {
+   "x": 1674,
+   "y": 700,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 1826,
+   "y": 700,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 92,
+   "y": 1308,
+   "color": "#ffbf79",
+   "radius": 190
+  },
+  {
+   "x": 608,
+   "y": 1308,
+   "color": "#ffbf79",
+   "radius": 190
+  },
+  {
+   "x": 700,
+   "y": 974,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 700,
+   "y": 1126,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 274,
+   "y": 1400,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 426,
+   "y": 1400,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 792,
+   "y": 1308,
+   "color": "#ffbf79",
+   "radius": 190
+  },
+  {
+   "x": 1308,
+   "y": 1308,
+   "color": "#ffbf79",
+   "radius": 190
+  },
+  {
+   "x": 1400,
+   "y": 974,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 1400,
+   "y": 1126,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 974,
+   "y": 1400,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 1126,
+   "y": 1400,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 1492,
+   "y": 1308,
+   "color": "#ffbf79",
+   "radius": 190
+  },
+  {
+   "x": 2008,
+   "y": 1308,
+   "color": "#ffbf79",
+   "radius": 190
+  },
+  {
+   "x": 1674,
+   "y": 1400,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 1826,
+   "y": 1400,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 92,
+   "y": 2008,
+   "color": "#ffbf79",
+   "radius": 190
+  },
+  {
+   "x": 608,
+   "y": 2008,
+   "color": "#ffbf79",
+   "radius": 190
+  },
+  {
+   "x": 700,
+   "y": 1674,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 700,
+   "y": 1826,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 792,
+   "y": 2008,
+   "color": "#ffbf79",
+   "radius": 190
+  },
+  {
+   "x": 1308,
+   "y": 2008,
+   "color": "#ffbf79",
+   "radius": 190
+  },
+  {
+   "x": 1400,
+   "y": 1674,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 1400,
+   "y": 1826,
+   "color": "#9ed9d2",
+   "radius": 100
+  },
+  {
+   "x": 1492,
+   "y": 2008,
+   "color": "#ffbf79",
+   "radius": 190
+  },
+  {
+   "x": 2008,
+   "y": 2008,
+   "color": "#ffbf79",
+   "radius": 190
+  }
+ ],
+ "hazards": [
+  {
+   "id": "steamVent",
+   "x": 790.124,
+   "y": 1014.856,
+   "radius": 56,
+   "passive": false,
+   "color": "#dff5f2"
+  },
+  {
+   "id": "steamVent",
+   "x": 1578.725,
+   "y": 1338.8,
+   "radius": 56,
+   "passive": false,
+   "color": "#dff5f2"
+  },
+  {
+   "id": "steamVent",
+   "x": 1177.1,
+   "y": 761.649,
+   "radius": 56,
+   "passive": false,
+   "color": "#dff5f2"
+  },
+  {
+   "id": "steamVent",
+   "x": 495.657,
+   "y": 1082.065,
+   "radius": 56,
+   "passive": false,
+   "color": "#dff5f2"
+  },
+  {
+   "id": "electricFloor",
+   "x": 1767.565,
+   "y": 839.727,
+   "radius": 88,
+   "passive": false,
+   "color": "#8fd8ff"
+  },
+  {
+   "id": "electricFloor",
+   "x": 1713.527,
+   "y": 1676.175,
+   "radius": 88,
+   "passive": false,
+   "color": "#8fd8ff"
+  },
+  {
+   "id": "electricFloor",
+   "x": 1043.233,
+   "y": 1630.432,
+   "radius": 88,
+   "passive": false,
+   "color": "#8fd8ff"
+  },
+  {
+   "id": "electricFloor",
+   "x": 1580.922,
+   "y": 1800.849,
+   "radius": 88,
+   "passive": false,
+   "color": "#8fd8ff"
+  },
+  {
+   "id": "electricFloor",
+   "x": 1055.372,
+   "y": 1365.834,
+   "radius": 88,
+   "passive": false,
+   "color": "#8fd8ff"
+  }
+ ],
+ "rooms": [
+  {
+   "x": 350,
+   "y": 350,
+   "w": 568,
+   "h": 568
+  },
+  {
+   "x": 1050,
+   "y": 350,
+   "w": 568,
+   "h": 568
+  },
+  {
+   "x": 1750,
+   "y": 350,
+   "w": 568,
+   "h": 568
+  },
+  {
+   "x": 350,
+   "y": 1050,
+   "w": 568,
+   "h": 568
+  },
+  {
+   "x": 1050,
+   "y": 1050,
+   "w": 568,
+   "h": 568
+  },
+  {
+   "x": 1750,
+   "y": 1050,
+   "w": 568,
+   "h": 568
+  },
+  {
+   "x": 350,
+   "y": 1750,
+   "w": 568,
+   "h": 568
+  },
+  {
+   "x": 1050,
+   "y": 1750,
+   "w": 568,
+   "h": 568
+  },
+  {
+   "x": 1750,
+   "y": 1750,
+   "w": 568,
+   "h": 568
+  }
+ ]
+}
