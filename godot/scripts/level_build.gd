@@ -59,6 +59,7 @@ func build(lvl: Level, mats: Dictionary) -> void:
     _build_solids()
     _build_doorframes()
     _build_props()
+    _build_decals()
     _build_lights()
 
 func _mat(name: String) -> Material:
@@ -600,3 +601,112 @@ func _ground_clutter(o: Dictionary, size: Vector3, pos: Vector3) -> void:
         var chunk := _box(Vector3(scale * 1.7, scale, scale * 1.3), at, _mat("kerb"), false)
         chunk.rotation.y = float(_pick(o, i * 31 + 5, 8)) * 0.4
         chunk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+
+# ---- Decals ----------------------------------------------------------------
+
+## Projected markings.
+##
+## A `Decal` projects onto whatever geometry is already there, so none of this
+## adds a triangle of collision or occludes a sightline the simulation believes
+## is open -- which makes it the only way to add a painted layer under the rule
+## this build works to. The content is the level's own: Blacksite Zero names
+## its nine chambers, and those designations are what goes on the floors.
+##
+## A Decal projects along its local -Y. Floor markings therefore need no
+## rotation; wall markings are turned so -Y points into the face.
+const DECAL_DIR := "res://art/decals/%s.png"
+
+func _decal_tex(name: String) -> Texture2D:
+    var path := DECAL_DIR % name
+    return load(path) if ResourceLoader.exists(path) else null
+
+func _decal(name: String, pos: Vector3, size: Vector3, rot: Vector3 = Vector3.ZERO,
+        energy: float = 1.0, fade: float = 0.35) -> void:
+    var tex := _decal_tex(name)
+    if tex == null:
+        return
+    var d := Decal.new()
+    d.texture_albedo = tex
+    d.size = size
+    d.position = pos
+    d.rotation_degrees = rot
+    d.albedo_mix = energy
+    d.upper_fade = fade
+    d.lower_fade = fade
+    d.normal_fade = 0.35
+    add_child(d)
+
+func _build_decals() -> void:
+    _decal_zone_labels()
+    _decal_thresholds()
+    _decal_grime()
+
+## The chamber designation painted on each floor, as facilities do.
+func _decal_zone_labels() -> void:
+    for i in range(level.zones.size()):
+        var z: Dictionary = level.zones[i]
+        var cx := level.metres(float(z["x"]))
+        var cz := level.metres(float(z["y"]))
+        # Offset off the room centre so the label is not always under the
+        # operative's feet the moment they walk in.
+        _decal("label_%d" % i, Vector3(cx, 0.35, cz - 3.2), Vector3(9.5, 1.2, 3.0), Vector3.ZERO, 0.85)
+        _decal("number_%d" % i, Vector3(cx + 5.6, 0.35, cz + 1.4), Vector3(3.0, 1.2, 3.0), Vector3(0, 12.0, 0), 0.85)
+
+## Hazard chevrons across every doorway threshold, and an arrow leading in.
+func _decal_thresholds() -> void:
+    for d in level.doorways:
+        var vertical: bool = d.get("vertical", false)
+        var cx := level.metres(float(d["x"]))
+        var cz := level.metres(float(d["y"]))
+        var span := level.metres(float(d["h"] if vertical else d["w"]))
+        var yaw := 90.0 if vertical else 0.0
+        _decal("chevrons", Vector3(cx, 0.35, cz), Vector3(span * 0.92, 1.2, 1.5),
+            Vector3(0, yaw, 0), 0.9)
+        # An arrow on each approach, pointing through the opening.
+        for side in [-1.0, 1.0]:
+            var offset: Vector3 = Vector3(0, 0, 3.4 * side) if not vertical else Vector3(3.4 * side, 0, 0)
+            # The arrow art points toward -Z in its own space; turn it to face
+            # the doorway from whichever side it sits on.
+            var arrow_yaw: float = yaw + (0.0 if side > 0.0 else 180.0)
+            _decal("arrow", Vector3(cx, 0.35, cz) + offset, Vector3(1.6, 1.2, 3.2),
+                Vector3(0, arrow_yaw, 0), 0.75)
+
+## Soot, spills and water runs. Placed deterministically from the plan's own
+## seeded `variant` field, so a sector looks the same every time it is loaded.
+func _decal_grime() -> void:
+    var idx := 0
+    for o in level.walls:
+        var kind := String(o.get("type", "wall"))
+        if kind != "masonry" and kind != "wall":
+            continue
+        idx += 1
+        var ow := level.metres(float(o["w"]))
+        var oh := level.metres(float(o["h"]))
+        var tall := _height_for(o)
+        var cx := level.metres(float(o["x"]))
+        var cz := level.metres(float(o["y"]))
+        var along_x: bool = ow >= oh
+        var span: float = ow if along_x else oh
+        if span < 5.0:
+            continue
+        var half_depth: float = (oh if along_x else ow) * 0.5
+        var axis := Vector3(1.0, 0.0, 0.0) if along_x else Vector3(0.0, 0.0, 1.0)
+        var normal := Vector3(0.0, 0.0, 1.0) if along_x else Vector3(1.0, 0.0, 0.0)
+        for face in [-1.0, 1.0]:
+            # Water streaking down the facade.
+            for k in range(2):
+                if _pick(o, idx * 7 + k * 3 + int(face), 3) == 0:
+                    continue
+                var t := (float(_pick(o, idx * 11 + k * 5, 9)) / 8.0 - 0.5) * (span - 2.5)
+                var at: Vector3 = Vector3(cx, tall * 0.55, cz) + axis * t + normal * (half_depth + 0.05) * face
+                # Turned so the projection points into the wall face.
+                var rot: Vector3 = Vector3(90.0 * face, 0.0, 0.0) if along_x else Vector3(0.0, 0.0, -90.0 * face)
+                _decal("streak", at, Vector3(2.0, 1.0, tall * 0.7), rot, 0.55, 0.5)
+            # Soot at the base, where the ground meets the wall.
+            if _pick(o, idx * 13 + int(face) * 2, 2) == 0:
+                continue
+            var t2 := (float(_pick(o, idx * 17 + 3, 7)) / 6.0 - 0.5) * (span - 4.0)
+            var ground: Vector3 = Vector3(cx, 0.35, cz) + axis * t2 + normal * (half_depth + 1.6) * face
+            _decal("scorch", ground, Vector3(4.6, 1.2, 4.6), Vector3(0, float(_pick(o, idx, 8)) * 45.0, 0), 0.8)
+            _decal("stain", ground + axis * 2.4, Vector3(3.2, 1.2, 3.2),
+                Vector3(0, float(_pick(o, idx * 3, 8)) * 45.0, 0), 0.7)

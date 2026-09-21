@@ -277,24 +277,29 @@ func _spawn_player() -> void:
 ## headings, so a judge scoring two rounds is scoring the build and not a
 ## different part of the level.
 func _viewpoint(name: String) -> Array:
-    var c := Vector2(level.width * 0.5, level.height * 0.5)
+    # Plan bearings, since the yaw is not obvious: 0 looks toward plan -Y,
+    # 90 toward -X, 180 toward +Y, -90 toward +X.
+    #
+    # These are chosen from the level data rather than by eye. The sector is a
+    # 3x3 grid of 700-unit rooms, and the two long axial runs -- south to north
+    # and west to east through the centre chamber -- give a clear 1600 units
+    # of sightline through two archways each. The first attempt at a "wide"
+    # shot put the camera in a corner 30 cm from a pillar.
     match name:
         "corridor":
-            # Standing well back in CONTROL / 05, looking down the east
-            # doorway. The old stand-off put a 5 m equipment bay about five
-            # metres dead ahead, so the middle third of every capture was one
-            # unreadable slab and the sky was a sliver.
-            return [Vector2(c.x - 265.0, c.y), 0.0, -1.0]
-        "room":
-            # Across REACTOR / 02 toward the north wall.
-            return [Vector2(c.x, c.y - 480.0), -90.0, 2.0]
+            # INTAKE / 08 north through CONTROL / 05 into REACTOR / 02.
+            return [Vector2(1050.0, 1900.0), 0.0, -1.5]
         "wide":
-            # Diagonal across the central chamber, both doorways in frame.
-            return [Vector2(c.x - 250.0, c.y - 250.0), 45.0, -3.0]
+            # TRANSIT / 04 east through CONTROL / 05 into LABORATORY / 06.
+            return [Vector2(250.0, 1050.0), -90.0, -1.5]
+        "room":
+            # Standing in the centre chamber looking at its north wall.
+            return [Vector2(1050.0, 1330.0), 0.0, 1.0]
         "extract":
-            return [level.extraction_point + Vector2(-260.0, 0.0), 0.0, -1.0]
+            # Approaching the beacon in LABORATORY / 06.
+            return [Vector2(1420.0, 1050.0), -90.0, -1.0]
         _:
-            return [c, 0.0, 0.0]
+            return [Vector2(level.width * 0.5, level.height * 0.5), 0.0, 0.0]
 
 func _run_capture() -> void:
     print("CAPTURE scene: %d nodes" % _count_nodes(self))
