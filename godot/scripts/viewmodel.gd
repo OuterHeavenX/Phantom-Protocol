@@ -13,14 +13,22 @@ const MODEL := "res://art/models/viewmodel_needle.glb"
 ## Rest pose, in camera space. Low and to the right, barrel angled a few
 ## degrees inboard so the suppressor reads across the frame rather than
 ## pointing at the vanishing point.
-const REST_POS := Vector3(0.178, -0.170, -0.300)
-const REST_ROT := Vector3(-3.0, 7.0, 0.5)
-const ADS_POS := Vector3(0.0, -0.056, -0.250)
+## At the previous offset the whole fist sat about 1.45 half-frames below
+## centre: the hands were modelled, lit and completely off screen, with only a
+## sliver of knuckle at the bottom edge. Higher and pushed forward puts the
+## glove and cuff back in frame.
+const REST_POS := Vector3(0.145, -0.105, -0.42)
+const REST_ROT := Vector3(-2.0, 6.0, 0.5)
+const ADS_POS := Vector3(0.0, -0.050, -0.34)
 ## The weapon is authored at true scale. It needed scaling up while the camera
 ## was at 127 degrees horizontal; with the FOV corrected to a realistic 70
 ## vertical it is the right size on its own, and scaling geometry to fix a
 ## framing problem distorts the slide's perspective against the hand.
-const VM_SCALE := 1.0
+## Drawn through the world's 106-degree horizontal lens, a correctly-sized
+## pistol spanned 43% of frame width against the references' 25%. Real shooters
+## render the viewmodel through a narrower lens; this is the same correction
+## expressed as one number.
+const VM_SCALE := 0.78
 
 var model: Node3D
 var muzzle: Node3D
@@ -52,11 +60,23 @@ func _ready() -> void:
     # camera-parented key gives it form without lighting the world.
     var key := OmniLight3D.new()
     key.position = Vector3(-0.22, 0.30, 0.16)
-    key.light_color = Color(0.86, 0.90, 1.0)
-    key.light_energy = 1.1
+    # Warm, to match the world. A blue-lit weapon in an amber street is
+    # exactly what makes a viewmodel look composited in rather than held.
+    key.light_color = Color(1.0, 0.92, 0.80)
+    key.light_energy = 0.32
     key.omni_range = 1.4
     key.shadow_enabled = false
     add_child(key)
+
+    # A dim cool rim from upper left, so the silhouette holds against a dark
+    # background without warming the shadow side.
+    var rim := OmniLight3D.new()
+    rim.position = Vector3(0.26, 0.24, -0.10)
+    rim.light_color = Color(0.78, 0.86, 1.0)
+    rim.light_energy = 0.22
+    rim.omni_range = 1.2
+    rim.shadow_enabled = false
+    add_child(rim)
 
     muzzle = Node3D.new()
     muzzle.position = Vector3(0.0, 0.0115, -0.19)

@@ -205,7 +205,10 @@ func _build_ground() -> void:
         var zw := level.metres(float(z["w"]))
         var zh := level.metres(float(z["h"]))
         var pos := Vector3(level.metres(float(z["x"])), 0.005, level.metres(float(z["y"])))
-        var plate := _box(Vector3(zw, 0.02, zh), pos, _mat("floor"), false)
+        # Paving, not slab. The concrete plate's form seams landed on a
+        # perfectly axis-aligned 1.25 m grid and read as bathroom tile; the
+        # cobble set is already at a believable 17 cm.
+        var plate := _box(Vector3(zw, 0.02, zh), pos, _mat("ground"), false)
         plate.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 func _build_solids() -> void:
@@ -223,8 +226,12 @@ func _build_solids() -> void:
         if kind == "masonry" or kind == "wall" or kind == "perimeter":
             _plinth(Vector3(ow, tall, oh), pos)
             _windows(o, Vector3(ow, tall, oh), pos)
-            var cap := _box(Vector3(ow + 0.35, 0.34, oh + 0.35),
-                Vector3(pos.x, tall + 0.17, pos.z), _mat("cornice"), false)
+            _downpipes(o, Vector3(ow, tall, oh), pos)
+            _ground_clutter(o, Vector3(ow, tall, oh), pos)
+            # 0.28 m of overhang, not 0.175. A cornice that casts no shadow
+            # line is just a stripe of a different colour.
+            var cap := _box(Vector3(ow + 0.56, 0.45, oh + 0.56),
+                Vector3(pos.x, tall + 0.225, pos.z), _mat("cornice"), false)
             cap.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 
 func _material_for(kind: String) -> String:
@@ -257,6 +264,12 @@ func _build_doorframes() -> void:
 
 func _build_lights() -> void:
     for l in level.lights:
+        # The plan's 24 teal entries are inset doorway markers in the 2D art,
+        # not hanging lamps. Made into omnis they washed the far arch and the
+        # right-hand facade cyan, and no reference frame has a cyan pixel.
+        var col := Color(String(l.get("color", "#ffc781")))
+        if col.b > col.r:
+            continue
         var lamp := OmniLight3D.new()
         lamp.position = Vector3(level.metres(float(l["x"])), 2.9, level.metres(float(l["y"])))
         lamp.omni_range = maxf(3.0, level.metres(float(l.get("radius", 150))) * 2.2)
@@ -313,18 +326,29 @@ func _windows(o: Dictionary, size: Vector3, pos: Vector3) -> void:
             var glass_size := Vector3(w, h, depth + 0.22) if along_x else Vector3(depth + 0.22, h, w)
             var frame := _box(frame_size, centre, _mat("trim"), false)
             frame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-            var recess := MeshInstance3D.new()
-            var rm := BoxMesh.new()
-            rm.size = glass_size
-            recess.mesh = rm
-            recess.position = centre
-            var dark := StandardMaterial3D.new()
-            dark.albedo_color = Color(0.035, 0.045, 0.055)
-            dark.roughness = 0.35
-            dark.metallic = 0.0
-            recess.material_override = dark
-            recess.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-            add_child(recess)
+            # Glass set back behind the frame, so the reveal casts into the
+            # opening. The previous recess was an untextured near-black box --
+            # the only flat-paint surface left in the build, and it read as a
+            # hole cut in cardboard.
+            var inset := 0.12
+            var glass_pos: Vector3 = centre + (Vector3(0, 0, -inset) if along_x else Vector3(-inset, 0, 0))
+            var glass := _box(glass_size * 0.94, glass_pos, _mat("glass"), false)
+            glass.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+            # A mullion cross, which is what makes an opening read as a window
+            # rather than as a rectangle.
+            var bar_a := Vector3(0.06, h, 0.10) if along_x else Vector3(0.10, h, 0.06)
+            var bar_b := Vector3(w, 0.06, 0.10) if along_x else Vector3(0.10, 0.06, w)
+            _box(bar_a, glass_pos, _mat("trim"), false).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+            _box(bar_b, glass_pos, _mat("trim"), false).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+            # A sill that catches the sun and streaks below itself.
+            var sill_size := Vector3(w + 0.40, 0.10, depth + 0.30) if along_x else Vector3(depth + 0.30, 0.10, w + 0.40)
+            _box(sill_size, centre + Vector3(0, -h * 0.5 - 0.05, 0), _mat("trim"), false)
+            # Shutters on the lower row only, where a person could reach them.
+            if r < 4.0 and int(o.get("variant", 0)) % 2 == 0:
+                var sh_yaw: float = 0.0 if along_x else 90.0
+                var face_sign := 1.0 if (centre.z > pos.z or centre.x > pos.x) else -1.0
+                var sh_pos: Vector3 = centre + (Vector3(0, 0, depth * 0.5 * face_sign) if along_x else Vector3(depth * 0.5 * face_sign, 0, 0))
+                _mount("shutter", sh_pos, sh_yaw if face_sign > 0.0 else sh_yaw + 180.0)
 
 # ---- Dressing --------------------------------------------------------------
 
@@ -354,13 +378,15 @@ func _mount(name: String, pos: Vector3, yaw_deg: float, scale: float = 1.0) -> v
     node.position = pos
     node.rotation_degrees = Vector3(0.0, yaw_deg, 0.0)
     node.scale = Vector3.ONE * scale
-    # Dressing does not cast. Each prop is tens of meshes and each shadow split
-    # redraws all of them; with a hundred props in the sector the shadow passes
-    # alone took the offscreen capture from twenty seconds to over ten minutes.
-    # They still RECEIVE shadows, which is most of what sells them.
+    # Dressing casts. A prop that throws no shadow onto the wall behind it
+    # reads as a sticker, and that shadow is most of what makes it a solid
+    # object. This was switched off for capture performance when there were no
+    # props to speak of; with ten families placed it was the reason none of
+    # them read. Paid for by a 45 m shadow distance and two splits instead of
+    # four, which costs far less than it buys.
     for c in _descendants(node):
         if c is GeometryInstance3D:
-            c.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+            c.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
     add_child(node)
 
 func _descendants(n: Node) -> Array:
@@ -423,22 +449,27 @@ func _dress_walls() -> void:
             # capture renders on a software rasteriser; the first pass put ~260
             # of them in the sector and the capture blew its watchdog.
             var slots := [
-                {"t": -0.26, "set": ["pipe_run", "conduit", "ac_unit"], "y": [3.1, 2.5, 3.9]},
-                {"t": 0.28, "set": ["sign", "awning", "dish"], "y": [3.5, 3.0, 5.4]},
+                {"t": -0.31, "set": ["pipe_run", "conduit", "ac_unit"], "y": [3.1, 2.5, 3.9]},
+                {"t": 0.0, "set": ["sign", "awning", "conduit"], "y": [3.5, 3.0, 2.2]},
+                {"t": 0.31, "set": ["ac_unit", "dish", "pipe_run"], "y": [3.7, 4.6, 3.3]},
             ]
             for sl in range(slots.size()):
                 var slot: Dictionary = slots[sl]
-                var choice := _pick(o, sl * 7 + f * 3 + idx, 5)
-                if choice >= 3:
-                    # Two slots in five stay bare. Partly so the dressing does
-                    # not read as a pattern, partly because every prop is tens
-                    # of meshes and the capture renders in software.
+                # Two independent draws: one decides whether the slot is used
+                # at all, the other which family fills it. Deriving both from
+                # one number tied the skip rate to the option count and, when
+                # the slot list grew, indexed past the end of it.
+                if _pick(o, sl * 7 + f * 3 + idx, 5) == 0:
                     continue
                 var options: Array = slot["set"]
                 var heights: Array = slot["y"]
+                var choice := _pick(o, sl * 31 + f * 11 + idx * 3 + 5, options.size())
                 var name: String = options[choice]
                 var y: float = heights[choice]
-                if y + 1.6 > tall:
+                # Clamp below the parapet: a dish silhouetted against the sky
+                # with nothing behind it reads as a balloon.
+                y = minf(y, tall - 2.2)
+                if y < 1.8:
                     continue
                 var offset: float = span * float(slot["t"])
                 _mount(name, base + axis * offset + Vector3(0.0, y, 0.0), face["yaw"])
@@ -514,3 +545,58 @@ func _dress_solids() -> void:
         var oz: float = (float(_pick(o, idx + 23, 7)) / 6.0 - 0.5) * maxf(0.0, oh - 1.1)
         var yaw: float = float(_pick(o, idx + 31, 8)) * 45.0
         _mount(name, Vector3(cx + ox, top, cz + oz), yaw)
+
+## A downpipe from the cornice to the kerb at facade corners.
+##
+## Every reference has a vertical run somewhere in frame; this build had only
+## horizontal pipes, and a vertical breaks the flat facade rectangle better
+## than anything else of comparable cost. Flush to the wall, so it adds no
+## collision.
+func _downpipes(o: Dictionary, size: Vector3, pos: Vector3) -> void:
+    if size.y < 6.0:
+        return
+    var along_x: bool = size.x >= size.z
+    var span: float = size.x if along_x else size.z
+    if span < 6.0:
+        return
+    var half_depth: float = (size.z if along_x else size.x) * 0.5
+    var axis := Vector3(1.0, 0.0, 0.0) if along_x else Vector3(0.0, 0.0, 1.0)
+    var normal := Vector3(0.0, 0.0, 1.0) if along_x else Vector3(1.0, 0.0, 0.0)
+    for end in [-1.0, 1.0]:
+        for face in [-1.0, 1.0]:
+            if _pick(o, int(end) * 5 + int(face) * 3, 4) == 0:
+                continue
+            var at: Vector3 = Vector3(pos.x, size.y * 0.5, pos.z) \
+                + axis * (span * 0.5 - 0.55) * end \
+                + normal * (half_depth + 0.09) * face
+            var pipe := _box(Vector3(0.16, size.y - 0.55, 0.16), at, _mat("machinery"), false)
+            pipe.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+            # A hopper at the top and a shoe at the bottom.
+            _box(Vector3(0.30, 0.26, 0.24), Vector3(at.x, size.y - 0.55, at.z), _mat("machinery"), false)
+            _box(Vector3(0.22, 0.18, 0.34), Vector3(at.x, 0.30, at.z) + normal * 0.06 * face,
+                _mat("machinery"), false)
+
+## Spall and rubble along wall bases.
+##
+## Small enough to be visual only: every piece sits within 40 cm of a face the
+## simulation already treats as solid, so there is nowhere for the operative to
+## walk into one and no sightline it could block that the sim thinks is open.
+func _ground_clutter(o: Dictionary, size: Vector3, pos: Vector3) -> void:
+    var along_x: bool = size.x >= size.z
+    var span: float = size.x if along_x else size.z
+    if span < 6.0:
+        return
+    var half_depth: float = (size.z if along_x else size.x) * 0.5
+    var axis := Vector3(1.0, 0.0, 0.0) if along_x else Vector3(0.0, 0.0, 1.0)
+    var normal := Vector3(0.0, 0.0, 1.0) if along_x else Vector3(1.0, 0.0, 0.0)
+    for i in range(6):
+        if _pick(o, i * 13 + 41, 3) == 0:
+            continue
+        var t := (float(_pick(o, i * 17 + 7, 11)) / 10.0 - 0.5) * (span - 1.6)
+        var face := 1.0 if _pick(o, i * 19 + 3, 2) == 0 else -1.0
+        var out := 0.30 + float(_pick(o, i * 23 + 9, 5)) * 0.03
+        var scale := 0.05 + float(_pick(o, i * 29 + 11, 6)) * 0.022
+        var at: Vector3 = Vector3(pos.x, scale * 0.5, pos.z) + axis * t + normal * (half_depth + out) * face
+        var chunk := _box(Vector3(scale * 1.7, scale, scale * 1.3), at, _mat("kerb"), false)
+        chunk.rotation.y = float(_pick(o, i * 31 + 5, 8)) * 0.4
+        chunk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON

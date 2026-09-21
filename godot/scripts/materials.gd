@@ -33,7 +33,7 @@ static func pbr(name: String, uv_scale: float, tint: Color = Color.WHITE, metal_
     if nrm:
         m.normal_enabled = true
         m.normal_texture = nrm
-        m.normal_scale = 1.0
+        m.normal_scale = 1.6
     var orm := _load(name, "orm")
     if orm:
         # Godot's ORM material reads roughness from G and metallic from B.
@@ -61,15 +61,25 @@ static func build() -> Dictionary:
         # dielectric, and a direct cause of the clipped highlights measured in
         # the first round. Sunlit limestone is about 0.45-0.55 albedo and
         # weathered concrete 0.30-0.40, so these sit where real surfaces do.
-        "wall": pbr("sandstone", 0.30, Color(0.82, 0.79, 0.74)),
-        "perimeter": pbr("sandstone", 0.26, Color(0.74, 0.71, 0.66)),
-        "vault": pbr("steel", 0.50, Color(0.72, 0.75, 0.78), 0.20),
+        "wall": pbr("sandstone", 0.45, Color(0.82, 0.79, 0.74)),
+        "perimeter": pbr("sandstone", 0.40, Color(0.74, 0.71, 0.66)),
+        "vault": pbr("steel", 0.80, Color(0.80, 0.78, 0.74), 0.20),
         "pillar": pbr("plaster", 0.30, Color(0.80, 0.78, 0.73)),
-        "machinery": pbr("steel", 0.55, Color(0.78, 0.80, 0.82), 0.18),
+        "machinery": pbr("steel", 0.85, Color(0.80, 0.79, 0.76), 0.18),
         "container": pbr("crate", 0.50, Color(0.76, 0.72, 0.66), 0.12),
-        "floor": pbr("concrete", 0.20, Color(0.74, 0.73, 0.70)),
+        "floor": pbr("concrete", 0.45, Color(0.74, 0.73, 0.70)),
         "ground": pbr("cobble", 0.36, Color(0.78, 0.75, 0.71)),
         "trim": pbr("plaster", 0.30, Color(0.80, 0.77, 0.71)),
         "cornice": pbr("plaster", 0.34, Color(0.70, 0.67, 0.62)),
         "kerb": pbr("concrete", 0.55, Color(0.62, 0.61, 0.58)),
+        "glass": glass(),
     }
+
+## Dirty glazing. Rough enough not to mirror, smooth enough to take a sky
+## reflection, and dark enough to read as an interior behind it.
+static func glass() -> StandardMaterial3D:
+    var m := StandardMaterial3D.new()
+    m.albedo_color = Color(0.055, 0.070, 0.078)
+    m.roughness = 0.12
+    m.metallic = 0.0
+    return m

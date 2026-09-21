@@ -77,6 +77,9 @@ func _ready() -> void:
         _run_simtest()
         return
     if capture_path != "":
+        # Step the contract briefly before capturing so the HUD has a live
+        # clock and hostile count rather than an opening-frame zero.
+        sim.advance(2.0)
         _run_capture()
 
 func _parse_args() -> void:
@@ -105,10 +108,13 @@ func _build_environment() -> void:
     # Measured against the references: the build sat about 1.2 stops hot, with
     # 5.7% of pixels clipped against their 0.02%, and a lit-to-shade ground
     # ratio of 5.3:1 against their 2.1:1. Sun down, fill up.
-    sun.light_energy = 1.7
+    sun.light_energy = 1.10
     sun.shadow_enabled = true
-    sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-    sun.directional_shadow_max_distance = 120.0
+    sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+    # 45 m instead of 120. Nothing past that needs a crisp shadow, and the
+    # splits it buys back are spent on letting the dressing cast again --
+    # a prop that throws no shadow onto the wall behind it reads as a sticker.
+    sun.directional_shadow_max_distance = 45.0
     sun.directional_shadow_blend_splits = true
     # A 4096 atlas over four splits affords a much tighter bias. The old values
     # pushed every contact shadow away from the base of its wall, which is a
@@ -125,9 +131,13 @@ func _build_environment() -> void:
     # faces poorly, because what reaches them is the horizon colour rather
     # than the zenith. Pulling energy down and deepening the gradient fixes
     # both: a blue sky above the cornices, and blue bounce in the shadows.
-    sky_mat.sky_top_color = Color(0.16, 0.34, 0.68)
-    sky_mat.sky_horizon_color = Color(0.62, 0.72, 0.84)
-    sky_mat.sky_curve = 0.32
+    # The references' sky is a pale, nearly neutral haze at about 0.10
+    # saturation. The first correction for the blown-white sky overshot into a
+    # cobalt poster at 0.55, which also dragged the whole frame's saturation to
+    # 0.41 against their 0.28.
+    sky_mat.sky_top_color = Color(0.36, 0.50, 0.72)
+    sky_mat.sky_horizon_color = Color(0.80, 0.82, 0.85)
+    sky_mat.sky_curve = 0.20
     sky_mat.sky_energy_multiplier = 1.1
     sky_mat.ground_bottom_color = Color(0.30, 0.28, 0.25)
     sky_mat.ground_horizon_color = Color(0.58, 0.55, 0.50)
@@ -148,11 +158,14 @@ func _build_environment() -> void:
     # Sunlit stone against a blue sky has bright, coloured shadows. At 1.15 the
     # shaded half of the sector was reading near black, which is a night look
     # wearing a daytime sun.
-    env.ambient_light_energy = 3.6
+    # Exposure was the wrong lever for clipped highlights: it moved the whole
+    # curve down and left 30% of the frame crushed under 0.06. The ratio is
+    # what was actually wrong, so the fill comes up and the key comes down.
+    env.ambient_light_energy = 6.5
     env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 
     env.tonemap_mode = Environment.TONE_MAPPER_ACES
-    env.tonemap_exposure = 0.55
+    env.tonemap_exposure = 0.95
     env.tonemap_white = 10.0
 
     env.ssao_enabled = true
@@ -160,8 +173,8 @@ func _build_environment() -> void:
     # so a strong setting crushes every shaded corner to black. It is a contact
     # cue, not a lighting model.
     env.ssao_radius = 0.55
-    env.ssao_intensity = 0.85
-    env.ssao_power = 1.2
+    env.ssao_intensity = 0.45
+    env.ssao_power = 1.0
     env.ssao_detail = 0.6
     env.ssao_light_affect = 0.0
 
@@ -184,7 +197,10 @@ func _build_environment() -> void:
     env.fog_light_color = Color(0.74, 0.75, 0.72)
     # Depth fog is gated by density even in FOG_MODE_DEPTH, so at 0.0 the whole
     # depth_begin/end/curve block below did nothing.
-    env.fog_density = 0.02
+    # In FOG_MODE_DEPTH the density scalar multiplies the final depth-derived
+    # blend, so 0.02 capped the haze at 2% and there was no aerial perspective
+    # at all: buildings 60 m away were as contrasty as a wall 3 m away.
+    env.fog_density = 0.65
     env.fog_depth_begin = 18.0
     env.fog_depth_end = 95.0
     env.fog_depth_curve = 1.4
@@ -194,11 +210,13 @@ func _build_environment() -> void:
     # every shot so far had a sheet of white paper above the rooflines instead
     # of a blue sky. The haze is wanted on the far rooms and not at all on the
     # sky behind them.
-    env.fog_sky_affect = 0.0
+    # A little haze on the sky, not none. Zero was the overcorrection for the
+    # sky being painted fog-white; the references do carry some.
+    env.fog_sky_affect = 0.30
 
     env.adjustment_enabled = true
     env.adjustment_brightness = 1.0
-    env.adjustment_contrast = 1.04
+    env.adjustment_contrast = 0.96
     env.adjustment_saturation = 1.0
 
     # Bounce fill from the anti-sun azimuth. Shadowed stone in a sunlit street
@@ -207,7 +225,7 @@ func _build_environment() -> void:
     var bounce := DirectionalLight3D.new()
     bounce.rotation_degrees = Vector3(-18.0, -52.0, 0.0)
     bounce.light_color = Color(1.0, 0.86, 0.68)
-    bounce.light_energy = 0.25
+    bounce.light_energy = 0.70
     bounce.shadow_enabled = false
     add_child(bounce)
 
@@ -262,8 +280,11 @@ func _viewpoint(name: String) -> Array:
     var c := Vector2(level.width * 0.5, level.height * 0.5)
     match name:
         "corridor":
-            # Standing in CONTROL / 05 looking down the east doorway.
-            return [Vector2(c.x - 190.0, c.y), 0.0, -2.0]
+            # Standing well back in CONTROL / 05, looking down the east
+            # doorway. The old stand-off put a 5 m equipment bay about five
+            # metres dead ahead, so the middle third of every capture was one
+            # unreadable slab and the sky was a sliver.
+            return [Vector2(c.x - 265.0, c.y), 0.0, -1.0]
         "room":
             # Across REACTOR / 02 toward the north wall.
             return [Vector2(c.x, c.y - 480.0), -90.0, 2.0]

@@ -70,23 +70,39 @@ def grain_fn(freq=384, rng=None):
     return lattice(freq, rng)
 
 
-def cell_ids(n, rng=None):
-    """Per-cell random value on an n x n grid, as a full-resolution field.
+def cell_ids(rows, cols=None, rng=None, stagger=False):
+    """Per-cell random value on a rows x cols grid, as a full-resolution field.
 
     Used for per-block and per-sett variation: without it every block in a wall
-    shares one base value and the courses read as printed wallpaper.
+    shares one base value and the courses read as printed wallpaper. The grid
+    MUST line up with whatever joint pattern it is modulating -- an 8x8 and a
+    12x12 value grid laid over 5.33 columns of mortar produced a checkerboard
+    that had nothing to do with the blocks, which is worse than no variation.
     """
     rng = rng or rng_global
-    g = rng.random((n, n))
-    idx_y = (np.arange(N) * n // N)[:, None]
-    idx_x = (np.arange(N) * n // N)[None, :]
-    return g[idx_y, idx_x]
+    cols = cols or rows
+    g = rng.random((rows, cols))
+    idx_y = (np.arange(N) * rows // N)
+    idx_x = (np.arange(N) * cols // N)
+    if stagger:
+        # Odd courses shift half a block, matching a stretcher bond.
+        shift = (idx_y % 2)[:, None] * (N // (cols * 2))
+        idx_x = ((np.arange(N)[None, :] + shift) % N) * cols // N
+        return g[idx_y[:, None], idx_x]
+    return g[idx_y[:, None], idx_x[None, :]]
 
 def norm01(a):
     lo, hi = a.min(), a.max()
     return (a - lo) / max(1e-9, hi - lo)
 
-def normal_from_height(h, strength=2.0):
+def normal_from_height(h, strength=3.5):
+    """Tangent-space normal from a height field.
+
+    At strength 2.0 on a normalised height the fine grain worked out to about
+    a 6 degree slope, so mortar joints caught neither a bright top edge nor a
+    dark underside under a grazing sun and the normal map may as well not have
+    been there.
+    """
     # Wrapped central differences, so the normal map tiles with the height.
     dx = (np.roll(h, -1, 1) - np.roll(h, 1, 1)) * strength
     dy = (np.roll(h, -1, 0) - np.roll(h, 1, 0)) * strength
@@ -129,10 +145,15 @@ def mat_sandstone(out):
     grain = fbm(6, 6)
     blotch = fbm(3, 2)
     # Block courses: horizontal beds with staggered vertical joints.
-    course = 128
+    #
+    # Both periods divide 1024, so the pattern tiles. The vertical joint used
+    # to be at course*1.5 = 192 px, which is 5.33 columns across the texture:
+    # it did not tile, and no per-block value grid could line up with it.
+    course = 128          # 8 beds
+    joint_period = 256    # 4 columns
     beds = stripes(course, 3, axis=0)
-    stagger = (np.floor(np.arange(N)[:, None] / course) % 2) * (course / 2)
-    joints = stripes(course * 1.5, 3, axis=1, jitter=stagger)
+    stagger = (np.floor(np.arange(N)[:, None] / course) % 2) * (joint_period / 2)
+    joints = stripes(joint_period, 3, axis=1, jitter=stagger)
     mortar = np.clip(beds + joints * (1 - beds), 0, 1)
     # Patches where the stucco has come away and the block shows through.
     spall = (fbm(4, 3) > 0.66).astype(np.float64)
@@ -140,17 +161,26 @@ def mat_sandstone(out):
     # Ragged the joint: a constant-width soft stroke reads as a drawn grid.
     mortar = np.clip(mortar - (grain > 0.62) * 0.55, 0, 1)
     # Per-block value jitter. Blocks are one course tall and about 1.5 wide.
-    blocks = cell_ids(8) * 0.5 + cell_ids(12) * 0.5
+    # One value per block, on the same 8 x 4 grid the joints cut.
+    blocks = cell_ids(8, 4, stagger=True)
     fine = grain_fn()
     h = norm01(grain * 0.30 + blotch * 0.32 - mortar * 0.7 - spall * 0.25 + fine * 0.14)
-    base = norm01(grain * 0.38 + blotch * 0.34 + blocks * 0.28)
+    # `blocks` drives the brightness multiply below and must NOT also drive
+    # the colour ramp, or the jitter is applied twice and the wall reads as a
+    # randomised patchwork rather than as masonry.
+    base = norm01(grain * 0.46 + blotch * 0.54)
     alb = tint(base, (150, 128, 100), (214, 196, 165))
-    # +/-12% per block, which is what stops a wall reading as printed.
-    alb = alb * (0.88 + 0.24 * blocks)[..., None]
+    # +/-5% per block. The measured per-block deviation at +/-12% was 0.053
+    # against reference walls that are close to uniform in value: the right
+    # diagnosis at more than twice the right dose.
+    alb = alb * (0.95 + 0.10 * blocks)[..., None]
     alb = alb * (1 - 0.30 * mortar[..., None])
     alb = alb * (1 - 0.18 * spall[..., None]) + np.array([0.13, 0.10, 0.07]) * spall[..., None]
     alb = alb * (0.94 + 0.12 * fine)[..., None]
-    rough = 0.72 + 0.16 * norm01(grain) + 0.08 * mortar + 0.05 * fine
+    # A wide roughness range: weathered faces are matte, but the arris and the
+    # wind-polished faces catch a sheen, and a uniformly matte wall has no
+    # specular information at all.
+    rough = 0.45 + 0.42 * norm01(grain) + 0.10 * mortar + 0.05 * fine
     write_material(out, "sandstone", alb, h, rough)
 
 def mat_plaster(out):
@@ -211,18 +241,24 @@ def mat_cobble(out):
     h = norm01(stone * 0.66 + grain * 0.20 + fine * 0.14)
     base = norm01(stone * 0.32 + grain * 0.46 + fine * 0.22)
     alb = tint(base, (92, 86, 76), (168, 158, 140))
-    alb = alb * (0.72 + 0.56 * setts)[..., None]
-    alb = alb * (0.62 + 0.38 * stone[..., None])
-    alb = alb * (1 - 0.34 * joint[..., None]) + np.array([0.11, 0.10, 0.08]) * joint[..., None]
-    rough = 0.66 + 0.18 * norm01(grain) + 0.16 * joint + 0.06 * fine
+    alb = alb * (0.82 + 0.34 * setts)[..., None]
+    alb = alb * (0.78 + 0.22 * stone[..., None])
+    # Lighter joints. At 0.34 with a near-black dirt colour the setts read as
+    # a dark net laid over the courtyard rather than as packed paving.
+    alb = alb * (1 - 0.18 * joint[..., None]) + np.array([0.22, 0.20, 0.17]) * joint[..., None]
+    # Foot-polished crowns, rough packed joints. A uniformly matte pavement
+    # has no sheen anywhere, and the sheen is how paving reads as stone.
+    rough = 0.34 + 0.30 * norm01(grain) + 0.46 * joint + 0.06 * fine
     write_material(out, "cobble", alb, h, rough)
 
 def mat_steel(out):
     """Painted steel plate with rivets — machinery and vault doors."""
     grain = fbm(5, 14)
-    panel = np.clip(stripes(256, 3, 0) + stripes(170, 3, 1), 0, 1)
-    px = np.mod(np.arange(N)[None, :], 170); py = np.mod(np.arange(N)[:, None], 256)
-    rivets = (((px - 24) ** 2 + (py - 24) ** 2) < 90).astype(np.float64)
+    # 128 px panels: at uv_scale 0.80 that is a plate about 1.2 m across,
+    # rather than the 2 m one that read as a featureless slab at four metres.
+    panel = np.clip(stripes(128, 2, 0) + stripes(128, 2, 1), 0, 1)
+    px = np.mod(np.arange(N)[None, :], 128); py = np.mod(np.arange(N)[:, None], 128)
+    rivets = (((px - 18) ** 2 + (py - 18) ** 2) < 70).astype(np.float64)
     # Rust biased onto seams and rivets, where water sits, and at a frequency
     # that reads as corrosion rather than as a camouflage splotch.
     rust_field = fbm(5, 18)
@@ -231,7 +267,10 @@ def mat_steel(out):
     fine = grain_fn()
     h = norm01(grain * 0.18 - panel * 0.8 + rivets * 0.9 + rust * 0.22 + fine * 0.16)
     base = norm01(grain * 0.7 + fine * 0.3)
-    alb = tint(base, (58, 66, 70), (108, 118, 122))
+    # Painted steel, not gun blue. The old ramp was a cold near-black, and
+    # with a dark tint on top of it the biggest object in frame measured 0.024
+    # luminance: a flat black slab with no readable surface at four metres.
+    alb = tint(base, (96, 96, 92), (168, 166, 156))
     alb = alb * (1 - np.clip(rust, 0, 1)[..., None]) + np.array([0.36, 0.19, 0.10]) * np.clip(rust, 0, 1)[..., None]
     alb = alb * (1 - 0.3 * panel[..., None])
     # Rust is not just a colour: it is a roughness jump and a loss of metal.

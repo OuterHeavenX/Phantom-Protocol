@@ -61,8 +61,11 @@ def cyl(r, depth, loc, material, rot=(0, 0, 0), verts=16, bevel=0.006):
 # Shared palette. Kept muted so props never out-saturate the architecture.
 def palette():
     return {
-        "steel": mat("p_steel", (0.30, 0.31, 0.32), 0.85, 0.42),
-        "galv": mat("p_galv", (0.44, 0.46, 0.47), 0.70, 0.52),
+        # Metallic well down. With sky-sourced reflection and no probes in the
+        # scene, 0.85 rendered the pipe runs as mirror-bright chrome -- brighter
+        # than sunlit stone.
+        "steel": mat("p_steel", (0.26, 0.27, 0.28), 0.25, 0.48),
+        "galv": mat("p_galv", (0.40, 0.42, 0.43), 0.15, 0.58),
         "rust": mat("p_rust", (0.26, 0.13, 0.07), 0.35, 0.82),
         "paint_blue": mat("p_blue", (0.10, 0.20, 0.30), 0.25, 0.55),
         "paint_red": mat("p_red", (0.32, 0.09, 0.07), 0.20, 0.60),
@@ -128,14 +131,20 @@ def prop_dish(P):
     """Satellite dish on a stand-off mast."""
     cyl(0.045, 0.85, (0, 0.40, 0.10), P["galv"], verts=10)
     box((0.22, 0.08, 0.22), (0, 0.0, 0.11), P["galv"], bevel=0.008)
-    bpy.ops.mesh.primitive_uv_sphere_add(radius=0.52, location=(0, 0.80, 0.42), segments=20, ring_count=10)
+    # A concave dish, built as a shallow cone shell rather than a squashed
+    # sphere. The sphere read unmistakably as a grey balloon.
+    bpy.ops.mesh.primitive_cone_add(radius1=0.52, radius2=0.20, depth=0.26,
+                                    location=(0, 0.80, 0.34), rotation=(math.radians(-90), 0, 0),
+                                    vertices=24)
     d = bpy.context.object
-    d.scale = (1.0, 1.0, 0.34)
-    bpy.ops.object.transform_apply(scale=True)
     d.data.materials.append(P["galv"])
     bpy.ops.object.shade_smooth()
-    cyl(0.035, 0.42, (0, 0.80, 0.62), P["dark"], verts=8)
-    cyl(0.07, 0.07, (0, 0.80, 0.82), P["dark"], verts=10)
+    sol = d.modifiers.new("sol", "SOLIDIFY")
+    sol.thickness = 0.02
+    # Feed arm and horn, reading across the dish face.
+    cyl(0.028, 0.46, (0, 0.80, 0.56), P["dark"], verts=8)
+    cyl(0.055, 0.09, (0, 0.80, 0.76), P["dark"], verts=10)
+    box((0.03, 0.03, 0.30), (0, 0.63, 0.44), P["dark"], bevel=0.004)
 
 def prop_shutter(P):
     """Louvred shutter pair for a window reveal."""

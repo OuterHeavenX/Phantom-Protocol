@@ -89,7 +89,10 @@ def build_pistol():
     steel = mat("vm_steel", (0.045, 0.048, 0.052), metallic=0.92, rough=0.30)
     dark = mat("vm_dark", (0.022, 0.024, 0.026), metallic=0.75, rough=0.45)
     poly = mat("vm_polymer", (0.030, 0.032, 0.035), metallic=0.0, rough=0.62)
-    accent = mat("vm_accent", (0.05, 0.62, 0.55), metallic=0.2, rough=0.35, emit=(0.05, 0.62, 0.55))
+    # No emission. Two glowing teal dots on a sidearm in a sunlit street were
+    # the only emissive pixels in the frame, and nothing in the references
+    # glows at all.
+    accent = mat("vm_accent", (0.085, 0.090, 0.095), metallic=0.4, rough=0.34)
     brass = mat("vm_brass", (0.52, 0.38, 0.14), metallic=0.95, rough=0.28)
 
     parts = []
@@ -133,8 +136,9 @@ def build_pistol():
     parts.append(box("front_dot", (0.0022, 0.0022, 0.0042), (0, 0.0272, -0.092), accent, bevel=0.0004))
     # A small charge indicator, so the weapon carries the game's accent colour.
     parts.append(box("indicator", (0.0035, 0.0075, 0.0035), (0.0105, -0.0035, -0.004), accent, bevel=0.0004))
-    parts.append(cyl("case", 0.0045, 0.0125, (0.020, 0.024, -0.030), brass,
-                     rot=(math.radians(16), math.radians(74), math.radians(18))))
+    # No permanently-parked ejected case: scaled up with the rest of the
+    # weapon it became a brass ingot on the slide, and the brightest object on
+    # the model.
     for o in parts:
         o.scale = tuple(v * PISTOL_SCALE for v in o.scale)
         o.location = tuple(v * PISTOL_SCALE for v in o.location)
@@ -192,9 +196,12 @@ def build_hands():
     right of screen centre, so the weapon's LEFT flank faces the viewer and the
     fingers must close on that side to be seen at all.
     """
-    glove = mat("vm_glove", (0.074, 0.070, 0.066), metallic=0.0, rough=0.70)
-    sleeve = mat("vm_sleeve", (0.080, 0.088, 0.082), metallic=0.0, rough=0.84)
-    strap = mat("vm_strap", (0.135, 0.120, 0.096), metallic=0.16, rough=0.54)
+    # Much darker. The scene's ambient is deliberately strong so shadows stay
+    # readable, and the viewmodel takes all of it at point-blank range: at
+    # 0.074 the glove came out a pale beige tube that read as a bare forearm.
+    glove = mat("vm_glove", (0.028, 0.026, 0.024), metallic=0.0, rough=0.74)
+    sleeve = mat("vm_sleeve", (0.034, 0.038, 0.035), metallic=0.0, rough=0.86)
+    strap = mat("vm_strap", (0.060, 0.054, 0.044), metallic=0.16, rough=0.56)
     parts = []
 
     def hand_field(name, material, build_fn, resolution=0.0026):
