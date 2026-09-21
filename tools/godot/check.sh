@@ -9,6 +9,10 @@
 # takes a few seconds.
 set -e
 ROOT=$(cd "$(dirname "$0")/../../godot" && pwd)
+# Import first. A newly added `class_name` is not resolvable until the project
+# has been rescanned, so without this the check reports a parse error for a
+# file that is perfectly fine -- and, worse, a real error looks the same.
+timeout 240 godot --headless --path "$ROOT" --import >/dev/null 2>&1 || true
 OUT=$(timeout 120 godot --headless --path "$ROOT" --quit-after 2 2>&1 || true)
 if echo "$OUT" | grep -qE "SCRIPT ERROR|Parse Error|Compile Error"; then
   echo "$OUT" | grep -E "SCRIPT ERROR|Parse Error|Compile Error|  at: " | head -20

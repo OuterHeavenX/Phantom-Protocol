@@ -12,6 +12,8 @@ const LevelBuildC := preload("res://scripts/level_build.gd")
 const PlayerC := preload("res://scripts/player.gd")
 const RngC := preload("res://scripts/rng.gd")
 const ViewmodelC := preload("res://scripts/viewmodel.gd")
+const SimC := preload("res://scripts/sim.gd")
+const HudC := preload("res://scripts/hud.gd")
 
 var level: Level
 var player: CharacterBody3D
@@ -23,6 +25,23 @@ var env_node: WorldEnvironment
 ## take a live screenshot without a human at the keyboard.
 var capture_path: String = ""
 var capture_view: String = "corridor"
+## Headless contract test: run the simulation for N seconds of game time with
+## no renderer and report what happened. This is how the mechanics are checked
+## without a human at the keyboard.
+var simtest_seconds: float = 0.0
+
+var sim: Sim
+var hud: Hud
+var viewmodel: Node3D
+var _enemy_nodes: Dictionary = {}
+var _char_cache: Dictionary = {}
+## Which model stands in for each archetype's `render` kind.
+const CHAR_FOR := {
+    "soldier": "soldier", "shield": "shield", "sniper": "sniper",
+    "heavy": "heavy", "drone": "drone", "crawler": "drone",
+    "jammer": "drone", "warden": "heavy", "veil": "sniper",
+    "augment": "heavy", "sapper": "soldier", "mortar": "heavy",
+}
 
 func _ready() -> void:
     _parse_args()
@@ -51,8 +70,12 @@ func _ready() -> void:
     var t2 := Time.get_ticks_msec()
     _build_environment()
     _spawn_player()
+    _start_contract()
     var t3 := Time.get_ticks_msec()
     print("BUILD materials=%dms level=%dms rest=%dms nodes=%d" % [t1 - t0, t2 - t1, t3 - t2, _count_nodes(self)])
+    if simtest_seconds > 0.0:
+        _run_simtest()
+        return
     if capture_path != "":
         _run_capture()
 
@@ -66,6 +89,9 @@ func _parse_args() -> void:
                 i += 1
             "view":
                 capture_view = args[i + 1] if i + 1 < args.size() else "corridor"
+                i += 1
+            "simtest":
+                simtest_seconds = float(args[i + 1]) if i + 1 < args.size() else 300.0
                 i += 1
         i += 1
 
@@ -220,6 +246,7 @@ func _spawn_player() -> void:
     var vm := ViewmodelC.new()
     vm.name = "Viewmodel"
     cam.add_child(vm)
+    viewmodel = vm
 
     player.speed_mps = level.metres(212.0)
     player.look_locked = capture_path != ""
@@ -278,3 +305,160 @@ func _count_nodes(n: Node) -> int:
     for c in n.get_children():
         total += _count_nodes(c)
     return total
+
+# ---- Contract -------------------------------------------------------------
+
+func _start_contract() -> void:
+    var op: Dictionary = GameData.operatives[0]
+    var weapon_def := {}
+    for w in GameData.weapons:
+        if w.get("id", "") == op.get("weapon", "needle"):
+            weapon_def = w
+            break
+    var map := GameData.map_named("blacksite")
+    sim = SimC.new()
+    sim.name = "Sim"
+    add_child(sim)
+    sim.setup(level, 1234, op, GameData.difficulty(int(GameData.op1.get("difficulty", 0))),
+        float(GameData.op1.get("duration", 5)), weapon_def, map.get("enemyBias", {}))
+    sim.enemy_spawned.connect(_on_enemy_spawned)
+    sim.enemy_died.connect(_on_enemy_died)
+    sim.weapon_fired.connect(_on_weapon_fired)
+
+    hud = HudC.new()
+    hud.sim = sim
+    var layer := CanvasLayer.new()
+    layer.add_child(hud)
+    add_child(layer)
+
+    _build_extraction_marker()
+
+func _process(delta: float) -> void:
+    if sim == null or capture_path != "":
+        return
+    sim.player_pos = level.to_plan(player.global_position)
+    sim.advance(delta)
+    _sync_enemies()
+    if viewmodel:
+        var planar := Vector2(player.velocity.x, player.velocity.z).length()
+        viewmodel.update_motion(delta, Vector2.ZERO,
+            clampf(planar / maxf(0.1, player.speed_mps), 0.0, 1.0), false)
+
+func _char_scene(kind: String):
+    var name: String = CHAR_FOR.get(kind, "soldier")
+    if not _char_cache.has(name):
+        var path := "res://art/models/char_%s.glb" % name
+        _char_cache[name] = load(path) if ResourceLoader.exists(path) else null
+    return _char_cache[name]
+
+func _on_enemy_spawned(e: Dictionary) -> void:
+    var packed = _char_scene(String(e.get("render", "soldier")))
+    var node: Node3D
+    if packed != null:
+        node = packed.instantiate()
+    else:
+        node = Node3D.new()
+    # The figures are modelled at human height in metres; the simulation knows
+    # them only as a radius in plan units, so nothing is scaled to match.
+    add_child(node)
+    node.global_position = level.to_world(e["pos"], 0.0)
+    e["node"] = node
+    _enemy_nodes[node] = e
+
+func _on_enemy_died(e: Dictionary) -> void:
+    var node = e.get("node", null)
+    if node != null and is_instance_valid(node):
+        _enemy_nodes.erase(node)
+        node.queue_free()
+    e["node"] = null
+
+func _sync_enemies() -> void:
+    for e in sim.enemies:
+        var node = e.get("node", null)
+        if node == null or not is_instance_valid(node):
+            continue
+        var target := level.to_world(e["pos"], 0.0)
+        node.global_position = target
+        # Face the operative. These are static meshes; a turn is the whole of
+        # their animation, and at this distance it is enough to read intent.
+        var to_player: Vector2 = sim.player_pos - Vector2(e["pos"])
+        if to_player.length() > 1.0:
+            node.rotation.y = atan2(to_player.x, to_player.y) + PI
+
+func _on_weapon_fired(_dir: Vector2) -> void:
+    if viewmodel:
+        viewmodel.fire_kick(1.0)
+
+## A beacon at the extraction point, lit once the contract window closes.
+func _build_extraction_marker() -> void:
+    var marker := Node3D.new()
+    marker.name = "Extraction"
+    marker.position = level.to_world(level.extraction_point, 0.0)
+    var pillar := MeshInstance3D.new()
+    var mesh := CylinderMesh.new()
+    mesh.top_radius = level.metres(Sim.EXTRACTION_RADIUS) * 0.12
+    mesh.bottom_radius = mesh.top_radius
+    mesh.height = 9.0
+    pillar.mesh = mesh
+    var glow := StandardMaterial3D.new()
+    glow.albedo_color = Color(0.463, 0.906, 0.831, 0.30)
+    glow.emission_enabled = true
+    glow.emission = Color(0.463, 0.906, 0.831)
+    glow.emission_energy_multiplier = 2.4
+    glow.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    pillar.material_override = glow
+    pillar.position.y = 4.5
+    pillar.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    marker.add_child(pillar)
+    add_child(marker)
+
+## Drive the contract on a fixed clock with no renderer, walking the operative
+## toward the extraction point once the window closes, and report the result.
+func _run_simtest() -> void:
+    var step := Sim.FIXED_STEP
+    var steps := int(simtest_seconds / step)
+    var peak := 0
+    for i in range(steps):
+        if sim.finished:
+            break
+        # Stand-in for a player. A stationary operative is not a fair test of
+        # the contract -- the game is built around moving -- so this kites away
+        # from the nearest hostile, and walks to the beacon once it is live.
+        var move := Vector2.ZERO
+        if sim.extraction_active:
+            var to: Vector2 = level.extraction_point - sim.player_pos
+            if to.length() > 4.0:
+                move = to.normalized()
+        else:
+            var nearest := INF
+            var away := Vector2.ZERO
+            for e in sim.enemies:
+                var d: float = (Vector2(e["pos"]) - sim.player_pos).length()
+                if d < nearest:
+                    nearest = d
+                    away = (sim.player_pos - Vector2(e["pos"])).normalized()
+            # Kite the whole nearby group rather than the single closest
+            # hostile, which is what walks a bot into a corner.
+            var push := Vector2.ZERO
+            for e in sim.enemies:
+                var v: Vector2 = sim.player_pos - Vector2(e["pos"])
+                var d: float = maxf(1.0, v.length())
+                if d < 320.0:
+                    push += v.normalized() * (320.0 - d) / 320.0
+            if push.length() > 0.05:
+                move = push.normalized()
+            elif nearest < 260.0:
+                move = away
+        if move != Vector2.ZERO:
+            var want: Vector2 = sim.player_pos + move * 212.0 * step
+            if not level.overlaps_solid(want.x, want.y, 13.0) and level.playable(want.x, want.y, 20.0):
+                sim.player_pos = want
+        sim._step(step)
+        peak = maxi(peak, sim.enemies.size())
+    print("SIMTEST rounds hit=%d expired=%d blocked=%d" % [sim.rounds_hit, sim.rounds_expired, sim.rounds_blocked])
+    print("SIMTEST elapsed=%.1fs finished=%s outcome=%s shots=%d peak=%d alive=%d kills=%d level=%d weapon_level=%d hp=%.0f/%.0f extraction=%s hold=%.2f" % [
+        sim.elapsed, sim.finished, sim.outcome, sim.shots_fired, peak, sim.enemies.size(),
+        sim.kills, sim.player_level, sim.weapon_level, sim.player_hp, sim.player_max_hp,
+        sim.extraction_active, sim.extraction_hold])
+    get_tree().quit()

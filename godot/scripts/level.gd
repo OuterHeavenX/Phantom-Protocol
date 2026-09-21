@@ -118,3 +118,51 @@ func metres(units: float) -> float:
 
 func height_metres(units: float) -> float:
     return units * HEIGHT_SCALE
+
+## Is anything sight-blocking between two plan-space points?
+##
+## Ported from World.hasLineOfSight. Targeting needs this: without it the
+## operative's weapons lock whatever hostile is nearest in a straight line and
+## fire into the wall between them. In a nine-room facility that was 97 of
+## every 140 rounds.
+##
+## Slab method against each rectangle. Cover that does not block sight (low
+## cover) is ignored, exactly as the 2D game ignores it.
+func has_line_of_sight(from: Vector2, to: Vector2) -> bool:
+    var d := to - from
+    for o in solids():
+        if not bool(o.get("blocksSight", true)):
+            continue
+        var hw := float(o["w"]) * 0.5
+        var hh := float(o["h"]) * 0.5
+        var minx := float(o["x"]) - hw
+        var maxx := float(o["x"]) + hw
+        var miny := float(o["y"]) - hh
+        var maxy := float(o["y"]) + hh
+        var t0 := 0.0
+        var t1 := 1.0
+        var blocked := true
+        for axis in range(2):
+            var origin: float = from.x if axis == 0 else from.y
+            var delta: float = d.x if axis == 0 else d.y
+            var lo: float = minx if axis == 0 else miny
+            var hi: float = maxx if axis == 0 else maxy
+            if absf(delta) < 0.00001:
+                if origin < lo or origin > hi:
+                    blocked = false
+                    break
+                continue
+            var ta := (lo - origin) / delta
+            var tb := (hi - origin) / delta
+            if ta > tb:
+                var swap := ta
+                ta = tb
+                tb = swap
+            t0 = maxf(t0, ta)
+            t1 = minf(t1, tb)
+            if t0 > t1:
+                blocked = false
+                break
+        if blocked:
+            return false
+    return true
