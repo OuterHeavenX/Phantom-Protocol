@@ -45,4 +45,11 @@ lights_and_shadows/directional_shadow/size=4096
 lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
 anti_aliasing/quality/msaa_3d=2
 anti_aliasing/quality/screen_space_aa=1
+; Compatibility has no screen space antialiasing and no way to fake it, so
+; asking for FXAA there is an error per frame. Multisampling drops to 2x and
+; the shadow map halves on the web as well: a browser build is running on
+; whatever GPU the page happens to land on, including a phone's.
+anti_aliasing/quality/screen_space_aa.web=0
+anti_aliasing/quality/msaa_3d.web=1
+lights_and_shadows/directional_shadow/size.web=2048
 environment/defaults/default_clear_color=Color(0.55, 0.68, 0.85, 1)

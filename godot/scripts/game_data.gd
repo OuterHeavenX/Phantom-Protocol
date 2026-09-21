@@ -18,6 +18,19 @@ var op1: Dictionary = {}
 
 var _by_id: Dictionary = {}
 
+## True when the running build has a RenderingDevice, which means Forward+ or
+## Mobile rather than Compatibility.
+##
+## The web export cannot use Forward+ at all: browsers have no Vulkan, so a
+## browser build runs the Compatibility backend over WebGL2. Several things the
+## desktop look is built on simply do not exist there -- Decal nodes, screen
+## space ambient occlusion, screen space indirect lighting -- and asking for
+## them prints a warning per node and then ignores it. Code that would use one
+## checks here and takes another route instead of rendering a different game on
+## each platform by accident.
+static func has_rendering_device() -> bool:
+    return RenderingServer.get_rendering_device() != null
+
 func _ready() -> void:
     weapons = _load("weapons")
     enemies = _load("enemies")

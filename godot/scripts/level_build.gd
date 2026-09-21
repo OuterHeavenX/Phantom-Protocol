@@ -1091,10 +1091,19 @@ func _decal_tex(name: String) -> Texture2D:
     var path := DECAL_DIR % name
     return load(path) if ResourceLoader.exists(path) else null
 
+## A projected marking, or a flat quad standing in for one.
+##
+## `surface` is how far the marking's own surface lies from `pos` along the
+## projection direction, which is the node's local -Y. It is only read by the
+## quad fallback, which has no projection volume to work with and has to be
+## placed on the surface itself.
 func _decal(name: String, pos: Vector3, size: Vector3, rot: Vector3 = Vector3.ZERO,
-        energy: float = 1.0, fade: float = 0.35) -> void:
+        energy: float = 1.0, fade: float = 0.35, surface: float = -1.0) -> void:
     var tex := _decal_tex(name)
     if tex == null:
+        return
+    if not GameData.has_rendering_device():
+        _decal_quad(tex, pos, size, rot, energy, surface)
         return
     var d := Decal.new()
     d.texture_albedo = tex
@@ -1106,6 +1115,44 @@ func _decal(name: String, pos: Vector3, size: Vector3, rot: Vector3 = Vector3.ZE
     d.lower_fade = fade
     d.normal_fade = 0.35
     add_child(d)
+
+## Compatibility has no Decal node, so the marking becomes a textured quad.
+##
+## It is a worse thing than a decal in one specific way: a decal wraps onto
+## whatever geometry lies inside its box, while a quad is flat and will float
+## over anything that is not. That is acceptable here because every marking in
+## this sector is painted on a floor or a wall face, both of which are flat.
+## The quad is laid on that surface rather than hovering at the decal's origin,
+## and pushed 2 cm proud of it so it does not fight the surface for depth.
+func _decal_quad(tex: Texture2D, pos: Vector3, size: Vector3, rot: Vector3,
+        energy: float, surface: float) -> void:
+    var mesh := PlaneMesh.new()
+    # A Decal projects down its local -Y, so its footprint is its X by its Z
+    # and a PlaneMesh, which faces +Y over exactly those two axes, matches it.
+    mesh.size = Vector2(size.x, size.z)
+    var mi := MeshInstance3D.new()
+    mi.mesh = mesh
+    mi.rotation_degrees = rot
+    # How far down the projection axis the surface sits. Floor markings are
+    # authored well above the paving so their box reaches it, so without this
+    # they would hang in the air at knee height.
+    var drop: float = surface if surface >= 0.0 else maxf(0.0, pos.y - 0.02)
+    # Build the basis from the euler angles directly. Reading global_transform
+    # here returns identity and logs an error, because the node has not been
+    # added to the tree yet -- and the position being computed is what decides
+    # where to add it.
+    var basis := Basis.from_euler(Vector3(
+        deg_to_rad(rot.x), deg_to_rad(rot.y), deg_to_rad(rot.z)))
+    mi.position = pos - basis.y.normalized() * (drop - 0.02)
+    var m := StandardMaterial3D.new()
+    m.albedo_texture = tex
+    m.albedo_color = Color(1.0, 1.0, 1.0, clampf(energy, 0.0, 1.0))
+    m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    m.cull_mode = BaseMaterial3D.CULL_DISABLED
+    m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+    mi.material_override = m
+    mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    add_child(mi)
 
 func _build_decals() -> void:
     _decal_zone_labels()
@@ -1176,7 +1223,7 @@ func _decal_grime() -> void:
                 var at: Vector3 = Vector3(cx, tall * 0.55, cz) + axis * t + normal * (half_depth + 0.05) * face
                 # Turned so the projection points into the wall face.
                 var rot: Vector3 = Vector3(90.0 * face, 0.0, 0.0) if along_x else Vector3(0.0, 0.0, -90.0 * face)
-                _decal("streak", at, Vector3(2.0, 1.0, tall * 0.7), rot, 0.55, 0.5)
+                _decal("streak", at, Vector3(2.0, 1.0, tall * 0.7), rot, 0.55, 0.5, 0.05)
             # Soot at the base, where the ground meets the wall.
             if _pick(o, idx * 13 + int(face) * 2, 2) == 0:
                 continue

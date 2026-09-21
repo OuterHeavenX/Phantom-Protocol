@@ -28,14 +28,34 @@ var look_locked: bool = false
 
 var _bob := 0.0
 var _recoil := 0.0
+var _awaiting_click := false
 
 func _ready() -> void:
-    if not look_locked:
+    if look_locked:
+        return
+    # Browsers will not hand over the pointer except from inside a user
+    # gesture. Asking for it as the scene loads throws "A user gesture is
+    # required to request Pointer Lock" and the player is left looking
+    # straight ahead with a mouse that does nothing, which reads as a broken
+    # build rather than as a permission prompt. On the web the capture waits
+    # for the first click; on desktop there is nothing to wait for.
+    if OS.has_feature("web"):
+        _awaiting_click = true
+    else:
         Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 func _unhandled_input(event: InputEvent) -> void:
     if look_locked:
         return
+    if _awaiting_click and event is InputEventMouseButton and event.pressed:
+        # This runs inside the browser's gesture, which is the whole point.
+        Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+        _awaiting_click = false
+        return
+    # Escape releases the pointer, and the browser also releases it on its own,
+    # so the next click has to be able to take it back.
+    if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and OS.has_feature("web"):
+        _awaiting_click = true
     if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
         rotate_y(-event.relative.x * MOUSE_SENS)
         head.rotate_x(-event.relative.y * MOUSE_SENS)

@@ -194,11 +194,24 @@ func _build_environment() -> void:
     env.ambient_light_energy = 1.0
     env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 
+    # Compatibility has neither screen space occlusion nor screen space
+    # indirect lighting, and asking for them there prints a warning per call
+    # and then ignores it. The browser build loses both, which costs it some
+    # contact shading -- there is no cheap substitute, and a fake one applied
+    # only on the web would make the two builds diverge further, not less.
+    var rd := GameData.has_rendering_device()
+
     env.tonemap_mode = Environment.TONE_MAPPER_ACES
-    env.tonemap_exposure = 1.06
+    # Compatibility measures about half a stop brighter than Forward+ on the
+    # same scene: mean luminance 0.486 against 0.412, and a 95th percentile of
+    # 0.840 against 0.655. Most of that is the missing occlusion and indirect
+    # passes, which on Forward+ are subtracting light everywhere at once. The
+    # exposure is trimmed to put the browser build back in the same band as
+    # the desktop one rather than leaving it visibly washed out.
+    env.tonemap_exposure = 1.06 if rd else 0.87
     env.tonemap_white = 3.0
 
-    env.ssao_enabled = true
+    env.ssao_enabled = rd
     # SSAO multiplies the ambient term, and ambient is the only fill in shadow,
     # so a strong setting crushes every shaded corner to black. It is a contact
     # cue, not a lighting model.
@@ -213,7 +226,7 @@ func _build_environment() -> void:
     env.ssao_detail = 0.6
     env.ssao_light_affect = 0.0
 
-    env.ssil_enabled = true
+    env.ssil_enabled = rd
     # Bounce off sunlit stone is what makes a real shadow warm rather than
     # blue. This build's darks were at 0.008/0.029/0.071: nearly black, and the
     # wrong colour besides.
