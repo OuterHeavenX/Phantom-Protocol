@@ -9,3 +9,6 @@ assets/models/renders/
 tools/visual-qa-output/
 assets/sprites/architecture/*.png
 __pycache__/
+
+# dream-loop skill working directory
+.dream-loop/
