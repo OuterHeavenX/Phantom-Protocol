@@ -101,6 +101,10 @@ func _parse_args() -> void:
                 i += 1
         i += 1
 
+## Every render layer except the viewmodel's. World lights use this as their
+## cull mask so the weapon is lit only by the rig parented to the camera.
+const WORLD_LAYERS := 0xFFFFF & ~(1 << 1)
+
 func _build_environment() -> void:
     # Sun. A single hard key at a low-ish western elevation is what gives the
     # reference its long shadows and its warm/cool split: lit faces go amber,
@@ -126,6 +130,9 @@ func _build_environment() -> void:
     sun.shadow_bias = 0.02
     sun.shadow_normal_bias = 0.15
     sun.light_angular_distance = 0.6
+    # Skip the viewmodel layer. The weapon sits 30 cm from the eye and would
+    # take the key at an angle no world surface does; it has its own rig.
+    sun.light_cull_mask = WORLD_LAYERS
     add_child(sun)
 
     var env := Environment.new()
@@ -165,19 +172,27 @@ func _build_environment() -> void:
     # Exposure was the wrong lever for clipped highlights: it moved the whole
     # curve down and left 30% of the frame crushed under 0.06. The ratio is
     # what was actually wrong, so the fill comes up and the key comes down.
-    env.ambient_light_energy = 1.8
+    # Shadowed stone was sitting near a tenth of the luminance of the same
+    # stone in sun, where the references hold about a third: their shadows
+    # still read as stone, this build's read as holes cut in the frame.
+    env.ambient_light_energy = 2.4
     env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 
     env.tonemap_mode = Environment.TONE_MAPPER_ACES
-    env.tonemap_exposure = 0.95
+    env.tonemap_exposure = 0.99
     env.tonemap_white = 3.0
 
     env.ssao_enabled = true
     # SSAO multiplies the ambient term, and ambient is the only fill in shadow,
     # so a strong setting crushes every shaded corner to black. It is a contact
     # cue, not a lighting model.
-    env.ssao_radius = 0.55
-    env.ssao_intensity = 0.45
+    # Just under a metre. At 0.55 the occlusion was too tight to darken a
+    # wall/ground junction at all: the paving read the same brightness two
+    # centimetres from a wall as it did in the middle of the lane, and every
+    # solid in the sector looked like it was hovering a few millimetres off
+    # the floor rather than sitting on it.
+    env.ssao_radius = 0.9
+    env.ssao_intensity = 1.1
     env.ssao_power = 1.0
     env.ssao_detail = 0.6
     env.ssao_light_affect = 0.0
@@ -231,6 +246,7 @@ func _build_environment() -> void:
     bounce.light_color = Color(1.0, 0.86, 0.68)
     bounce.light_energy = 0.35
     bounce.shadow_enabled = false
+    bounce.light_cull_mask = WORLD_LAYERS
     add_child(bounce)
 
     env_node = WorldEnvironment.new()

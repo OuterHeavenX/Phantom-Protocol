@@ -44,12 +44,18 @@ const DOOR_OPENING := 3.4
 
 func _height_for(o: Dictionary) -> float:
     var base: float = float(HEIGHTS.get(String(o.get("type", "wall")), 7.2))
-    # A flat roofline over a whole sector reads as one extruded shape. The
-    # plan already carries a per-object `variant` (0-3) chosen by the 2D
-    # game's seeded RNG, so stepping height by it varies the skyline without
-    # introducing any randomness of our own and without moving a footprint.
+    # A flat roofline over a whole sector reads as one extruded shape, and
+    # every wall/sky boundary in the sector was a dead straight horizontal.
+    # This was meant to be driven by the plan's per-object `variant`, but the
+    # opening sector leaves that field null on every wall, so the step was
+    # always zero and every building came out the same height.
+    #
+    # The hash of the footprint does the job instead. Four steps of 0.8 m put
+    # typically 1.6 m between one side of a lane and the other, which is the
+    # difference the references carry between adjacent buildings. It moves no
+    # footprint, so the 2D simulation's collision is untouched.
     if base >= 5.0:
-        base += float(int(o.get("variant", 0))) * 0.62
+        base += float(_pick(o, 71, 5)) * 0.8
     return base
 
 func build(lvl: Level, mats: Dictionary) -> void:
@@ -229,6 +235,7 @@ func _build_solids() -> void:
             _windows(o, Vector3(ow, tall, oh), pos)
             _downpipes(o, Vector3(ow, tall, oh), pos)
             _ground_clutter(o, Vector3(ow, tall, oh), pos)
+            _rooftop(o, Vector3(ow, tall, oh), pos)
             # 0.28 m of overhang, not 0.175. A cornice that casts no shadow
             # line is just a stripe of a different colour.
             var cap := _box(Vector3(ow + 0.56, 0.45, oh + 0.56),
@@ -246,10 +253,7 @@ func _material_for_object(o: Dictionary) -> String:
         # the opening view drew the same material and the sector came out one
         # colour again, just a different one. It stays a pure function of the
         # plan, so the layout is identical on every load.
-        var seed := int(o.get("variant", 0)) * 2246822519
-        seed += int(round(float(o.get("x", 0.0)) * 0.37)) * 2654435761
-        seed += int(round(float(o.get("y", 0.0)) * 0.37)) * 3266489917
-        var v := posmod(seed >> 13, 8)
+        var v := _pick(o, 91, 8)
         # Warm stone takes half. The references are warm-dominant: tan and
         # terracotta carry the sector and grey concrete punctuates it, and
         # reversing that reads as an industrial estate rather than a town.
@@ -294,6 +298,8 @@ func _build_lights() -> void:
         if col.b > col.r:
             continue
         var lamp := OmniLight3D.new()
+        # Street lamps are world lights, so they skip the viewmodel layer too.
+        lamp.light_cull_mask = 0xFFFFF & ~(1 << 1)
         lamp.position = Vector3(level.metres(float(l["x"])), 2.9, level.metres(float(l["y"])))
         lamp.omni_range = maxf(3.0, level.metres(float(l.get("radius", 150))) * 2.2)
         lamp.light_color = Color(String(l.get("color", "#ffc781")))
@@ -304,6 +310,54 @@ func _build_lights() -> void:
 
 ## A base course at pavement level. Buildings in the reference all have one,
 ## and it is what stops a facade looking like it was dropped onto the ground.
+## Something standing on the roof, to break the skyline.
+##
+## Every wall/sky boundary in the sector was a dead straight horizontal line,
+## which is the silhouette of a extruded floor plan and of nothing else. The
+## references break their skylines constantly -- a vent stack, a water tank, an
+## aerial -- and those breaks are most of what makes a roofline read as a
+## building rather than as the top of a wall.
+##
+## Roughly one facade in six gets one. That is deliberately sparse: a stack on
+## every roof is crenellation, an irregular fringe that reads as visual noise
+## and makes the walls harder to judge as cover. Everything here stands ON an
+## existing solid, so the 2D simulation's collision is untouched.
+func _rooftop(o: Dictionary, size: Vector3, pos: Vector3) -> void:
+    if _pick(o, 41, 6) != 0:
+        return
+    # Keep it on the roof. A stack placed past the parapet would hang over the
+    # lane below, where nothing supports it and nothing blocks it.
+    var half := Vector2(maxf(0.4, size.x * 0.5 - 0.7), maxf(0.4, size.z * 0.5 - 0.7))
+    var off := Vector3(
+        (float(_pick(o, 42, 9)) / 8.0 - 0.5) * 2.0 * half.x,
+        0.0,
+        (float(_pick(o, 43, 9)) / 8.0 - 0.5) * 2.0 * half.y)
+    var top := size.y + 0.45
+    var at := Vector3(pos.x + off.x, top, pos.z + off.z)
+    match _pick(o, 44, 3):
+        0:
+            # Extract stack: a squat housing with a cowl over it.
+            var hb := 1.15
+            _box(Vector3(1.0, hb, 1.0), at + Vector3(0, hb * 0.5, 0), _mat("machinery"), false)
+            _box(Vector3(1.35, 0.14, 1.35), at + Vector3(0, hb + 0.07, 0), _mat("kerb"), false)
+            _box(Vector3(0.42, 1.5, 0.42), at + Vector3(0.0, hb + 0.85, 0.0), _mat("machinery"), false)
+        1:
+            # Water tank on short legs.
+            var lg := 0.7
+            for sx in [-0.55, 0.55]:
+                for sz in [-0.55, 0.55]:
+                    _box(Vector3(0.14, lg, 0.14),
+                        at + Vector3(sx, lg * 0.5, sz), _mat("machinery"), false)
+            _box(Vector3(1.5, 1.25, 1.5), at + Vector3(0, lg + 0.625, 0), _mat("container"), false)
+            _box(Vector3(1.62, 0.1, 1.62), at + Vector3(0, lg + 1.3, 0), _mat("kerb"), false)
+        _:
+            # Aerial mast: thin, tall, and almost all silhouette.
+            _box(Vector3(0.5, 0.35, 0.5), at + Vector3(0, 0.175, 0), _mat("kerb"), false)
+            _box(Vector3(0.11, 3.1, 0.11), at + Vector3(0, 1.9, 0), _mat("machinery"), false)
+            for i in range(2):
+                var y := 2.35 + float(i) * 0.62
+                _box(Vector3(1.05, 0.07, 0.07), at + Vector3(0, y, 0), _mat("machinery"), false)
+
 func _plinth(size: Vector3, pos: Vector3) -> void:
     var p := _box(Vector3(size.x + 0.28, 0.85, size.z + 0.28),
         Vector3(pos.x, 0.425, pos.z), _mat("trim"), false)
@@ -431,15 +485,36 @@ func _descendants(n: Node) -> Array:
         out.append_array(_descendants(c))
     return out
 
-## A stable pseudo-random value per (object, slot). The plan carries a seeded
-## `variant` per object from the 2D game, so dressing derived from it is the
-## same on every run without this file owning any randomness of its own.
+## A stable pseudo-random value per (object, slot).
+##
+## The plan carries a seeded `variant` per object from the 2D game, so dressing
+## derived from it is the same on every run without this file owning any
+## randomness of its own.
+##
+## The mixing matters more than it looks. The first version summed the
+## coordinates against odd multipliers and took the modulo directly, and every
+## wall in the sector came out dressed identically: plan coordinates are all
+## multiples of ten, so the sum is always a multiple of ten too, and it is
+## therefore constant modulo 2 and modulo 5 -- which is most of the moduli the
+## dressing asks for. Two walls facing each other across the lane drew the same
+## pipe at the same height with the same panel beside it, and a mirrored street
+## is the fastest way to tell a player they are standing in a greybox.
+##
+## Running the accumulator through an avalanche step first breaks that: each
+## shift-xor-multiply round spreads every input bit across the whole word, so
+## the low bits the modulo reads stop tracking the coordinate grid.
+func _hash64(v: int) -> int:
+    var h := v
+    h = (h ^ (h >> 33)) * -49064778989728563      # 0xff51afd7ed558ccd
+    h = (h ^ (h >> 29)) * -4265267296055464877    # 0xc4ceb9fe1a85ec53
+    return h ^ (h >> 32)
+
 func _pick(o: Dictionary, slot: int, modulo: int) -> int:
-    var h := int(o.get("variant", 0)) * 2654435761
-    h += int(absf(float(o.get("x", 0.0)))) * 40503
-    h += int(absf(float(o.get("y", 0.0)))) * 12289
+    var h := int(o.get("variant", 0) if o.get("variant") != null else 0) * 2654435761
+    h += int(round(float(o.get("x", 0.0)))) * 40503
+    h += int(round(float(o.get("y", 0.0)))) * 12289
     h += slot * 2246822519
-    return int(absf(float(h % modulo)))
+    return absi(_hash64(h)) % modulo
 
 func _build_props() -> void:
     _dress_walls()
@@ -687,8 +762,12 @@ func _decal_zone_labels() -> void:
         var cz := level.metres(float(z["y"]))
         # Offset off the room centre so the label is not always under the
         # operative's feet the moment they walk in.
-        _decal("label_%d" % i, Vector3(cx, 0.35, cz - 3.2), Vector3(9.5, 1.2, 3.0), Vector3.ZERO, 0.85)
-        _decal("number_%d" % i, Vector3(cx + 5.6, 0.35, cz + 1.4), Vector3(3.0, 1.2, 3.0), Vector3(0, 12.0, 0), 0.85)
+        # Small and faded. At 9.5 m across and 0.85 opacity the room name was
+        # the highest-contrast element in the frame -- brighter than the
+        # operative's own weapon -- and painted floor lettering is never the
+        # thing a player should be reading first. Worn stencil, not signage.
+        _decal("label_%d" % i, Vector3(cx, 0.35, cz - 3.2), Vector3(5.4, 1.2, 1.7), Vector3.ZERO, 0.40)
+        _decal("number_%d" % i, Vector3(cx + 5.6, 0.35, cz + 1.4), Vector3(2.0, 1.2, 2.0), Vector3(0, 12.0, 0), 0.44)
 
 ## Hazard chevrons across every doorway threshold, and an arrow leading in.
 func _decal_thresholds() -> void:

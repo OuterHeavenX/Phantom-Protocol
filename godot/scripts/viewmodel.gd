@@ -30,6 +30,11 @@ const ADS_POS := Vector3(0.0, -0.050, -0.34)
 ## expressed as one number.
 const VM_SCALE := 0.78
 
+## Render layer 2, reserved for the viewmodel. World lights clear this bit from
+## their cull masks and the viewmodel's own lights set only this bit, so the
+## two lighting rigs never touch each other.
+const VM_LAYER := 1 << 1
+
 var model: Node3D
 var muzzle: Node3D
 var flash: OmniLight3D
@@ -50,32 +55,48 @@ func _ready() -> void:
     rotation_degrees = REST_ROT
     # The viewmodel must never cast into the world or receive the world's
     # shadows: at 30 cm from the near plane it would self-shadow into mush.
+    #
+    # It also lives on its own render layer, and the world's lights are told
+    # to skip that layer. A weapon held 30 cm from the eye receives the sun at
+    # a grazing angle no world surface does, so when the key light was raised
+    # for the sector the glove's highlights blew to white while its albedo was
+    # still 0.03 -- the hand read as a row of pale sausages. Lighting the
+    # viewmodel only from its own rig is how shooters keep a weapon looking
+    # the same whether the player is in a sunlit street or a dark stairwell.
     for child in _all_descendants(model):
         if child is GeometryInstance3D:
             child.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+            child.layers = VM_LAYER
 
-    # The weapon is the nearest object to the eye and the only one with no sky
-    # above it, so scene ambient alone leaves it a black cutout -- measured at
-    # 33% of its pixels under 0.12 luminance against the references' 3%. A dim
-    # camera-parented key gives it form without lighting the world.
+    # With the world's lights culled off the viewmodel layer, this rig is the
+    # only thing lighting the weapon, so it carries the whole exposure rather
+    # than topping up the sun. Warm key from the left, matching the sector's
+    # own sun direction, because a blue-lit weapon in an amber street is
+    # exactly what makes a viewmodel look composited in rather than held.
     var key := OmniLight3D.new()
     key.position = Vector3(-0.22, 0.30, 0.16)
     # Warm, to match the world. A blue-lit weapon in an amber street is
     # exactly what makes a viewmodel look composited in rather than held.
     key.light_color = Color(1.0, 0.92, 0.80)
-    key.light_energy = 0.32
+    # Sky ambient is not cull-masked, so it still reaches the weapon and
+    # already carries most of its exposure; this rig only has to add shape.
+    # Set to 2.1 the glove blew to near-white at an albedo of 0.03, which is
+    # the same overcorrection the sector's key light needed undoing from.
+    key.light_energy = 0.85
     key.omni_range = 1.4
     key.shadow_enabled = false
+    key.light_cull_mask = VM_LAYER
     add_child(key)
 
-    # A dim cool rim from upper left, so the silhouette holds against a dark
-    # background without warming the shadow side.
+    # A cool rim from upper right, so the silhouette holds against a bright
+    # pavement without warming the shadow side.
     var rim := OmniLight3D.new()
     rim.position = Vector3(0.26, 0.24, -0.10)
     rim.light_color = Color(0.78, 0.86, 1.0)
-    rim.light_energy = 0.22
+    rim.light_energy = 0.5
     rim.omni_range = 1.2
     rim.shadow_enabled = false
+    rim.light_cull_mask = VM_LAYER
     add_child(rim)
 
     muzzle = Node3D.new()
