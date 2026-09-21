@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/sandstone_albedo.png-7a9e61b297730e5c2596779e
 
 [params]
 
-compress/mode=0
+compress/mode=4
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

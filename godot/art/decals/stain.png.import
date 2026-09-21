@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/stain.png-5125b0186f6002bbb4d4d6abdb7f30ca.ct
 
 [params]
 
-compress/mode=0
+compress/mode=4
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

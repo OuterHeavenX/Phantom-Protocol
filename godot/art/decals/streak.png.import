@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/streak.png-2c65c90d6653167659d4817c8ba88fca.c
 
 [params]
 
-compress/mode=0
+compress/mode=4
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

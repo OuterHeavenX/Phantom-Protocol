@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/label_8.png-5534f23044f30ab53e7042b38f47603f.
 
 [params]
 
-compress/mode=0
+compress/mode=4
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

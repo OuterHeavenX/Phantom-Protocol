@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/sky_panorama.png-5165b6652b6db02d962e85ecd086
 
 [params]
 
-compress/mode=0
+compress/mode=4
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
