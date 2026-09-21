@@ -15,6 +15,7 @@ const ViewmodelC := preload("res://scripts/viewmodel.gd")
 const SimC := preload("res://scripts/sim.gd")
 const HudC := preload("res://scripts/hud.gd")
 const TouchControlsC := preload("res://scripts/touch_controls.gd")
+const GunFeelC := preload("res://scripts/gunfeel.gd")
 
 var level: Level
 var player: CharacterBody3D
@@ -34,6 +35,7 @@ var simtest_seconds: float = 0.0
 var sim: Sim
 var hud: Hud
 var touch_controls: CanvasLayer = null
+var gunfeel: Node3D = null
 var viewmodel: Node3D
 var _enemy_nodes: Dictionary = {}
 var _char_cache: Dictionary = {}
@@ -434,6 +436,10 @@ func _start_contract() -> void:
     sim.enemy_spawned.connect(_on_enemy_spawned)
     sim.enemy_died.connect(_on_enemy_died)
     sim.weapon_fired.connect(_on_weapon_fired)
+    gunfeel = GunFeelC.new()
+    add_child(gunfeel)
+    gunfeel.setup(viewmodel.muzzle if viewmodel else null,
+        String(weapon_def.get("voice", "pistol")))
 
     hud = HudC.new()
     hud.sim = sim
@@ -495,9 +501,14 @@ func _sync_enemies() -> void:
         if to_player.length() > 1.0:
             node.rotation.y = atan2(to_player.x, to_player.y) + PI
 
-func _on_weapon_fired(_dir: Vector2) -> void:
+func _on_weapon_fired(_dir: Vector2, target_pos: Vector2) -> void:
     if viewmodel:
         viewmodel.fire_kick(1.0)
+    if gunfeel and viewmodel and viewmodel.muzzle:
+        # Chest height on the target rather than its feet, so the tracer runs
+        # to where the contact is rather than to the paving under it.
+        gunfeel.fire(viewmodel.muzzle.global_position,
+            level.to_world(target_pos, 1.2))
 
 ## A beacon at the extraction point, lit once the contract window closes.
 func _build_extraction_marker() -> void:

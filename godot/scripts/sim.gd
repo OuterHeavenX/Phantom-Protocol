@@ -82,7 +82,10 @@ var weapon_level: int = 1
 
 signal enemy_spawned(e)
 signal enemy_died(e)
-signal weapon_fired(target_dir)
+## `target_pos` is where the round is actually going, in plan coordinates, so
+## the presentation can draw a tracer that agrees with the hit rather than
+## guessing an endpoint from the direction and the weapon's range.
+signal weapon_fired(target_dir, target_pos)
 signal player_hurt(amount)
 signal level_gained(level)
 
@@ -387,7 +390,7 @@ func _step_weapon(dt: float) -> void:
             "hit": [],
             "life": _stat("range", 500.0) / maxf(1.0, _stat("speed", 600.0)),
         })
-    weapon_fired.emit(to.normalized())
+    weapon_fired.emit(to.normalized(), Vector2(target["pos"]))
 
 ## Target selection by the weapon's own `targeting` rule.
 func _acquire_target():
