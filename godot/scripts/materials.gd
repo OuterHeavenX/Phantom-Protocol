@@ -56,14 +56,20 @@ static func pbr(name: String, uv_scale: float, tint: Color = Color.WHITE, metal_
 ## paving setts about 18 cm, container corrugations about 6 cm.
 static func build() -> Dictionary:
     return {
-        "wall": pbr("sandstone", 0.30, Color(1.03, 0.99, 0.93)),
-        "perimeter": pbr("sandstone", 0.26, Color(0.92, 0.88, 0.82)),
-        "vault": pbr("steel", 0.50, Color(1.30, 1.36, 1.42), 0.20),
-        "pillar": pbr("plaster", 0.30, Color(1.0, 0.98, 0.93)),
-        "machinery": pbr("steel", 0.55, Color(1.55, 1.60, 1.62), 0.18),
-        "container": pbr("crate", 0.50, Color(1.0, 0.94, 0.86), 0.12),
-        "floor": pbr("concrete", 0.20, Color(1.0, 0.98, 0.94)),
-        "ground": pbr("cobble", 0.36, Color(1.0, 0.96, 0.90)),
-        "trim": pbr("plaster", 0.30, Color(0.86, 0.83, 0.78)),
-        "cornice": pbr("plaster", 0.34, Color(0.78, 0.74, 0.68)),
+        # Tints are all at or below 0.85 per channel. Several were above 1.0,
+        # which multiplies the texture past unity: physically impossible for a
+        # dielectric, and a direct cause of the clipped highlights measured in
+        # the first round. Sunlit limestone is about 0.45-0.55 albedo and
+        # weathered concrete 0.30-0.40, so these sit where real surfaces do.
+        "wall": pbr("sandstone", 0.30, Color(0.82, 0.79, 0.74)),
+        "perimeter": pbr("sandstone", 0.26, Color(0.74, 0.71, 0.66)),
+        "vault": pbr("steel", 0.50, Color(0.72, 0.75, 0.78), 0.20),
+        "pillar": pbr("plaster", 0.30, Color(0.80, 0.78, 0.73)),
+        "machinery": pbr("steel", 0.55, Color(0.78, 0.80, 0.82), 0.18),
+        "container": pbr("crate", 0.50, Color(0.76, 0.72, 0.66), 0.12),
+        "floor": pbr("concrete", 0.20, Color(0.74, 0.73, 0.70)),
+        "ground": pbr("cobble", 0.36, Color(0.78, 0.75, 0.71)),
+        "trim": pbr("plaster", 0.30, Color(0.80, 0.77, 0.71)),
+        "cornice": pbr("plaster", 0.34, Color(0.70, 0.67, 0.62)),
+        "kerb": pbr("concrete", 0.55, Color(0.62, 0.61, 0.58)),
     }

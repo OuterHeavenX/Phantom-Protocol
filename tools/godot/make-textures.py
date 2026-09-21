@@ -42,13 +42,45 @@ def lattice(freq, rng):
     c = gw[np.ix_(y0 + 1, x0)]; d = gw[np.ix_(y0 + 1, x0 + 1)]
     return (a * (1 - fx) * (1 - fy) + b * fx * (1 - fy) + c * (1 - fx) * fy + d * fx * fy)
 
-def fbm(octaves=5, base=4, gain=0.5, lac=2, rng=None):
+def fbm(octaves=5, base=4, gain=0.68, lac=2, rng=None):
+    """Fractal noise.
+
+    `gain` was 0.5, which puts the sixth octave at 1/32 amplitude -- below the
+    point where it contributes anything visible. The result was a texture whose
+    entire content was a 64-170 px blur stretched to 1024, and the build
+    measured half the per-pixel gradient energy of the reference screenshots.
+    0.68 keeps the fine octaves alive.
+    """
     rng = rng or rng_global
     out = np.zeros((N, N)); amp = 1.0; tot = 0.0; f = base
     for _ in range(octaves):
         out += lattice(max(2, int(f)), rng) * amp
         tot += amp; amp *= gain; f *= lac
     return out / tot
+
+
+def grain_fn(freq=384, rng=None):
+    """A near-Nyquist layer.
+
+    Every material needs content at 2-4 px or the surface dissolves into paint
+    the moment the camera is more than a couple of metres away. `lattice` at
+    this frequency is the cheapest way to get it and still tile.
+    """
+    rng = rng or rng_global
+    return lattice(freq, rng)
+
+
+def cell_ids(n, rng=None):
+    """Per-cell random value on an n x n grid, as a full-resolution field.
+
+    Used for per-block and per-sett variation: without it every block in a wall
+    shares one base value and the courses read as printed wallpaper.
+    """
+    rng = rng or rng_global
+    g = rng.random((n, n))
+    idx_y = (np.arange(N) * n // N)[:, None]
+    idx_x = (np.arange(N) * n // N)[None, :]
+    return g[idx_y, idx_x]
 
 def norm01(a):
     lo, hi = a.min(), a.max()
@@ -105,24 +137,39 @@ def mat_sandstone(out):
     # Patches where the stucco has come away and the block shows through.
     spall = (fbm(4, 3) > 0.66).astype(np.float64)
     spall = np.clip(spall * (0.5 + 0.5 * fbm(5, 8)), 0, 1)
-    h = norm01(grain * 0.35 + blotch * 0.4 - mortar * 0.7 - spall * 0.25)
-    base = norm01(grain * 0.5 + blotch * 0.5)
+    # Ragged the joint: a constant-width soft stroke reads as a drawn grid.
+    mortar = np.clip(mortar - (grain > 0.62) * 0.55, 0, 1)
+    # Per-block value jitter. Blocks are one course tall and about 1.5 wide.
+    blocks = cell_ids(8) * 0.5 + cell_ids(12) * 0.5
+    fine = grain_fn()
+    h = norm01(grain * 0.30 + blotch * 0.32 - mortar * 0.7 - spall * 0.25 + fine * 0.14)
+    base = norm01(grain * 0.38 + blotch * 0.34 + blocks * 0.28)
     alb = tint(base, (150, 128, 100), (214, 196, 165))
+    # +/-12% per block, which is what stops a wall reading as printed.
+    alb = alb * (0.88 + 0.24 * blocks)[..., None]
     alb = alb * (1 - 0.30 * mortar[..., None])
     alb = alb * (1 - 0.18 * spall[..., None]) + np.array([0.13, 0.10, 0.07]) * spall[..., None]
-    rough = 0.72 + 0.16 * norm01(grain) + 0.08 * mortar
+    alb = alb * (0.94 + 0.12 * fine)[..., None]
+    rough = 0.72 + 0.16 * norm01(grain) + 0.08 * mortar + 0.05 * fine
     write_material(out, "sandstone", alb, h, rough)
 
 def mat_plaster(out):
-    """Painted plaster — the blue-grey walls in the references."""
+    """Warm plaster -- trim, plinths, cornices, window surrounds.
+
+    This started blue-grey, and materials.gd puts it on every plinth, cornice,
+    lintel and window frame in the sector. The effect was cold blue trim
+    against warm walls, where the references have warm cream limestone and
+    painted stucco throughout.
+    """
     grain = fbm(6, 10)
     wear = fbm(4, 3)
     drip = np.clip(fbm(5, 4) - 0.5, 0, 1) * np.linspace(0, 1, N)[:, None]
-    h = norm01(grain * 0.5 + wear * 0.3 + drip * 0.4)
-    base = norm01(grain * 0.4 + wear * 0.6)
-    alb = tint(base, (96, 112, 122), (166, 182, 188))
+    fine = grain_fn()
+    h = norm01(grain * 0.42 + wear * 0.26 + drip * 0.34 + fine * 0.16)
+    base = norm01(grain * 0.34 + wear * 0.50 + fine * 0.16)
+    alb = tint(base, (168, 152, 128), (226, 214, 192))
     alb = alb * (1 - 0.35 * drip[..., None]) + np.array([0.22, 0.20, 0.17]) * drip[..., None]
-    rough = 0.55 + 0.25 * norm01(wear) + 0.15 * drip
+    rough = 0.55 + 0.25 * norm01(wear) + 0.15 * drip + 0.06 * fine
     write_material(out, "plaster", alb, h, rough)
 
 def mat_concrete(out):
@@ -130,12 +177,19 @@ def mat_concrete(out):
     grain = fbm(6, 12)
     agg = (fbm(6, 40) > 0.62).astype(np.float64) * 0.5
     seams = np.clip(stripes(256, 2, 0) + stripes(256, 2, 1), 0, 1)
-    cracks = (np.abs(fbm(4, 5) - 0.5) < 0.012).astype(np.float64)
-    h = norm01(grain * 0.5 + agg * 0.3 - seams * 0.8 - cracks * 0.6)
-    base = norm01(grain * 0.7 + agg * 0.3)
+    # The old crack layer was a level set of a smooth low-frequency fbm --
+    # `abs(f - 0.5) < 0.012` -- which is a single long smoothly meandering
+    # closed loop. On the floor it drew a black marker doodle across the whole
+    # courtyard. Cracks now come from a ridged high-frequency field, so they
+    # branch and terminate the way cracks do, and they are shallow.
+    ridged = 1.0 - np.abs(2.0 * fbm(4, 26) - 1.0)
+    cracks = np.clip((ridged - 0.93) * 14.0, 0, 1)
+    fine = grain_fn()
+    h = norm01(grain * 0.42 + agg * 0.26 - seams * 0.8 - cracks * 0.35 + fine * 0.16)
+    base = norm01(grain * 0.56 + agg * 0.26 + fine * 0.18)
     alb = tint(base, (78, 78, 76), (142, 140, 133))
-    alb = alb * (1 - 0.35 * seams[..., None]) * (1 - 0.45 * cracks[..., None])
-    rough = 0.80 + 0.12 * norm01(grain) - 0.10 * agg
+    alb = alb * (1 - 0.30 * seams[..., None]) * (1 - 0.30 * cracks[..., None])
+    rough = 0.80 + 0.12 * norm01(grain) - 0.10 * agg + 0.06 * fine
     write_material(out, "concrete", alb, h, rough)
 
 def mat_cobble(out):
@@ -148,11 +202,19 @@ def mat_cobble(out):
     d = np.minimum(np.minimum(gx, 1 - gx), np.minimum(gy, 1 - gy))
     stone = np.clip(d * 6.0, 0, 1)
     grain = fbm(5, 16)
-    h = norm01(stone * 0.75 + grain * 0.25)
-    base = norm01(stone * 0.4 + grain * 0.6)
+    fine = grain_fn()
+    # Per-sett value. Every stone sharing one base value is what made the
+    # paving read as a moulded rubber mat.
+    setts = cell_ids(N // cell)
+    # Joints carry packed dirt rather than just being darker stone.
+    joint = 1.0 - stone
+    h = norm01(stone * 0.66 + grain * 0.20 + fine * 0.14)
+    base = norm01(stone * 0.32 + grain * 0.46 + fine * 0.22)
     alb = tint(base, (92, 86, 76), (168, 158, 140))
-    alb = alb * (0.55 + 0.45 * stone[..., None])
-    rough = 0.70 + 0.2 * norm01(grain) + 0.1 * (1 - stone)
+    alb = alb * (0.72 + 0.56 * setts)[..., None]
+    alb = alb * (0.62 + 0.38 * stone[..., None])
+    alb = alb * (1 - 0.34 * joint[..., None]) + np.array([0.11, 0.10, 0.08]) * joint[..., None]
+    rough = 0.66 + 0.18 * norm01(grain) + 0.16 * joint + 0.06 * fine
     write_material(out, "cobble", alb, h, rough)
 
 def mat_steel(out):
@@ -161,14 +223,20 @@ def mat_steel(out):
     panel = np.clip(stripes(256, 3, 0) + stripes(170, 3, 1), 0, 1)
     px = np.mod(np.arange(N)[None, :], 170); py = np.mod(np.arange(N)[:, None], 256)
     rivets = (((px - 24) ** 2 + (py - 24) ** 2) < 90).astype(np.float64)
-    rust = np.clip(fbm(4, 4) - 0.58, 0, 1) * 3.0
-    h = norm01(grain * 0.2 - panel * 0.8 + rivets * 0.9 + rust * 0.2)
-    base = norm01(grain)
+    # Rust biased onto seams and rivets, where water sits, and at a frequency
+    # that reads as corrosion rather than as a camouflage splotch.
+    rust_field = fbm(5, 18)
+    rust = np.clip((rust_field - 0.52) * 2.6, 0, 1)
+    rust = np.clip(rust * (0.45 + 0.55 * np.clip(panel + rivets, 0, 1)) + rust * 0.35, 0, 1)
+    fine = grain_fn()
+    h = norm01(grain * 0.18 - panel * 0.8 + rivets * 0.9 + rust * 0.22 + fine * 0.16)
+    base = norm01(grain * 0.7 + fine * 0.3)
     alb = tint(base, (58, 66, 70), (108, 118, 122))
     alb = alb * (1 - np.clip(rust, 0, 1)[..., None]) + np.array([0.36, 0.19, 0.10]) * np.clip(rust, 0, 1)[..., None]
     alb = alb * (1 - 0.3 * panel[..., None])
-    rough = 0.42 + 0.30 * np.clip(rust, 0, 1) + 0.12 * norm01(grain)
-    metal = np.clip(0.85 - np.clip(rust, 0, 1) * 0.7, 0, 1)
+    # Rust is not just a colour: it is a roughness jump and a loss of metal.
+    rough = 0.38 + 0.46 * np.clip(rust, 0, 1) + 0.12 * norm01(grain) + 0.05 * fine
+    metal = np.clip(0.85 - np.clip(rust, 0, 1) * 0.78, 0, 1)
     write_material(out, "steel", alb, h, rough, metal)
 
 def mat_crate(out):
@@ -177,11 +245,12 @@ def mat_crate(out):
     grain = fbm(5, 12)
     scuff = np.clip(fbm(4, 6) - 0.55, 0, 1) * 2.5
     bands = stripes(512, 6, 0)
-    h = norm01(corr * 0.7 + grain * 0.2 - bands * 0.5)
-    base = norm01(corr * 0.35 + grain * 0.65)
+    fine = grain_fn()
+    h = norm01(corr * 0.62 + grain * 0.18 - bands * 0.5 + fine * 0.18)
+    base = norm01(corr * 0.28 + grain * 0.54 + fine * 0.18)
     alb = tint(base, (104, 74, 46), (176, 132, 82))
     alb = alb * (1 - np.clip(scuff, 0, 1)[..., None] * 0.6)
-    rough = 0.55 + 0.30 * np.clip(scuff, 0, 1) + 0.1 * norm01(grain)
+    rough = 0.55 + 0.30 * np.clip(scuff, 0, 1) + 0.1 * norm01(grain) + 0.06 * fine
     write_material(out, "crate", alb, h, rough, 0.35)
 
 if __name__ == "__main__":

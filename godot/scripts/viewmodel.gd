@@ -13,15 +13,14 @@ const MODEL := "res://art/models/viewmodel_needle.glb"
 ## Rest pose, in camera space. Low and to the right, barrel angled a few
 ## degrees inboard so the suppressor reads across the frame rather than
 ## pointing at the vanishing point.
-const REST_POS := Vector3(0.132, -0.148, -0.335)
-const REST_ROT := Vector3(-2.0, 5.5, 1.5)
-const ADS_POS := Vector3(0.0, -0.052, -0.235)
-## The weapon is authored at true scale (a 9.8 cm slide). Held that close to a
-## 90-degree camera it reads smaller than the references, where the sidearm
-## fills most of the lower right. Games solve this by drawing the viewmodel
-## with its own narrow FOV; scaling it up here is the same trick with one
-## number instead of a second camera.
-const VM_SCALE := 1.35
+const REST_POS := Vector3(0.178, -0.170, -0.300)
+const REST_ROT := Vector3(-3.0, 7.0, 0.5)
+const ADS_POS := Vector3(0.0, -0.056, -0.250)
+## The weapon is authored at true scale. It needed scaling up while the camera
+## was at 127 degrees horizontal; with the FOV corrected to a realistic 70
+## vertical it is the right size on its own, and scaling geometry to fix a
+## framing problem distorts the slide's perspective against the hand.
+const VM_SCALE := 1.0
 
 var model: Node3D
 var muzzle: Node3D
@@ -46,6 +45,18 @@ func _ready() -> void:
     for child in _all_descendants(model):
         if child is GeometryInstance3D:
             child.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+    # The weapon is the nearest object to the eye and the only one with no sky
+    # above it, so scene ambient alone leaves it a black cutout -- measured at
+    # 33% of its pixels under 0.12 luminance against the references' 3%. A dim
+    # camera-parented key gives it form without lighting the world.
+    var key := OmniLight3D.new()
+    key.position = Vector3(-0.22, 0.30, 0.16)
+    key.light_color = Color(0.86, 0.90, 1.0)
+    key.light_energy = 1.1
+    key.omni_range = 1.4
+    key.shadow_enabled = false
+    add_child(key)
 
     muzzle = Node3D.new()
     muzzle.position = Vector3(0.0, 0.0115, -0.19)

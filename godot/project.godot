@@ -31,7 +31,7 @@ ability={"deadzone":0.2,"events":[{"resource_local_to_scene":false,"type":"Input
 
 [rendering]
 renderer/rendering_method="forward_plus"
-textures/default_filters/anisotropic_filtering_level=4
+textures/default_filters/anisotropic_filtering_level=16
 lights_and_shadows/directional_shadow/size=4096
 lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
 anti_aliasing/quality/msaa_3d=2
