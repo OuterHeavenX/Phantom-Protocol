@@ -93,7 +93,10 @@ static func build() -> Dictionary:
 ## reflection, and dark enough to read as an interior behind it.
 static func glass() -> StandardMaterial3D:
     var m := StandardMaterial3D.new()
-    m.albedo_color = Color(0.055, 0.070, 0.078)
-    m.roughness = 0.12
+    # Near black. A window is read almost entirely by being much darker than
+    # the wall around it; sky ambient alone lifts anything lighter than this
+    # until the opening disappears back into the facade.
+    m.albedo_color = Color(0.030, 0.038, 0.046)
+    m.roughness = 0.10
     m.metallic = 0.0
     return m

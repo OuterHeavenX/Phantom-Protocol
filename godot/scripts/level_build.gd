@@ -65,6 +65,7 @@ func build(lvl: Level, mats: Dictionary) -> void:
     _build_solids()
     _build_doorframes()
     _build_props()
+    _build_spans()
     _build_decals()
     _build_lights()
 
@@ -236,6 +237,7 @@ func _build_solids() -> void:
             _downpipes(o, Vector3(ow, tall, oh), pos)
             _ground_clutter(o, Vector3(ow, tall, oh), pos)
             _rooftop(o, Vector3(ow, tall, oh), pos)
+            _awning(o, Vector3(ow, tall, oh), pos)
             # 0.28 m of overhang, not 0.175. A cornice that casts no shadow
             # line is just a stripe of a different colour.
             var cap := _box(Vector3(ow + 0.56, 0.45, oh + 0.56),
@@ -380,14 +382,26 @@ func _windows(o: Dictionary, size: Vector3, pos: Vector3) -> void:
     var span: float = size.x if along_x else size.z
     if span < 5.0 or size.y < 5.0:
         return
-    var variant := int(o.get("variant", 0))
-    var spacing := 3.6 + float(variant) * 0.35
-    var count := int(floor((span - 2.0) / spacing))
+    # An 8 m facade at 3.6 m spacing works out to exactly one window, and the
+    # opening sector is built almost entirely from 8 m wall segments, so most
+    # facades carried a single opening near one end and read as blank. Real
+    # buildings put windows on roughly a 2.5 to 3 m grid.
+    var spacing := 2.7 + float(_pick(o, 51, 3)) * 0.3
+    var count := int(floor((span - 1.4) / spacing))
     if count < 1:
         return
     var depth: float = (size.z if along_x else size.x)
     var start := -(float(count - 1) * spacing) * 0.5
-    var rows := [2.6, 5.4] if size.y > 8.0 else [2.9]
+    # A storey every 2.7 m, as many as the wall is tall enough to carry. One
+    # row on a seven-metre facade left five metres of unbroken masonry above
+    # it, which is most of what made the lanes read as a greybox.
+    var rows: Array = [2.5]
+    if size.y > 7.0:
+        rows.append(5.2)
+    if size.y > 10.0:
+        rows.append(7.9)
+    if size.y > 12.6:
+        rows.append(10.6)
     for r in rows:
         if r + 1.5 > size.y - 0.6:
             continue
@@ -397,29 +411,47 @@ func _windows(o: Dictionary, size: Vector3, pos: Vector3) -> void:
                 pos.x + (off if along_x else 0.0),
                 r,
                 pos.z + (0.0 if along_x else off))
-            var w := 1.15
-            var h := 1.5
-            var frame_size := Vector3(w + 0.26, h + 0.26, depth + 0.16) if along_x else Vector3(depth + 0.16, h + 0.26, w + 0.26)
-            var glass_size := Vector3(w, h, depth + 0.22) if along_x else Vector3(depth + 0.22, h, w)
-            var frame := _box(frame_size, centre, _mat("trim"), false)
-            frame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-            # Glass set back behind the frame, so the reveal casts into the
-            # opening. The previous recess was an untextured near-black box --
-            # the only flat-paint surface left in the build, and it read as a
-            # hole cut in cardboard.
-            var inset := 0.12
-            var glass_pos: Vector3 = centre + (Vector3(0, 0, -inset) if along_x else Vector3(-inset, 0, 0))
-            var glass := _box(glass_size * 0.94, glass_pos, _mat("glass"), false)
+            var w := 1.22
+            var h := 1.62
+            # The frame used to be a solid box the same size as the opening,
+            # drawn at the same centre as the glass -- so it enclosed the
+            # glass completely and what the player saw was the frame's own
+            # outer face in pale trim. Every window in the sector rendered as
+            # a blank light rectangle stuck on the wall. A frame has to be a
+            # ring: four bars around an opening, with the dark glazing behind
+            # them doing the work.
+            var through: float = depth + 0.03
+            var glass_size := Vector3(w, h, through) if along_x else Vector3(through, h, w)
+            var glass := _box(glass_size, centre, _mat("glass"), false)
             glass.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+            # Frame bars stand proud of the wall, so each one casts a shadow
+            # onto the glazing behind it and the opening gains real depth.
+            var jamb := 0.11
+            var proud: float = depth + 0.22
+            var head_size := Vector3(w + jamb * 2.0, jamb, proud) if along_x \
+                else Vector3(proud, jamb, w + jamb * 2.0)
+            var post_size := Vector3(jamb, h + jamb * 2.0, proud) if along_x \
+                else Vector3(proud, h + jamb * 2.0, jamb)
+            for dy in [-(h + jamb) * 0.5, (h + jamb) * 0.5]:
+                var hb: float = dy
+                _box(head_size, centre + Vector3(0, hb, 0), _mat("trim"), false) \
+                    .cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+            for d in [-(w + jamb) * 0.5, (w + jamb) * 0.5]:
+                var side: float = d
+                var at: Vector3 = centre + (Vector3(side, 0, 0) if along_x else Vector3(0, 0, side))
+                _box(post_size, at, _mat("trim"), false) \
+                    .cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
             # A mullion cross, which is what makes an opening read as a window
-            # rather than as a rectangle.
-            var bar_a := Vector3(0.06, h, 0.10) if along_x else Vector3(0.10, h, 0.06)
-            var bar_b := Vector3(w, 0.06, 0.10) if along_x else Vector3(0.10, 0.06, w)
-            _box(bar_a, glass_pos, _mat("trim"), false).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-            _box(bar_b, glass_pos, _mat("trim"), false).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+            # rather than as a rectangle. Set just proud of the glazing.
+            var mull: float = depth + 0.13
+            var bar_a := Vector3(0.055, h, mull) if along_x else Vector3(mull, h, 0.055)
+            var bar_b := Vector3(w, 0.055, mull) if along_x else Vector3(mull, 0.055, w)
+            _box(bar_a, centre, _mat("trim"), false).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+            _box(bar_b, centre, _mat("trim"), false).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
             # A sill that catches the sun and streaks below itself.
-            var sill_size := Vector3(w + 0.40, 0.10, depth + 0.30) if along_x else Vector3(depth + 0.30, 0.10, w + 0.40)
-            _box(sill_size, centre + Vector3(0, -h * 0.5 - 0.05, 0), _mat("trim"), false)
+            var sill_size := Vector3(w + 0.44, 0.11, depth + 0.34) if along_x else Vector3(depth + 0.34, 0.11, w + 0.44)
+            _box(sill_size, centre + Vector3(0, -h * 0.5 - jamb - 0.06, 0), _mat("kerb"), false) \
+                .cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
             # Shutters on the lower row only, where a person could reach them.
             if r < 4.0 and int(o.get("variant", 0)) % 2 == 0:
                 var sh_yaw: float = 0.0 if along_x else 90.0
@@ -695,7 +727,220 @@ func _downpipes(o: Dictionary, size: Vector3, pos: Vector3) -> void:
 ## Small enough to be visual only: every piece sits within 40 cm of a face the
 ## simulation already treats as solid, so there is nowhere for the operative to
 ## walk into one and no sightline it could block that the sim thinks is open.
+## Cables strung across a lane, from one facade to the one opposite.
+##
+## The lane floor has to stay clear -- the 2D simulation owns collision and
+## would let a player walk through anything standing in it -- so the only place
+## left to fill the middle of the frame is above head height. That turns out to
+## be the right place anyway: the references are full of overhead runs, and a
+## cable crossing a street does something no wall dressing can, which is to tie
+## the two sides of the lane into one space and give the gap between them a
+## measurable depth.
+##
+## Each span looks for the nearest facade directly opposite, across a gap wide
+## enough to be a lane and narrow enough to be spanned.
+## Blacksite Zero's lanes run about 21 m between facades, so a 17 m ceiling
+## rejected every pair in the sector and not one cable was strung.
+const SPAN_MIN := 4.0
+const SPAN_MAX := 26.0
+
+func _build_spans() -> void:
+    var facades: Array = []
+    for o in level.walls:
+        var kind := String(o.get("type", "wall"))
+        if kind != "masonry" and kind != "wall":
+            continue
+        facades.append(o)
+    var drawn := 0
+    for i in range(facades.size()):
+        var a: Dictionary = facades[i]
+        # One in three facades tries, so lanes carry the odd cable rather than
+        # a cat's cradle. A sector roofed over with wire reads as a set.
+        if _pick(a, 101, 3) != 0:
+            continue
+        var aw := level.metres(float(a["w"]))
+        var ah := level.metres(float(a["h"]))
+        var along_x: bool = aw >= ah
+        var ax := level.metres(float(a["x"]))
+        var az := level.metres(float(a["y"]))
+        var normal := Vector3(0.0, 0.0, 1.0) if along_x else Vector3(1.0, 0.0, 0.0)
+        var half: float = (ah if along_x else aw) * 0.5
+        for face in [1.0, -1.0]:
+            var best: Dictionary = {}
+            var best_gap := SPAN_MAX
+            for j in range(facades.size()):
+                if j == i:
+                    continue
+                var b: Dictionary = facades[j]
+                var bw := level.metres(float(b["w"]))
+                var bh := level.metres(float(b["h"]))
+                if (bw >= bh) != along_x:
+                    continue
+                var bx := level.metres(float(b["x"]))
+                var bz := level.metres(float(b["y"]))
+                # Must overlap along the lane, or the cable runs diagonally
+                # off into a wall that is not opposite at all.
+                var lateral: float = absf(bx - ax) if along_x else absf(bz - az)
+                if lateral > (aw if along_x else ah) * 0.5:
+                    continue
+                var across: float = (bz - az) if along_x else (bx - ax)
+                if across * face <= 0.0:
+                    continue
+                var gap: float = absf(across) - half - (bh if along_x else bw) * 0.5
+                if gap < SPAN_MIN or gap >= best_gap:
+                    continue
+                best_gap = gap
+                best = b
+            if best.is_empty():
+                continue
+            _cable(a, best, along_x, face, half)
+            drawn += 1
+            break
+    if drawn > 0:
+        print("SPANS %d cables" % drawn)
+
+func _cable(a: Dictionary, b: Dictionary, along_x: bool, face: float, half: float) -> void:
+    var normal := Vector3(0.0, 0.0, 1.0) if along_x else Vector3(1.0, 0.0, 0.0)
+    var axis := Vector3(1.0, 0.0, 0.0) if along_x else Vector3(0.0, 0.0, 1.0)
+    var bw := level.metres(float(b["w"]))
+    var bh := level.metres(float(b["h"]))
+    var from: Vector3 = Vector3(level.metres(float(a["x"])), 0.0, level.metres(float(a["y"]))) \
+        + normal * half * face
+    var to: Vector3 = Vector3(level.metres(float(b["x"])), 0.0, level.metres(float(b["y"]))) \
+        - normal * ((bh if along_x else bw) * 0.5) * face
+    # Anchor a little below each parapet, and well clear of anything walking
+    # underneath: the lowest point of the sag still sits above 4.2 m.
+    var ya: float = maxf(4.9, _height_for(a) - 1.1)
+    var yb: float = maxf(4.9, _height_for(b) - 1.1)
+    # Keep the run over the middle of the lane rather than at a wall end.
+    var slide: float = (float(_pick(a, 103, 9)) / 8.0 - 0.5) * (level.metres(float(a["w"] if along_x else a["h"])) - 2.0)
+    from += axis * slide
+    to += axis * slide
+    var segments := 9
+    # Catenary, approximated by a parabola. A dead straight cable between two
+    # roofs reads as a strut; the sag is the whole point.
+    var sag := 0.55 + float(_pick(a, 104, 4)) * 0.16
+    var prev := Vector3(from.x, ya, from.z)
+    for i in range(1, segments + 1):
+        var t := float(i) / float(segments)
+        var p := Vector3(from.x, ya, from.z).lerp(Vector3(to.x, yb, to.z), t)
+        p.y -= sag * 4.0 * t * (1.0 - t)
+        var mid := (prev + p) * 0.5
+        var seg := _shallow(Vector3(0.05, (p - prev).length(), 0.05), mid, _mat("machinery"))
+        seg.look_at_from_position(mid, p, Vector3.UP)
+        # look_at points -Z at the target; the box is long in Y, so tip it.
+        seg.rotate_object_local(Vector3.RIGHT, PI * 0.5)
+        seg.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        prev = p
+    # A bracket at each end, so the cable visibly lands on something.
+    for pair in [[Vector3(from.x, ya, from.z), 1.0], [Vector3(to.x, yb, to.z), -1.0]]:
+        var at: Vector3 = pair[0]
+        var dir: float = pair[1]
+        _shallow(Vector3(0.12, 0.12, 0.45), at + normal * face * dir * -0.16 + Vector3(0, 0.02, 0),
+            _mat("machinery"))
+
+## How far a prop may stand out from a wall face, in metres.
+##
+## The 2D simulation owns collision and knows nothing about any of this, so a
+## crate left in the middle of a lane would be a crate the player walks through.
+## Bodies resolve against walls at a radius of about eleven plan units, which is
+## 0.34 m, so anything shallower than that sits inside a margin nothing can
+## enter. It is a tight budget, but a prop 0.3 m deep and 1.5 m wide still reads
+## completely from the middle of a lane -- depth is the one dimension a player
+## standing in front of it cannot judge.
+const CLUTTER_DEPTH := 0.30
+
+## Things stacked and propped against the bottom of a facade.
+##
+## This used to place rubble chunks between 5 and 17 cm across, which at
+## standing eye height is invisible: the lane floor read as an unbroken empty
+## plane from the camera to the far wall, while the references fill the
+## equivalent space with crates, sacks, barrels and bins. These are full-size
+## objects held inside the depth budget above.
 func _ground_clutter(o: Dictionary, size: Vector3, pos: Vector3) -> void:
+    var along_x: bool = size.x >= size.z
+    var span: float = size.x if along_x else size.z
+    if span < 5.0:
+        return
+    var half_depth: float = (size.z if along_x else size.x) * 0.5
+    var axis := Vector3(1.0, 0.0, 0.0) if along_x else Vector3(0.0, 0.0, 1.0)
+    var normal := Vector3(0.0, 0.0, 1.0) if along_x else Vector3(1.0, 0.0, 0.0)
+    # One or two per facade. More than that and a sector of thirty walls is
+    # prop soup, where nothing is a landmark because everything is clutter.
+    var count := 1 + _pick(o, 61, 2)
+    for i in range(count):
+        var t := (float(_pick(o, i * 17 + 63, 11)) / 10.0 - 0.5) * (span - 2.4)
+        var face := 1.0 if _pick(o, i * 19 + 65, 2) == 0 else -1.0
+        var base: Vector3 = Vector3(pos.x, 0.0, pos.z) + axis * t \
+            + normal * (half_depth + CLUTTER_DEPTH * 0.5) * face
+        _clutter_piece(_pick(o, i * 23 + 67, 5), base, axis, normal * face, o, i)
+
+## `axis` runs along the wall, `out` points away from its face.
+func _clutter_piece(kind: int, base: Vector3, axis: Vector3, out: Vector3,
+        o: Dictionary, slot: int) -> void:
+    var d := CLUTTER_DEPTH
+    match kind:
+        0:
+            # Pallet stack: slats with air between them, which is most of what
+            # makes a pallet read as a pallet rather than as a box.
+            var n := 4 + _pick(o, slot * 7 + 71, 4)
+            for i in range(n):
+                var y := 0.06 + float(i) * 0.135
+                _shallow(Vector3(1.18, 0.085, d), base + Vector3(0, y, 0), _mat("container"))
+                _shallow(Vector3(1.18, 0.05, d * 0.55), base + Vector3(0, y + 0.075, 0), _mat("kerb"))
+        1:
+            # Sandbags: three courses, offset like real coursing.
+            for row in range(3):
+                var y := 0.11 + float(row) * 0.21
+                var shift := 0.16 if row % 2 == 1 else 0.0
+                for i in range(4):
+                    var x := (float(i) - 1.5) * 0.34 + shift
+                    var bag := _shallow(Vector3(0.36, 0.2, d), base + axis * x + Vector3(0, y, 0),
+                        _mat("container"))
+                    bag.rotation.y = (float(_pick(o, slot * 11 + i + row * 3, 5)) - 2.0) * 0.05
+        2:
+            # Crate column, each crate turned slightly off the one below.
+            var h := 0.62
+            for i in range(2 + _pick(o, slot * 13 + 73, 2)):
+                var c := _shallow(Vector3(0.66, h, d), base + Vector3(0, h * 0.5 + float(i) * h, 0),
+                    _mat("container"))
+                c.rotation.y = (float(_pick(o, slot * 3 + i, 7)) - 3.0) * 0.035
+        3:
+            # Ladder propped against the wall. Almost pure silhouette, and it
+            # carries the eye up the facade rather than along the lane.
+            var lh := 2.8
+            for side in [-0.21, 0.21]:
+                var rail: float = side
+                _shallow(Vector3(0.07, lh, 0.07), base + axis * rail + Vector3(0, lh * 0.5, 0),
+                    _mat("machinery"))
+            for i in range(8):
+                _shallow(Vector3(0.48, 0.045, 0.045),
+                    base + Vector3(0, 0.3 + float(i) * 0.33, 0), _mat("machinery"))
+        _:
+            # Drums, half-buried in the wall so their depth costs nothing.
+            for i in range(2):
+                var dr := _shallow(Vector3(0.56, 0.88, d), base + axis * ((float(i) - 0.5) * 0.66)
+                    + Vector3(0, 0.44, 0), _mat("machinery"))
+                _shallow(Vector3(0.6, 0.05, d), base + axis * ((float(i) - 0.5) * 0.66)
+                    + Vector3(0, 0.86, 0), _mat("kerb"))
+
+## A shallow box that casts but adds nothing to the simulation.
+func _shallow(size: Vector3, at: Vector3, mat: Material) -> MeshInstance3D:
+    var mi := _box(size, at, mat, false)
+    mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+    return mi
+
+## A canopy projecting from the facade, well above head height.
+##
+## Awnings are the cheapest overhead structure there is and they do two things
+## nothing at ground level can: they put a hard horizontal shadow across a wall
+## that would otherwise be a blank rectangle, and they give the lane a ceiling
+## edge, which is most of how the references convey that a street is enclosed.
+## At 3.2 m the underside clears any body in the simulation, so projecting a
+## metre and a half into the lane costs no collision at all.
+func _awning(o: Dictionary, size: Vector3, pos: Vector3) -> void:
+    if size.y < 6.0 or _pick(o, 81, 3) != 0:
+        return
     var along_x: bool = size.x >= size.z
     var span: float = size.x if along_x else size.z
     if span < 6.0:
@@ -703,17 +948,28 @@ func _ground_clutter(o: Dictionary, size: Vector3, pos: Vector3) -> void:
     var half_depth: float = (size.z if along_x else size.x) * 0.5
     var axis := Vector3(1.0, 0.0, 0.0) if along_x else Vector3(0.0, 0.0, 1.0)
     var normal := Vector3(0.0, 0.0, 1.0) if along_x else Vector3(1.0, 0.0, 0.0)
-    for i in range(6):
-        if _pick(o, i * 13 + 41, 3) == 0:
-            continue
-        var t := (float(_pick(o, i * 17 + 7, 11)) / 10.0 - 0.5) * (span - 1.6)
-        var face := 1.0 if _pick(o, i * 19 + 3, 2) == 0 else -1.0
-        var out := 0.30 + float(_pick(o, i * 23 + 9, 5)) * 0.03
-        var scale := 0.05 + float(_pick(o, i * 29 + 11, 6)) * 0.022
-        var at: Vector3 = Vector3(pos.x, scale * 0.5, pos.z) + axis * t + normal * (half_depth + out) * face
-        var chunk := _box(Vector3(scale * 1.7, scale, scale * 1.3), at, _mat("kerb"), false)
-        chunk.rotation.y = float(_pick(o, i * 31 + 5, 8)) * 0.4
-        chunk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+    var face := 1.0 if _pick(o, 82, 2) == 0 else -1.0
+    var t := (float(_pick(o, 83, 9)) / 8.0 - 0.5) * (span - 4.2)
+    var width := 2.6 + float(_pick(o, 84, 4)) * 0.45
+    var reach := 1.35
+    var y := 3.2
+    var anchor: Vector3 = Vector3(pos.x, y, pos.z) + axis * t + normal * half_depth * face
+    # The canopy itself, tipped down away from the wall so it sheds.
+    var deck := _shallow(Vector3(width, 0.09, reach),
+        anchor + normal * face * (reach * 0.5) + Vector3(0, -0.14, 0), _mat("container"))
+    var tilt: float = 0.13 * face * (1.0 if along_x else -1.0)
+    deck.rotate_object_local(axis, tilt)
+    # A fascia board along the open edge, which is what gives it a silhouette
+    # from underneath rather than a thin invisible sliver.
+    _shallow(Vector3(width, 0.22, 0.07) if along_x else Vector3(0.07, 0.22, width),
+        anchor + normal * face * reach + Vector3(0, -0.25, 0), _mat("kerb"))
+    # Diagonal stays back to the wall.
+    for side in [-1.0, 1.0]:
+        var sx: float = side * (width * 0.5 - 0.12)
+        var stay := _shallow(Vector3(0.07, 0.9, 0.07),
+            anchor + axis * sx + normal * face * (reach * 0.5) + Vector3(0, 0.22, 0),
+            _mat("machinery"))
+        stay.rotate_object_local(axis, 0.95 * face * (1.0 if along_x else -1.0))
 
 # ---- Decals ----------------------------------------------------------------
 
