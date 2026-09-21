@@ -166,20 +166,16 @@ func _build_environment() -> void:
     # reference's shadows are blue, not empty.
     env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
     env.ambient_light_sky_contribution = 1.0
-    # Sunlit stone against a blue sky has bright, coloured shadows. At 1.15 the
-    # shaded half of the sector was reading near black, which is a night look
-    # wearing a daytime sun.
-    # Exposure was the wrong lever for clipped highlights: it moved the whole
-    # curve down and left 30% of the frame crushed under 0.06. The ratio is
-    # what was actually wrong, so the fill comes up and the key comes down.
-    # Shadowed stone was sitting near a tenth of the luminance of the same
-    # stone in sun, where the references hold about a third: their shadows
-    # still read as stone, this build's read as holes cut in the frame.
-    env.ambient_light_energy = 2.4
+    # Note that with sky contribution at 1.0 Godot takes the ambient term
+    # straight from the sky's own radiance and this energy value does nothing
+    # at all. Two rounds were spent moving it and measuring no change; the
+    # shadow fill is the `bounce` light further down, and the sky's brightness
+    # is the sky material's. Left at unity so it is not mistaken for a control.
+    env.ambient_light_energy = 1.0
     env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 
     env.tonemap_mode = Environment.TONE_MAPPER_ACES
-    env.tonemap_exposure = 0.99
+    env.tonemap_exposure = 1.06
     env.tonemap_white = 3.0
 
     env.ssao_enabled = true
@@ -244,7 +240,12 @@ func _build_environment() -> void:
     var bounce := DirectionalLight3D.new()
     bounce.rotation_degrees = Vector3(-18.0, -52.0, 0.0)
     bounce.light_color = Color(1.0, 0.86, 0.68)
-    bounce.light_energy = 0.35
+    # Shadowed stone was measuring under a tenth of the luminance of the same
+    # stone in sun, against roughly a quarter in the references, so their
+    # shadows read as stone and this build's read as holes cut in the frame.
+    # This light is the only lever that lifts them without also lifting the
+    # sky, the sunlit faces, or the highlights.
+    bounce.light_energy = 0.9
     bounce.shadow_enabled = false
     bounce.light_cull_mask = WORLD_LAYERS
     add_child(bounce)

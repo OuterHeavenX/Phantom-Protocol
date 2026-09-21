@@ -213,10 +213,13 @@ func _build_ground() -> void:
         var zw := level.metres(float(z["w"]))
         var zh := level.metres(float(z["h"]))
         var pos := Vector3(level.metres(float(z["x"])), 0.005, level.metres(float(z["y"])))
+        # Each chamber gets one of four surfaces, chosen from its own
+        # footprint so the arrangement is deterministic.
+        var surface: String = ["ground", "ground_1", "ground_2", "ground_3"][_pick(z, 121, 4)]
         # Paving, not slab. The concrete plate's form seams landed on a
         # perfectly axis-aligned 1.25 m grid and read as bathroom tile; the
         # cobble set is already at a believable 17 cm.
-        var plate := _box(Vector3(zw, 0.02, zh), pos, _mat("ground"), false)
+        var plate := _box(Vector3(zw, 0.02, zh), pos, _mat(surface), false)
         plate.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 func _build_solids() -> void:
@@ -238,9 +241,14 @@ func _build_solids() -> void:
             _ground_clutter(o, Vector3(ow, tall, oh), pos)
             _rooftop(o, Vector3(ow, tall, oh), pos)
             _awning(o, Vector3(ow, tall, oh), pos)
+            _wall_fixtures(o, Vector3(ow, tall, oh), pos)
             # 0.28 m of overhang, not 0.175. A cornice that casts no shadow
             # line is just a stripe of a different colour.
-            var cap := _box(Vector3(ow + 0.56, 0.45, oh + 0.56),
+            # 0.42 m of overhang each side rather than 0.28. The eaves have
+            # to project far enough to lay a dark band across the top of the
+            # facade; at the old depth the shadow line was a few centimetres
+            # and read as a change of colour rather than as a roof.
+            var cap := _box(Vector3(ow + 0.84, 0.45, oh + 0.84),
                 Vector3(pos.x, tall + 0.225, pos.z), _mat("cornice"), false)
             cap.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 
@@ -930,6 +938,68 @@ func _shallow(size: Vector3, at: Vector3, mat: Material) -> MeshInstance3D:
     mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
     return mi
 
+## Small hardware bolted to a facade: conduit, junction boxes, vents.
+##
+## The upper two-thirds of every wall in the sector was empty. The references
+## put six to twelve small attachments on a wall of this size, and they do more
+## than fill space: each one is a hard-edged object of a different value from
+## the render behind it, so it breaks the facade into readable pieces and gives
+## the eye something to measure the building's size against.
+##
+## Everything here is a shallow box flat against the face, so it costs no
+## collision. The count is bounded: past roughly a dozen per wall the facade
+## stops reading as a wall and starts reading as noise, and a distant enemy
+## silhouette becomes indistinguishable from a drainpipe.
+func _wall_fixtures(o: Dictionary, size: Vector3, pos: Vector3) -> void:
+    var along_x: bool = size.x >= size.z
+    var span: float = size.x if along_x else size.z
+    if span < 4.0 or size.y < 4.0:
+        return
+    var half_depth: float = (size.z if along_x else size.x) * 0.5
+    var axis := Vector3(1.0, 0.0, 0.0) if along_x else Vector3(0.0, 0.0, 1.0)
+    var normal := Vector3(0.0, 0.0, 1.0) if along_x else Vector3(1.0, 0.0, 0.0)
+
+    for face in [1.0, -1.0]:
+        var out: Vector3 = normal * face
+        # A vertical conduit drop, full height, offset from the corner.
+        if _pick(o, int(face) * 7 + 131, 2) == 0:
+            var cx: float = (float(_pick(o, int(face) + 132, 9)) / 8.0 - 0.5) * (span - 1.2)
+            var run := size.y - 0.9
+            _face_box(Vector3(0.10, run, 0.10), pos + axis * cx + out * (half_depth + 0.06)
+                + Vector3(0, run * 0.5 + 0.25, 0))
+            # Saddle clamps down its length, which is what makes a pipe read
+            # as fixed to a wall rather than drawn on one.
+            for i in range(int(run / 1.4)):
+                _face_box(Vector3(0.17, 0.07, 0.16),
+                    pos + axis * cx + out * (half_depth + 0.05)
+                    + Vector3(0, 0.9 + float(i) * 1.4, 0))
+        # A horizontal conduit run at service height with boxes on it.
+        if _pick(o, int(face) * 11 + 133, 3) != 0:
+            var y := 2.3 + float(_pick(o, int(face) + 134, 4)) * 0.35
+            var length: float = span * 0.62
+            var mid: float = (float(_pick(o, int(face) + 135, 7)) / 6.0 - 0.5) * (span - length)
+            var bar := Vector3(length, 0.075, 0.075) if along_x else Vector3(0.075, 0.075, length)
+            _face_box(bar, pos + axis * mid + out * (half_depth + 0.05) + Vector3(0, y, 0))
+            for i in range(2):
+                var bx: float = mid + (float(i) - 0.5) * length * 0.55
+                _face_box(Vector3(0.26, 0.34, 0.14),
+                    pos + axis * bx + out * (half_depth + 0.08) + Vector3(0, y - 0.28, 0))
+        # A louvred vent, high up.
+        if _pick(o, int(face) * 13 + 136, 3) == 0:
+            var vx: float = (float(_pick(o, int(face) + 137, 9)) / 8.0 - 0.5) * (span - 1.8)
+            var vy: float = size.y - 1.5
+            var frame := Vector3(0.78, 0.62, 0.11) if along_x else Vector3(0.11, 0.62, 0.78)
+            _face_box(frame, pos + axis * vx + out * (half_depth + 0.05) + Vector3(0, vy, 0),
+                "machinery")
+            for i in range(5):
+                var slat := Vector3(0.70, 0.05, 0.15) if along_x else Vector3(0.15, 0.05, 0.70)
+                _face_box(slat, pos + axis * vx + out * (half_depth + 0.06)
+                    + Vector3(0, vy - 0.22 + float(i) * 0.11, 0), "kerb")
+
+func _face_box(size: Vector3, at: Vector3, mat: String = "machinery") -> void:
+    var mi := _box(size, at, _mat(mat), false)
+    mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+
 ## A canopy projecting from the facade, well above head height.
 ##
 ## Awnings are the cheapest overhead structure there is and they do two things
@@ -1022,8 +1092,8 @@ func _decal_zone_labels() -> void:
         # the highest-contrast element in the frame -- brighter than the
         # operative's own weapon -- and painted floor lettering is never the
         # thing a player should be reading first. Worn stencil, not signage.
-        _decal("label_%d" % i, Vector3(cx, 0.35, cz - 3.2), Vector3(5.4, 1.2, 1.7), Vector3.ZERO, 0.40)
-        _decal("number_%d" % i, Vector3(cx + 5.6, 0.35, cz + 1.4), Vector3(2.0, 1.2, 2.0), Vector3(0, 12.0, 0), 0.44)
+        _decal("label_%d" % i, Vector3(cx, 0.35, cz - 3.2), Vector3(5.4, 1.2, 1.7), Vector3.ZERO, 0.30)
+        _decal("number_%d" % i, Vector3(cx + 5.6, 0.35, cz + 1.4), Vector3(2.0, 1.2, 2.0), Vector3(0, 12.0, 0), 0.32)
 
 ## Hazard chevrons across every doorway threshold, and an arrow leading in.
 func _decal_thresholds() -> void:

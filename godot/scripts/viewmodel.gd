@@ -17,7 +17,10 @@ const MODEL := "res://art/models/viewmodel_needle.glb"
 ## centre: the hands were modelled, lit and completely off screen, with only a
 ## sliver of knuckle at the bottom edge. Higher and pushed forward puts the
 ## glove and cuff back in frame.
-const REST_POS := Vector3(0.145, -0.105, -0.42)
+## Lowered from -0.105. The muzzle was sitting close to the horizon line, so
+## the weapon competed with the sightline it is supposed to sit beneath; in the
+## references the muzzle is always clearly below the crosshair.
+const REST_POS := Vector3(0.152, -0.138, -0.42)
 const REST_ROT := Vector3(-2.0, 6.0, 0.5)
 const ADS_POS := Vector3(0.0, -0.050, -0.34)
 ## The weapon is authored at true scale. It needed scaling up while the camera

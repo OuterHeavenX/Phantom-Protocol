@@ -129,12 +129,19 @@ def prop_sign(P):
 
 def prop_dish(P):
     """Satellite dish on a stand-off mast."""
-    cyl(0.045, 0.85, (0, 0.40, 0.10), P["galv"], verts=10)
-    box((0.22, 0.08, 0.22), (0, 0.0, 0.11), P["galv"], bevel=0.008)
+    # A backplate flat against the wall with two stand-off arms to the mast.
+    # With only a thin mast the dish read as levitating: the eye needs to see
+    # the thing that holds it to the building, and at four metres a 45 mm pole
+    # in shadow is not that thing.
+    box((0.30, 0.46, 0.04), (0, 0.42, 0.02), P["galv"], bevel=0.006)
+    for by in (0.24, 0.60):
+        box((0.06, 0.06, 0.13), (0, by, 0.085), P["dark"], bevel=0.004)
+    cyl(0.045, 0.85, (0, 0.40, 0.14), P["galv"], verts=10)
+    box((0.22, 0.08, 0.22), (0, 0.0, 0.15), P["galv"], bevel=0.008)
     # A concave dish, built as a shallow cone shell rather than a squashed
     # sphere. The sphere read unmistakably as a grey balloon.
     bpy.ops.mesh.primitive_cone_add(radius1=0.52, radius2=0.20, depth=0.26,
-                                    location=(0, 0.80, 0.34), rotation=(math.radians(-90), 0, 0),
+                                    location=(0, 0.80, 0.38), rotation=(math.radians(-90), 0, 0),
                                     vertices=24)
     d = bpy.context.object
     d.data.materials.append(P["galv"])

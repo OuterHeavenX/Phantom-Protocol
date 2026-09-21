@@ -86,9 +86,17 @@ PISTOL_SCALE = 1.70
 
 def build_pistol():
     """Needle-7. Barrel runs along -Z (Godot forward); up is +Y."""
-    steel = mat("vm_steel", (0.045, 0.048, 0.052), metallic=0.92, rough=0.30)
-    dark = mat("vm_dark", (0.022, 0.024, 0.026), metallic=0.75, rough=0.45)
-    poly = mat("vm_polymer", (0.030, 0.032, 0.035), metallic=0.0, rough=0.62)
+    # Five materials that were all near-black. At albedo 0.022 to 0.045 the
+    # slide, the frame, the grip and the suppressor were within a tenth of a
+    # stop of each other, so the weapon read as one moulded black mass with no
+    # part boundaries in it -- which is the single thing the references never
+    # do. A service pistol's slide is nitrided steel at roughly 0.12 albedo
+    # with a real sheen, and its frame is matte polymer at half that. Pulling
+    # the values apart is what separates the parts; the shapes were already
+    # right.
+    steel = mat("vm_steel", (0.115, 0.120, 0.128), metallic=0.90, rough=0.26)
+    dark = mat("vm_dark", (0.035, 0.036, 0.039), metallic=0.60, rough=0.52)
+    poly = mat("vm_polymer", (0.052, 0.052, 0.055), metallic=0.0, rough=0.72)
     # No emission. Two glowing teal dots on a sidearm in a sunlit street were
     # the only emissive pixels in the frame, and nothing in the references
     # glows at all.
@@ -124,7 +132,11 @@ def build_pistol():
     # degrees -- correct when the model was being axis-converted on export,
     # wrong once it was not -- and stood the suppressor vertically off the
     # slide like a periscope.
-    parts.append(cyl("can", 0.0168, 0.090, (0, 0.0115, -0.140), dark))
+    # The can is anodised, not blued: matte and a touch lighter than the
+    # frame, so it separates from both the slide in front of it and the hand
+    # behind it.
+    suppressor = mat("vm_can", (0.072, 0.072, 0.074), metallic=0.45, rough=0.66)
+    parts.append(cyl("can", 0.0168, 0.090, (0, 0.0115, -0.140), suppressor))
     for i in range(6):
         parts.append(cyl("can_rib%d" % i, 0.0176, 0.0038, (0, 0.0115, -0.104 - i * 0.0145), steel, bevel=0.0006))
     parts.append(cyl("muzzle_cap", 0.0130, 0.008, (0, 0.0115, -0.186), steel, bevel=0.0006))
@@ -199,9 +211,13 @@ def build_hands():
     # Much darker. The scene's ambient is deliberately strong so shadows stay
     # readable, and the viewmodel takes all of it at point-blank range: at
     # 0.074 the glove came out a pale beige tube that read as a bare forearm.
-    glove = mat("vm_glove", (0.028, 0.026, 0.024), metallic=0.0, rough=0.74)
-    sleeve = mat("vm_sleeve", (0.034, 0.038, 0.035), metallic=0.0, rough=0.86)
-    strap = mat("vm_strap", (0.060, 0.054, 0.044), metallic=0.16, rough=0.56)
+    # Three zones up the arm, with enough value between them to be legible at
+    # viewmodel size: a dark glove, a light cuff band, then a visibly lighter
+    # sleeve. The whole limb used to be one material from fingertip to frame
+    # edge and read as a bare tube.
+    glove = mat("vm_glove", (0.030, 0.028, 0.026), metallic=0.0, rough=0.78)
+    sleeve = mat("vm_sleeve", (0.068, 0.072, 0.062), metallic=0.0, rough=0.90)
+    strap = mat("vm_strap", (0.098, 0.090, 0.074), metallic=0.18, rough=0.54)
     parts = []
 
     def hand_field(name, material, build_fn, resolution=0.0026):
@@ -248,9 +264,17 @@ def build_hands():
         # Thumb, laid up the left of the frame toward the slide.
         _limb(mb, (0.020, -0.050, 0.036), (0.011, -0.030, -0.004), 0.0112, 0.0100)
         _limb(mb, (0.011, -0.030, -0.004), (-0.002, -0.020, -0.030), 0.0100, 0.0086)
-        # Wrist into a short forearm that leaves frame at the bottom.
-        _limb(mb, (0.010, -0.086, 0.058), (0.018, -0.118, 0.104), 0.0225, 0.0290)
-        _limb(mb, (0.018, -0.118, 0.104), (0.034, -0.168, 0.196), 0.0290, 0.0360)
+        # The hand stops at the wrist. The forearm is a separate field below,
+        # so it can carry the sleeve material instead of the glove's.
+        _limb(mb, (0.010, -0.086, 0.058), (0.014, -0.102, 0.081), 0.0225, 0.0250)
+
+    # ---- Sleeved forearm --------------------------------------------------
+    #
+    # Overlaps the wrist so the two fields meet without a seam, and runs out
+    # of frame at the bottom right.
+    def forearm(mb):
+        _limb(mb, (0.013, -0.098, 0.074), (0.020, -0.124, 0.112), 0.0262, 0.0300)
+        _limb(mb, (0.020, -0.124, 0.112), (0.034, -0.168, 0.196), 0.0300, 0.0370)
 
     # The support hand is deliberately absent.
     #
@@ -261,9 +285,10 @@ def build_hands():
     # weapon's left flank -- the side the camera actually sees -- unobstructed.
 
     parts.append(hand_field("hand_r", glove, right))
+    parts.append(hand_field("forearm_r", sleeve, forearm))
     # Cuff bands where glove meets sleeve, which is what tells the eye the
     # forearm is clothed rather than a continuation of the hand.
-    parts.append(cyl("r_cuff", 0.0300, 0.022, (0.019, -0.120, 0.108), strap,
+    parts.append(cyl("r_cuff", 0.0306, 0.026, (0.0165, -0.111, 0.094), strap,
                      rot=(math.radians(29), math.radians(-9), 0), verts=18, bevel=0.0026))
 
     return parts
@@ -278,7 +303,11 @@ def export(path):
     print("wrote", path, "%.0f KB" % (os.path.getsize(path) / 1024))
 
 if __name__ == "__main__":
-    out = sys.argv[1] if len(sys.argv) > 1 else "godot/art/models"
+    # Blender hands the script everything after `--`, including the separator
+    # itself, so taking argv[1] blindly wrote the model into a directory
+    # literally named "--". Anything that is not a flag is the output path.
+    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    out = args[0] if args else "godot/art/models"
     os.makedirs(out, exist_ok=True)
     reset()
     build_pistol()

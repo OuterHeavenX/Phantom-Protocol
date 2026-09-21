@@ -210,7 +210,7 @@ def mat_plaster(out, name="plaster", lo=(168, 152, 128), hi=(226, 214, 192)):
     rough = 0.55 + 0.25 * norm01(wear) + 0.15 * drip + 0.06 * fine
     write_material(out, name, alb, h, rough)
 
-def mat_concrete(out):
+def mat_concrete(out, name="concrete", lo=(78, 78, 76), hi=(142, 140, 133)):
     """Poured slab with form seams and aggregate — the interior floor."""
     grain = fbm(6, 12)
     agg = (fbm(6, 40) > 0.62).astype(np.float64) * 0.5
@@ -225,10 +225,10 @@ def mat_concrete(out):
     fine = grain_fn()
     h = norm01(grain * 0.42 + agg * 0.26 - seams * 0.8 - cracks * 0.35 + fine * 0.16)
     base = norm01(grain * 0.56 + agg * 0.26 + fine * 0.18)
-    alb = tint(base, (78, 78, 76), (142, 140, 133))
+    alb = tint(base, lo, hi)
     alb = alb * (1 - 0.30 * seams[..., None]) * (1 - 0.30 * cracks[..., None])
     rough = 0.80 + 0.12 * norm01(grain) - 0.10 * agg + 0.06 * fine
-    write_material(out, "concrete", alb, h, rough)
+    write_material(out, name, alb, h, rough)
 
 def mat_cobble(out):
     """Set stone paving — the courtyard ground in the references."""
@@ -320,4 +320,11 @@ if __name__ == "__main__":
     # surface and was clipping under the key light. Chalky, not paper.
     mat_plaster(out, "whitewash", (152, 150, 142), (198, 196, 186))
     mat_plaster(out, "paintwork", (112, 124, 126), (164, 174, 174))
+    # Ground surfaces. The whole sector was paved in one warm cobble from the
+    # camera to the far wall, so the thing under the crosshair had the same
+    # value as the tile under the player's feet and the lane had no depth
+    # banding at all. Three surfaces, spread far enough apart in value to
+    # separate where they meet.
+    mat_concrete(out, "asphalt", (40, 40, 42), (86, 85, 84))
+    mat_concrete(out, "flagstone", (104, 100, 92), (178, 172, 158))
     print("done ->", out)

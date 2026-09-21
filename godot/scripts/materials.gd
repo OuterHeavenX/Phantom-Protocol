@@ -83,6 +83,16 @@ static func build() -> Dictionary:
         # made the frame monochrome and put the brightest surface in the scene
         # directly under the camera. Grey setts leave the warmth to the walls.
         "ground": pbr("cobble", 0.36, Color(0.66, 0.66, 0.65)),
+        # Three paving surfaces for the zone plates, well separated in value:
+        # a whole sector under one texture gives the lane no depth banding,
+        # and the surface under the crosshair ends up the same brightness as
+        # the one under the player's feet.
+        # 0.55 tiles per metre, so a flag is about 1.8 m across. At 0.30 the
+        # slab was 3.3 m and the foreground read as a smooth pale floor with
+        # no joints in it at all.
+        "ground_1": pbr("flagstone", 0.55, Color(0.74, 0.73, 0.71)),
+        "ground_2": pbr("asphalt", 0.34, Color(0.82, 0.82, 0.83)),
+        "ground_3": pbr("concrete", 0.32, Color(0.70, 0.70, 0.68)),
         "trim": pbr("whitewash", 0.30, Color(0.84, 0.83, 0.80)),
         "cornice": pbr("concrete", 0.34, Color(0.76, 0.75, 0.72)),
         "kerb": pbr("concrete", 0.55, Color(0.62, 0.61, 0.58)),
