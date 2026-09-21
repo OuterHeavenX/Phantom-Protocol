@@ -234,6 +234,8 @@ func _build_solids() -> void:
         # stops a wall reading as an extruded rectangle: it gives the top edge
         # a shadow line and a change of material, which is what the eye uses
         # to tell a building from a block.
+        if kind == "pillar" or kind == "vault" or kind == "vaultSeal":
+            _dress_pillar(Vector3(ow, tall, oh), pos)
         if kind == "masonry" or kind == "wall" or kind == "perimeter":
             _plinth(Vector3(ow, tall, oh), pos)
             _windows(o, Vector3(ow, tall, oh), pos)
@@ -367,6 +369,33 @@ func _rooftop(o: Dictionary, size: Vector3, pos: Vector3) -> void:
             for i in range(2):
                 var y := 2.35 + float(i) * 0.62
                 _box(Vector3(1.05, 0.07, 0.07), at + Vector3(0, y, 0), _mat("machinery"), false)
+
+## A cap, a footing and a banded joint on a free-standing block.
+##
+## There are twenty-eight of these in the sector and they are the cover the
+## player actually fights around, so they sit close to the camera and fill a
+## lot of frame. Undressed they are extruded rectangles: a four-metre concrete
+## slab with a bare top edge reads as a placeholder at any distance, and two of
+## them at the frame edges were carrying a quarter of the image between them.
+##
+## All of it is inside the block's own footprint or directly above it, so
+## nothing here is reachable and the 2D simulation's collision is unchanged.
+func _dress_pillar(size: Vector3, pos: Vector3) -> void:
+    # A capping slab, overhanging enough to throw a shadow line down the face.
+    var cap := _box(Vector3(size.x + 0.30, 0.22, size.z + 0.30),
+        Vector3(pos.x, size.y + 0.11, pos.z), _mat("kerb"), false)
+    cap.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+    # A footing, so the block meets the ground in a step rather than a line.
+    var foot := _box(Vector3(size.x + 0.22, 0.30, size.z + 0.22),
+        Vector3(pos.x, 0.15, pos.z), _mat("kerb"), false)
+    foot.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+    # A lift joint partway up. Precast blocks are cast in sections and the
+    # seam between them is the one piece of information that tells the eye
+    # how tall the thing is.
+    if size.y > 2.6:
+        var band := _box(Vector3(size.x + 0.08, 0.13, size.z + 0.08),
+            Vector3(pos.x, size.y * 0.58, pos.z), _mat("trim"), false)
+        band.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 func _plinth(size: Vector3, pos: Vector3) -> void:
     var p := _box(Vector3(size.x + 0.28, 0.85, size.z + 0.28),
@@ -681,10 +710,13 @@ func _dress_solids() -> void:
     var idx := 0
     for o in level.cover:
         var kind := String(o.get("type", ""))
-        if kind != "container" and kind != "machinery":
+        # Pillars included: they are solid, so anything set on top of one is
+        # out of reach and costs no collision, and they are the blocks nearest
+        # the camera in most views.
+        if kind != "container" and kind != "machinery" and kind != "pillar":
             continue
         idx += 1
-        var top := _height_for(o)
+        var top := _height_for(o) + (0.22 if String(o.get("type", "")) == "pillar" else 0.0)
         var cx := level.metres(float(o["x"]))
         var cz := level.metres(float(o["y"]))
         var ow := level.metres(float(o["w"]))

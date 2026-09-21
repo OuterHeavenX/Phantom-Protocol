@@ -98,12 +98,25 @@ const out=await p.evaluate(async()=>{
   {
     const {engine,canvas}=build(MAPS[0],5);
     const ctx=canvas.getContext('2d');
-    const r=new Renderer(canvas,ctx,engine);
     const cam=engine.camera;cam.resize(canvas.width,canvas.height);
     cam.zoom=cam.targetZoom=cam.baseZoom=1;cam.x=200;cam.y=engine.world.height/2;cam.shakeX=cam.shakeY=0;
-    const grab=()=>{r.render(0);return ctx.getImageData(0,0,canvas.width,canvas.height).data};
-    const withWalls=grab();
+    // The renderer has to be built AFTER the wall list is set, not before.
+    //
+    // The authored-architecture path snapshots world.walls in its constructor
+    // and the plain path reads it live, so mutating the list between two
+    // renders of one Renderer only reaches the second of those. On the opening
+    // sector, which is hand-authored, that meant this check was diffing a
+    // frame against an identical copy of itself and reporting that the
+    // perimeter is never drawn -- for a renderer that draws it perfectly well.
+    const grab=()=>{
+      const r=new Renderer(canvas,ctx,engine);
+      r.render(0);
+      const d=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+      r.dispose?.();
+      return d;
+    };
     const all=engine.world.walls;
+    const withWalls=grab();
     engine.world.walls=all.filter(w=>w.type!=='perimeter');
     const without=grab();
     engine.world.walls=all;
