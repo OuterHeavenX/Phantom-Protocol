@@ -20,7 +20,7 @@ const MODEL := "res://art/models/viewmodel_needle.glb"
 ## Lowered from -0.105. The muzzle was sitting close to the horizon line, so
 ## the weapon competed with the sightline it is supposed to sit beneath; in the
 ## references the muzzle is always clearly below the crosshair.
-const REST_POS := Vector3(0.152, -0.138, -0.42)
+const REST_POS := Vector3(0.172, -0.150, -0.42)
 const REST_ROT := Vector3(-2.0, 6.0, 0.5)
 const ADS_POS := Vector3(0.0, -0.050, -0.34)
 ## The weapon is authored at true scale. It needed scaling up while the camera
@@ -85,7 +85,7 @@ func _ready() -> void:
     # already carries most of its exposure; this rig only has to add shape.
     # Set to 2.1 the glove blew to near-white at an albedo of 0.03, which is
     # the same overcorrection the sector's key light needed undoing from.
-    key.light_energy = 0.85
+    key.light_energy = 0.55
     key.omni_range = 1.4
     key.shadow_enabled = false
     key.light_cull_mask = VM_LAYER
@@ -96,7 +96,7 @@ func _ready() -> void:
     var rim := OmniLight3D.new()
     rim.position = Vector3(0.26, 0.24, -0.10)
     rim.light_color = Color(0.78, 0.86, 1.0)
-    rim.light_energy = 0.5
+    rim.light_energy = 0.32
     rim.omni_range = 1.2
     rim.shadow_enabled = false
     rim.light_cull_mask = VM_LAYER

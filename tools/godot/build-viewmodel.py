@@ -211,13 +211,15 @@ def build_hands():
     # Much darker. The scene's ambient is deliberately strong so shadows stay
     # readable, and the viewmodel takes all of it at point-blank range: at
     # 0.074 the glove came out a pale beige tube that read as a bare forearm.
-    # Three zones up the arm, with enough value between them to be legible at
-    # viewmodel size: a dark glove, a light cuff band, then a visibly lighter
-    # sleeve. The whole limb used to be one material from fingertip to frame
-    # edge and read as a bare tube.
+    # Three zones up the arm, separated by enough value to be legible at
+    # viewmodel size but no more. The whole limb used to be one material from
+    # fingertip to frame edge and read as a bare tube; the first correction
+    # then put the sleeve at three times the glove's albedo, which made the
+    # forearms the brightest object in the frame -- brighter than sunlit
+    # stone. Roughly 1.4x per step is enough to read as separate garments.
     glove = mat("vm_glove", (0.030, 0.028, 0.026), metallic=0.0, rough=0.78)
-    sleeve = mat("vm_sleeve", (0.068, 0.072, 0.062), metallic=0.0, rough=0.90)
-    strap = mat("vm_strap", (0.098, 0.090, 0.074), metallic=0.18, rough=0.54)
+    sleeve = mat("vm_sleeve", (0.042, 0.045, 0.038), metallic=0.0, rough=0.90)
+    strap = mat("vm_strap", (0.062, 0.057, 0.047), metallic=0.18, rough=0.54)
     parts = []
 
     def hand_field(name, material, build_fn, resolution=0.0026):
@@ -276,20 +278,55 @@ def build_hands():
         _limb(mb, (0.013, -0.098, 0.074), (0.020, -0.124, 0.112), 0.0262, 0.0300)
         _limb(mb, (0.020, -0.124, 0.112), (0.034, -0.168, 0.196), 0.0300, 0.0370)
 
-    # The support hand is deliberately absent.
+    # ---- Support hand -----------------------------------------------------
     #
-    # Two hands modelled this way never read as two hands: the second one's
-    # fingers have to interleave with the first's, and at this level of detail
-    # they came out splayed beside the grip instead. A firm one-handed hold is
-    # a real hold, it is unambiguous at viewmodel size, and it leaves the
-    # weapon's left flank -- the side the camera actually sees -- unobstructed.
+    # This was left out once on the grounds that two hands never read as two
+    # hands at viewmodel size, and that a one-handed hold at least leaves the
+    # weapon's left flank clear for the camera. Two separate reviews called
+    # its absence out anyway, and they were right: every reference has both
+    # hands on the weapon, and a pistol held one-handed reads as a placeholder
+    # however well the hand itself is modelled.
+    #
+    # The earlier attempt failed because it tried to interleave the support
+    # fingers between the firing fingers, which needs more resolution than
+    # this has. The real grip does not interleave: the support palm presses
+    # flat against the exposed left face of the firing hand and its fingers
+    # wrap OVER the firing fingers, one row lower. That is a single continuous
+    # mass on the side the camera sees, which is exactly what metaballs are
+    # good at.
+    def left(mb):
+        # Heel of the palm against the firing hand's knuckles.
+        _limb(mb, (-0.038, -0.030, 0.030), (-0.045, -0.074, 0.044), 0.0180, 0.0172)
+        _limb(mb, (-0.030, -0.034, 0.018), (-0.038, -0.070, 0.030), 0.0155, 0.0148)
+        # Four fingers lying across the firing hand's, offset half a finger
+        # down so the two sets read as interlocking rather than as one slab.
+        for i in range(4):
+            y = -0.042 - i * 0.0200
+            r = 0.0086 - i * 0.0005
+            _limb(mb, (-0.026, y, 0.020), (-0.044, y - 0.004, 0.002), r, r)
+            _limb(mb, (-0.044, y - 0.004, 0.002), (-0.048, y - 0.012, -0.022), r, r * 0.92)
+        # Thumb forward along the frame, which is where a modern grip puts it
+        # and which gives the silhouette a clear point at the front.
+        _limb(mb, (-0.042, -0.050, 0.040), (-0.038, -0.026, -0.012), 0.0104, 0.0094)
+        _limb(mb, (-0.038, -0.026, -0.012), (-0.032, -0.014, -0.042), 0.0094, 0.0080)
+        # Wrist, stopping where its own sleeve picks up.
+        _limb(mb, (-0.045, -0.078, 0.050), (-0.052, -0.098, 0.074), 0.0205, 0.0230)
+
+    def left_forearm(mb):
+        _limb(mb, (-0.051, -0.094, 0.068), (-0.060, -0.122, 0.108), 0.0246, 0.0284)
+        _limb(mb, (-0.060, -0.122, 0.108), (-0.076, -0.170, 0.196), 0.0284, 0.0352)
+
 
     parts.append(hand_field("hand_r", glove, right))
     parts.append(hand_field("forearm_r", sleeve, forearm))
+    parts.append(hand_field("hand_l", glove, left))
+    parts.append(hand_field("forearm_l", sleeve, left_forearm))
     # Cuff bands where glove meets sleeve, which is what tells the eye the
     # forearm is clothed rather than a continuation of the hand.
     parts.append(cyl("r_cuff", 0.0306, 0.026, (0.0165, -0.111, 0.094), strap,
                      rot=(math.radians(29), math.radians(-9), 0), verts=18, bevel=0.0026))
+    parts.append(cyl("l_cuff", 0.0292, 0.026, (-0.0555, -0.108, 0.090), strap,
+                     rot=(math.radians(31), math.radians(12), 0), verts=18, bevel=0.0026))
 
     return parts
 
