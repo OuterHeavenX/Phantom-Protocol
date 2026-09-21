@@ -20,6 +20,10 @@ GameData="*res://scripts/game_data.gd"
 window/size/viewport_width=1920
 window/size/viewport_height=1080
 window/stretch/mode="viewport"
+; Expand rather than letterbox. The default keeps the 16:9 design aspect and
+; pads the rest, which on a 19.5:9 phone put black bars down both sides and
+; shrank the play area by about a fifth.
+window/stretch/aspect="expand"
 
 [input]
 move_forward={"deadzone":0.2,"events":[{"resource_local_to_scene":false,"type":"InputEventKey","physical_keycode":87}]}
@@ -28,6 +32,20 @@ move_left={"deadzone":0.2,"events":[{"resource_local_to_scene":false,"type":"Inp
 move_right={"deadzone":0.2,"events":[{"resource_local_to_scene":false,"type":"InputEventKey","physical_keycode":68}]}
 dash={"deadzone":0.2,"events":[{"resource_local_to_scene":false,"type":"InputEventKey","physical_keycode":32}]}
 ability={"deadzone":0.2,"events":[{"resource_local_to_scene":false,"type":"InputEventKey","physical_keycode":81}]}
+
+[input_devices]
+
+; Touch is handled as touch. With emulation on, every tap also arrives as a
+; mouse click, which on the web tries to take a pointer lock that a phone has
+; no pointer for, and the stick would fight its own synthetic cursor.
+pointing/emulate_mouse_from_touch=false
+
+[display]
+
+; A first-person shooter with two thumb controls at the bottom corners is a
+; landscape game. Portrait puts both thumbs in the same place and leaves the
+; sightline a letterbox.
+window/handheld/orientation=4
 
 [rendering]
 ; The Web platform refuses to export unless ETC2/ASTC compression is imported,

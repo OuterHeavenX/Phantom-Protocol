@@ -30,8 +30,28 @@ var _bob := 0.0
 var _recoil := 0.0
 var _awaiting_click := false
 
+## Set when an on-screen stick is driving the camera instead of a mouse.
+var touch_driven := false
+
+## Apply a look delta in radians. Touch controls call this; the mouse path
+## below does the same arithmetic on its own relative motion.
+##
+## It exists so the touch layer does not have to forge mouse events. A forged
+## InputEventMouseMotion would be ignored anyway, because the mouse path is
+## gated on the pointer being captured and a phone never captures one.
+func apply_look(delta: Vector2) -> void:
+    if look_locked:
+        return
+    rotate_y(-delta.x)
+    head.rotate_x(-delta.y)
+    head.rotation.x = clampf(head.rotation.x, -1.45, 1.45)
+
 func _ready() -> void:
     if look_locked:
+        return
+    # A touch device has no pointer to lock, and asking for one there leaves a
+    # capture request outstanding that the first tap would try to satisfy.
+    if touch_driven:
         return
     # Browsers will not hand over the pointer except from inside a user
     # gesture. Asking for it as the scene loads throws "A user gesture is
@@ -45,7 +65,7 @@ func _ready() -> void:
         Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 func _unhandled_input(event: InputEvent) -> void:
-    if look_locked:
+    if look_locked or touch_driven:
         return
     if _awaiting_click and event is InputEventMouseButton and event.pressed:
         # This runs inside the browser's gesture, which is the whole point.
@@ -57,9 +77,7 @@ func _unhandled_input(event: InputEvent) -> void:
     if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and OS.has_feature("web"):
         _awaiting_click = true
     if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-        rotate_y(-event.relative.x * MOUSE_SENS)
-        head.rotate_x(-event.relative.y * MOUSE_SENS)
-        head.rotation.x = clampf(head.rotation.x, -1.45, 1.45)
+        apply_look(event.relative * MOUSE_SENS)
 
 func _physics_process(delta: float) -> void:
     dash_cooldown = maxf(0.0, dash_cooldown - delta)

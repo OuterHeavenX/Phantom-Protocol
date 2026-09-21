@@ -14,6 +14,7 @@ const RngC := preload("res://scripts/rng.gd")
 const ViewmodelC := preload("res://scripts/viewmodel.gd")
 const SimC := preload("res://scripts/sim.gd")
 const HudC := preload("res://scripts/hud.gd")
+const TouchControlsC := preload("res://scripts/touch_controls.gd")
 
 var level: Level
 var player: CharacterBody3D
@@ -32,6 +33,7 @@ var simtest_seconds: float = 0.0
 
 var sim: Sim
 var hud: Hud
+var touch_controls: CanvasLayer = null
 var viewmodel: Node3D
 var _enemy_nodes: Dictionary = {}
 var _char_cache: Dictionary = {}
@@ -324,6 +326,29 @@ func _spawn_player() -> void:
     player.look_locked = capture_path != ""
     add_child(player)
     player.global_position = level.to_world(level.spawn_point, 1.0)
+    _build_touch_controls()
+
+## On-screen controls, where the device has a touchscreen and nothing else.
+##
+## The check is for the screen rather than for the platform, because the same
+## web export serves both: a phone browser and a desktop browser load the same
+## wasm, and only one of them wants a thumbstick painted over the frame. Pass
+## `touch` on the command line to force it on for testing on a machine that
+## has no touchscreen.
+func _build_touch_controls() -> void:
+    # Not during an offscreen capture or a headless contract run: a thumbstick
+    # painted over a reference screenshot would be scored as part of the art.
+    if capture_path != "" or simtest_seconds > 0.0:
+        return
+    var forced := "touch" in OS.get_cmdline_user_args()
+    if not forced and not DisplayServer.is_touchscreen_available():
+        return
+    var tc := TouchControlsC.new()
+    tc.player = player
+    tc.debug = "touchdebug" in OS.get_cmdline_user_args()
+    player.touch_driven = true
+    add_child(tc)
+    touch_controls = tc
 
 # ---- Capture --------------------------------------------------------------
 
