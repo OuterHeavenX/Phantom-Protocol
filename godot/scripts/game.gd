@@ -153,10 +153,19 @@ func _build_environment() -> void:
     # Key and fill swap places here.
     sun.light_energy = 2.8
     sun.shadow_enabled = true
-    sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
     # Four splits over 60 m. Two splits over 45 gave neither: the near split
     # was too coarse for prop contact shadows and the range stopped short of
     # the far wall, so the frame had no cast shadows at any distance.
+    #
+    # The browser build takes two, at the same 60 m. Each split is a full pass
+    # over every shadow caster in its range, so on a phone four of them is
+    # four times the geometry submitted for a map nobody looks at directly.
+    # The range is kept, because losing it is what made two splits look wrong;
+    # what is lost instead is the near split's precision, which costs contact
+    # shadow crispness and not the shadows themselves.
+    sun.directional_shadow_mode = (DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+        if GameData.has_rendering_device()
+        else DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS)
     sun.directional_shadow_max_distance = 60.0
     sun.directional_shadow_blend_splits = true
     # A 4096 atlas over four splits affords a much tighter bias. The old values

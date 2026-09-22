@@ -71,4 +71,25 @@ anti_aliasing/quality/screen_space_aa=1
 anti_aliasing/quality/screen_space_aa.web=0
 anti_aliasing/quality/msaa_3d.web=1
 lights_and_shadows/directional_shadow/size.web=2048
+
+; The rest of this block is the browser build paying for the fact that it is
+; running on a phone. None of it touches the desktop path, which is what the
+; reference captures are scored on.
+;
+; Render 3D at three quarters across, which is a little over half the pixels,
+; and let the bilinear upscale carry it. The stretch mode above already caps
+; the viewport at 1080 tall, but "expand" widens it to the device aspect, so a
+; 19.5:9 phone was asking for about 2.5 megapixels of deferred-lit,
+; glow-post-processed frame per refresh. At 0.75 that is 1.4, and on a screen
+; held at arm's length the difference is not the thing anyone notices -- the
+; frame rate is.
+rendering/scaling_3d/scale.web=0.75
+; Hard shadow edges instead of the 6x6 filter. Quality 3 is the most expensive
+; of the five settings and it is sampling a 2048 atlas here, so it is buying
+; softness the phone cannot afford.
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality.web=0
+; 16x anisotropy on every surface in a triplanar scene is three texture
+; lookups per sample times sixteen taps. 4x keeps the ground from turning to
+; mush at grazing angles, which is all it was there for.
+textures/default_filters/anisotropic_filtering_level.web=2
 environment/defaults/default_clear_color=Color(0.55, 0.68, 0.85, 1)
