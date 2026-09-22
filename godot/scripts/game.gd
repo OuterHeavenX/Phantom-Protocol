@@ -86,6 +86,35 @@ func _ready() -> void:
     if not level.load_from("res://data/level_blacksite.json"):
         push_error("Could not load the level export.")
         return
+    # Yield before taking the thread, or the browser never gets its audio up.
+    #
+    # Building the sector holds the main thread for about six seconds in a
+    # browser, and the frames after it are held again by the first shader
+    # compiles. Godot asks for its AudioWorklet module during engine startup,
+    # but addModule resolves on that same main thread, so the driver does not
+    # finish coming up until all of it is done -- measured at 33 to 43 seconds
+    # in, against a context created in the first second. Until then the mixer
+    # has nowhere to send anything and every shot is silent, which is a large
+    # part of why "no sound" kept being reported by someone who had waited a
+    # perfectly reasonable ten seconds before firing.
+    #
+    # So the heavy work waits behind a loading screen for a moment of real
+    # time first. Nothing here is hogging the thread during that wait, so the
+    # worklet resolves in it, and the driver is up before the sector exists
+    # rather than long after. Measured in a browser, before and after: the
+    # worklet connects to the destination at 2 s instead of 33 to 43 s.
+    #
+    # What this does not fix is the gap between tapping and the context
+    # actually reporting itself running, which is resume() resolving on the
+    # same main thread and therefore waiting on a frame. That is 19 s on a
+    # software rasteriser doing fourteen seconds a frame, and a frame on a
+    # real phone GPU, so it is not worth engineering around here.
+    #
+    # Not for the capture or the headless replay: both expect a built world
+    # when _ready returns, and neither has anyone listening.
+    if capture_path == "" and simtest_seconds <= 0.0:
+        _build_loading_screen()
+        await get_tree().create_timer(STARTUP_YIELD).timeout
     var t0 := Time.get_ticks_msec()
     var mats: Dictionary = MaterialsC.build()
     var t1 := Time.get_ticks_msec()
@@ -98,6 +127,7 @@ func _ready() -> void:
     _start_contract()
     var t3 := Time.get_ticks_msec()
     print("BUILD materials=%dms level=%dms rest=%dms nodes=%d" % [t1 - t0, t2 - t1, t3 - t2, _count_nodes(self)])
+    _clear_loading_screen()
     if simtest_seconds > 0.0:
         _run_simtest()
         return
@@ -109,6 +139,43 @@ func _ready() -> void:
         # shows an empty sector and proves nothing about the game.
         _advance_for_capture(70.0 if capture_view == "combat" else 2.0)
         _run_capture()
+
+## How long to leave the main thread alone before building the sector.
+##
+## Long enough for a browser to finish fetching and compiling the audio
+## worklet, which is the thing being waited for; short enough that it reads as
+## part of loading rather than as a hang. It costs the same on desktop, where
+## it buys nothing and is not worth a platform branch to avoid.
+const STARTUP_YIELD := 0.75
+
+var _loading: CanvasLayer = null
+
+## Something to look at during the wait above and the build after it.
+##
+## Without it the player gets a blank window for the better part of ten
+## seconds on a phone, which reads as a broken page rather than as loading.
+func _build_loading_screen() -> void:
+    _loading = CanvasLayer.new()
+    _loading.layer = 8
+    var bg := ColorRect.new()
+    bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+    bg.color = Color(0.03, 0.035, 0.045)
+    bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _loading.add_child(bg)
+    var label := Label.new()
+    label.set_anchors_preset(Control.PRESET_FULL_RECT)
+    label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    label.text = "RED STATIC\n\nBUILDING SECTOR"
+    label.add_theme_color_override("font_color", Color(0.78, 0.80, 0.83))
+    label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _loading.add_child(label)
+    add_child(_loading)
+
+func _clear_loading_screen() -> void:
+    if _loading != null:
+        _loading.queue_free()
+        _loading = null
 
 func _parse_args() -> void:
     var args := OS.get_cmdline_user_args()

@@ -113,6 +113,18 @@
 // around in the engine's internals, and the listeners stay registered for the
 // life of the page rather than firing once.
 (function () {
+	// Start the worklet scripts downloading now, not when the engine asks.
+	//
+	// The engine requests these during its own startup, by which point the
+	// browser is already fetching a 15 MiB pack and a 9 MiB engine over
+	// whatever connection a phone has. They are a few kilobytes each and
+	// nothing can be heard until they arrive, so they go to the front of the
+	// queue. Failures are ignored: this is a warm-up, and the engine's own
+	// request is still the one that matters.
+	["index.audio.worklet.js", "index.audio.position.worklet.js"].forEach(function (f) {
+		try { fetch(f, { priority: "high" }).catch(function () {}); } catch (e) {}
+	});
+
 	function playback() {
 		try {
 			if (navigator.audioSession) navigator.audioSession.type = "playback";
