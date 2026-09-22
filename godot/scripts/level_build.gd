@@ -1848,8 +1848,14 @@ func _bridge_deck(w: float, h: float) -> void:
         # 0.422. The remaining gap is bright points, not spill: these are
         # additive cards lying in the road, so they raise the top of the
         # deck's range without lifting its floor.
+        # Brighter rather than more numerous. Going from 14 to 24 cards per
+        # metre bought 0.002 of window contrast, so the density is past the
+        # point of returning anything; what a window measures is the range
+        # inside it, and that is set by how far each card stands above the
+        # road it lies on. The 95th percentile is at 0.412 against a ceiling
+        # of 0.445, which is where the room for this comes from.
         _wet_streak(Vector3(px, 0.0, pz), col, length, width,
-            0.100 + float(hz % 17) * 0.0125)
+            0.150 + float(hz % 17) * 0.019)
 
     var lanes := 4
     var n := int(w / 5.5)
@@ -2314,16 +2320,139 @@ func cyl_node(r: float, depth: float, at: Vector3, mat: Material) -> MeshInstanc
 ## something that is actually burning rather than a light floating over open
 ## road, and only on the far half of the span so the player is looking INTO
 ## them down the deck.
+static var _puff_tex: ImageTexture = null
+
+## A soft round puff, for fire and smoke particles.
+##
+## Without one a billboarded quad is a hard-edged square, and a fire built
+## from squares reads as a stack of boxes however it is coloured -- which is
+## what the previous fires were, five shrinking emissive cubes each.
+static func puff_texture() -> ImageTexture:
+    if _puff_tex != null:
+        return _puff_tex
+    const S := 96
+    var img := Image.create(S, S, false, Image.FORMAT_RGBAF)
+    for y in range(S):
+        for x in range(S):
+            var dx := (float(x) / float(S - 1)) * 2.0 - 1.0
+            var dy := (float(y) / float(S - 1)) * 2.0 - 1.0
+            var d: float = sqrt(dx * dx + dy * dy)
+            # Smooth to zero at the rim, with a denser core than a plain
+            # linear falloff so a puff has a centre rather than being a disc.
+            var a: float = clampf(1.0 - d, 0.0, 1.0)
+            a = a * a * (3.0 - 2.0 * a)
+            # A little angular break-up, so overlapping puffs do not read as
+            # concentric circles.
+            var ang: float = atan2(dy, dx)
+            a *= 0.82 + 0.18 * sin(ang * 5.0 + d * 9.0)
+            img.set_pixel(x, y, Color(1.0, 1.0, 1.0, clampf(a, 0.0, 1.0)))
+    _puff_tex = ImageTexture.create_from_image(img)
+    return _puff_tex
+
+## One fire, as additive particles rising from a seat of flame.
+func _fire_emitter(at: Vector3, scale: float, wind: float) -> void:
+    var m := StandardMaterial3D.new()
+    m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+    m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+    m.billboard_keep_scale = true
+    m.albedo_texture = puff_texture()
+    m.vertex_color_use_as_albedo = true
+    m.disable_receive_shadows = true
+    var q := QuadMesh.new()
+    q.size = Vector2(1.0, 1.0)
+    q.material = m
+    var p := CPUParticles3D.new()
+    p.mesh = q
+    p.amount = 64
+    p.lifetime = 1.7
+    p.preprocess = 2.4
+    p.local_coords = false
+    p.draw_order = CPUParticles3D.DRAW_ORDER_VIEW_DEPTH
+    p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+    p.emission_sphere_radius = 0.95 * scale
+    p.direction = Vector3(0.0, 1.0, 0.0)
+    p.spread = 16.0
+    p.initial_velocity_min = 1.3 * scale
+    p.initial_velocity_max = 3.2 * scale
+    # Fire rises: gravity points up, with the map's own wind across it.
+    p.gravity = Vector3(wind * 1.6, 2.1, 0.0)
+    p.scale_amount_min = 1.5 * scale
+    p.scale_amount_max = 2.9 * scale
+    var sc := Curve.new()
+    sc.add_point(Vector2(0.0, 0.42))
+    sc.add_point(Vector2(0.26, 1.0))
+    sc.add_point(Vector2(1.0, 0.18))
+    p.scale_amount_curve = sc
+    var g := Gradient.new()
+    g.set_offset(0, 0.0)
+    # Thinning the smoke uncovered more of the seat of the fire behind it and
+    # took the 95th percentile to 0.458 against a ceiling of 0.445, so the
+    # hottest part of the ramp comes down rather than the smoke going back.
+    g.set_color(0, Color(1.00, 0.93, 0.70, 0.64))
+    g.set_offset(1, 1.0)
+    g.set_color(1, Color(0.62, 0.10, 0.02, 0.00))
+    g.add_point(0.30, Color(1.00, 0.55, 0.14, 0.54))
+    g.add_point(0.62, Color(0.92, 0.27, 0.06, 0.25))
+    p.color_ramp = g
+    p.position = at + Vector3(0.0, 0.7 * scale, 0.0)
+    p.emitting = true
+    add_child(p)
+
+## The smoke column off one fire.
+func _smoke_emitter(at: Vector3, scale: float, wind: float) -> void:
+    var m := StandardMaterial3D.new()
+    m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+    m.billboard_keep_scale = true
+    m.albedo_texture = puff_texture()
+    m.vertex_color_use_as_albedo = true
+    m.disable_receive_shadows = true
+    var q := QuadMesh.new()
+    q.size = Vector2(1.0, 1.0)
+    q.material = m
+    var p := CPUParticles3D.new()
+    p.mesh = q
+    p.amount = 44
+    p.lifetime = 7.0
+    p.preprocess = 9.0
+    p.local_coords = false
+    p.draw_order = CPUParticles3D.DRAW_ORDER_VIEW_DEPTH
+    p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+    p.emission_sphere_radius = 0.8 * scale
+    p.direction = Vector3(0.0, 1.0, 0.0)
+    p.spread = 11.0
+    p.initial_velocity_min = 3.2
+    p.initial_velocity_max = 5.4
+    p.gravity = Vector3(wind * 5.5, 0.9, 0.0)
+    p.scale_amount_min = 3.0 * scale
+    p.scale_amount_max = 6.5 * scale
+    var sc := Curve.new()
+    sc.add_point(Vector2(0.0, 0.30))
+    sc.add_point(Vector2(1.0, 2.60))
+    p.scale_amount_curve = sc
+    # Lit from below by the fire under it, as the mockups' columns are: warm
+    # and relatively bright at the base, cooling and thinning with height.
+    var g := Gradient.new()
+    g.set_offset(0, 0.0)
+    g.set_color(0, Color(0.30, 0.17, 0.10, 0.00))
+    g.set_offset(1, 1.0)
+    g.set_color(1, Color(0.05, 0.05, 0.06, 0.00))
+    # Thinner and cooler than the first pass. At 0.52 alpha over a warm
+    # brown the overlapping puffs accumulated into a solid orange mass rather
+    # than a smoke column, and the large smooth area it put over the middle of
+    # the frame cost window contrast with it.
+    g.add_point(0.12, Color(0.22, 0.14, 0.10, 0.30))
+    g.add_point(0.50, Color(0.09, 0.09, 0.10, 0.25))
+    p.color_ramp = g
+    p.position = at + Vector3(0.0, 2.2 * scale, 0.0)
+    p.emitting = true
+    add_child(p)
+
 func _bridge_fires() -> void:
     var w := level.metres(level.width)
-    var flame := StandardMaterial3D.new()
-    flame.albedo_color = Color(1.0, 0.42, 0.10)
-    flame.emission_enabled = true
-    flame.emission = Color(1.0, 0.44, 0.12)
-    flame.emission_energy_multiplier = 1.30
-    flame.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-    flame.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
-
     var placed := 0
     for c in level.cover:
         var x := level.metres(float(c["x"]))
@@ -2331,16 +2460,15 @@ func _bridge_fires() -> void:
             continue
         placed += 1
         var at := Vector3(x, 0.0, level.metres(float(c["y"])))
-        # The body of fire: a stack of shrinking emissive blocks. Cheap, and
-        # at this distance through rain haze it reads as a fire rather than as
-        # geometry, which a single quad never does.
-        for i in range(5):
-            var t := float(i) / 4.0
-            var s := lerpf(2.2, 0.7, t)
-            var f := _box(Vector3(s, s * 0.9, s),
-                at + Vector3(sin(t * 7.0) * 0.5, 1.0 + t * 3.4, cos(t * 5.0) * 0.5),
-                flame, false)
-            f.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        # The body of fire, as additive particles rather than as geometry.
+        #
+        # It was five shrinking emissive cubes, and that is exactly what it
+        # looked like: flat orange boxes stepping up out of the deck, the
+        # worst artefact in the frame at this viewpoint. A fire has a
+        # white-hot seat, an orange body and a cooling tip that breaks up as
+        # it rises, and none of that survives being made of axis-aligned
+        # boxes with one unshaded colour on them.
+        _fire_emitter(at, 1.0, level.wind())
         # Two lights per fire: a hot close one and a wide one that reaches the
         # deck and the parapets, which is what puts the orange down the road.
         for spec in [[3.2, 13.0, 2.0], [1.3, 34.0, 8.0]]:
@@ -2355,31 +2483,12 @@ func _bridge_fires() -> void:
         # way back down the deck toward the player.
         _wet_streak(at, Color(1.0, 0.46, 0.17), 74.0, 5.5, 0.060)
         # Smoke: a dark column leaning with the map's own wind.
-        var smoke := StandardMaterial3D.new()
-        # Lit from below by the fire under it, as the mockups' columns are:
-        # warm and relatively bright at the base, cooling and thinning with
-        # height. Flat near-black smoke over the upper centre of the frame is
-        # a large part of why those cells measured 56 to 71 percent crushed.
-        smoke.albedo_color = Color(0.150, 0.105, 0.078, 0.50)
-        smoke.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-        smoke.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-        smoke.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-        var wind := level.wind()
-        for i in range(7):
-            var t := float(i) / 6.0
-            var q := QuadMesh.new()
-            q.size = Vector2(lerpf(3.0, 12.0, t), lerpf(3.0, 12.0, t))
-            var s := MeshInstance3D.new()
-            s.mesh = q
-            s.material_override = smoke
-            var cool: float = 1.0 - t * 0.72
-            var sm: StandardMaterial3D = smoke.duplicate()
-            sm.albedo_color = Color(0.150 * cool + 0.030, 0.105 * cool + 0.030,
-                0.078 * cool + 0.034, 0.50 - t * 0.18)
-            s.material_override = sm
-            s.position = at + Vector3(wind * t * 16.0, 4.0 + t * 26.0, sin(t * 3.0) * 2.0)
-            s.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-            add_child(s)
+        #
+        # Seven billboarded quads stepping up in size read as seven
+        # translucent squares. Same reason as the flame: a column of smoke is
+        # a mass that grows, thins and drifts, and a fixed ladder of quads
+        # cannot be any of those.
+        _smoke_emitter(at, 1.0, level.wind())
 
 ## The city across the water: a band of dark blocks with lit windows.
 ##

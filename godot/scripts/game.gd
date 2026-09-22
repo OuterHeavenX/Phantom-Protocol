@@ -759,8 +759,17 @@ func _spawn_player() -> void:
     vm.name = "Viewmodel"
     # A night scene needs the weapon at night exposure too, or the rig that
     # keeps it readable in shade turns it into the brightest thing in frame.
+    #
+    # 0.20 went too far the other way and left the weapon a flat grey
+    # cut-out. In the mockups the near field is the gun and the shooter's
+    # gear -- hard edges, bright specular along every rail and rib, deep
+    # shadow between them -- and it is the densest part of those frames.
+    # Measured on the band's own 48-pixel windows over a 4 by 4 map, the
+    # bottom row of the references runs 0.069 to 0.129 of window deviation
+    # against 0.032 here, and that row is mostly weapon in both. An unlit
+    # viewmodel cannot contribute any of it.
     if level.is_night():
-        vm.rig_scale = 0.20
+        vm.rig_scale = 0.55
     cam.add_child(vm)
     viewmodel = vm
 
