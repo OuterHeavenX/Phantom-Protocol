@@ -1568,19 +1568,37 @@ func _bridge_mat(key: String) -> Material:
     # measured 0.036 against a floor of 0.064 even after the frame stopped
     # being black. Finer tiling puts one to two full cycles of grain in every
     # window, which is what a photograph of wet asphalt actually contains.
+    # Built on the wet sets, and the roughness MAP is left to speak.
+    #
+    # The six earlier attempts at surface variation all worked on the albedo
+    # -- the project's standard sets, finer tiling, brightness, then scattered
+    # puddle cards. Measuring the inputs showed why none of them could work:
+    # the asphalt set's roughness map has a standard deviation of 0.027 over a
+    # mean of 0.876. It is a constant to within a couple of percent, so every
+    # square metre of road reflected the lamps, the fires and the sky by
+    # exactly the same amount. At night almost nothing here is lit diffusely;
+    # what the eye reads on a wet road is specular, and specular is governed
+    # by roughness. No amount of albedo detail can survive a flat one.
+    #
+    # tools/godot/make-wet-textures.py builds the sets around that instead: a
+    # puddle mask at two scales, roughness near 0.06 on standing water against
+    # 0.48 on damp asphalt, which is a standard deviation of 0.171 -- six
+    # times the old map -- with the albedo darkened where the water sits and
+    # oil streaked down the lane centres.
+    #
+    # roughness stays at 1.0 so the map is used at its authored values. It is
+    # a MULTIPLIER on the texture, and the uniform 0.26 that used to be set
+    # here was flattening the very variation these maps exist to provide.
     var wall_hue := _hue_of(level.pal("wall", Color(0.137, 0.192, 0.251)))
     var floor_hue := _hue_of(level.pal("floor", Color(0.078, 0.114, 0.149)))
     var m: StandardMaterial3D
     match key:
         "concrete":
-            m = MaterialsC.pbr("concrete", 1.15, wall_hue * _tint(0.34, 0.385), 0.12)
-            m.roughness = 0.52
+            m = MaterialsC.pbr("wetconcrete", 1.15, wall_hue * _tint(0.34, 0.516), 0.12)
         "tower":
-            m = MaterialsC.pbr("concrete", 0.85, wall_hue * _tint(0.40, 0.385), 0.08)
-            m.roughness = 0.58
+            m = MaterialsC.pbr("wetconcrete", 0.85, wall_hue * _tint(0.40, 0.516), 0.08)
         "steel":
-            m = MaterialsC.pbr("steel", 1.90, wall_hue * _tint(0.28, 0.473), 0.55)
-            m.roughness = 0.38
+            m = MaterialsC.pbr("wetsteel", 1.90, wall_hue * _tint(0.28, 0.479), 0.62)
         "rust":
             m = MaterialsC.pbr("paintwork", 1.60,
                 Color(1.10, 0.95, 0.84) * _tint(0.24, 0.572), 0.25)
@@ -1589,10 +1607,9 @@ func _bridge_mat(key: String) -> Material:
             m = MaterialsC.pbr("blockwork", 1.45, floor_hue * _tint(0.26, 0.534), 0.30)
             m.roughness = 0.42
         "road":
-            m = MaterialsC.pbr("asphalt", 1.35, floor_hue * _tint(0.105, 0.217), 0.0)
-            m.roughness = 0.26
+            m = MaterialsC.pbr("wetroad", 1.35, floor_hue * _tint(0.105, 0.420), 0.0)
         _:
-            m = MaterialsC.pbr("concrete", 1.15, wall_hue * _tint(0.30, 0.385), 0.1)
+            m = MaterialsC.pbr("wetconcrete", 1.15, wall_hue * _tint(0.30, 0.516), 0.1)
     m.metallic_specular = 0.80
     # World triplanar, as the sector uses, so nothing needs UVs and the grain
     # stays continuous across the joins between deck, kerb and girder.
