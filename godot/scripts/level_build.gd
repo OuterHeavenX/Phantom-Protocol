@@ -1,6 +1,8 @@
 class_name LevelBuild
 extends Node3D
 
+const MaterialsC := preload("res://scripts/materials.gd")
+
 ## Builds the 3D sector from the exported plan.
 ##
 ## Every solid in the plan becomes a box of the same footprint with a
@@ -1487,28 +1489,49 @@ var _bmat: Dictionary = {}
 func _bridge_mat(key: String) -> Material:
     if _bmat.has(key):
         return _bmat[key]
-    var m := StandardMaterial3D.new()
+    # Built on the real PBR sets rather than as flat colours.
+    #
+    # The bridge shipped its first six rounds with untextured materials, and
+    # the measurements said so in three places at once: fine surface variation
+    # of 0.024 against the mockups' 0.064 to 0.089, large-scale contrast of
+    # 0.167 against their 0.074 to 0.107, and 48 percent of the frame crushed
+    # to black against their 15 to 32. All one fault. With no normal map and
+    # no roughness variation every pixel is either inside a lamp's pool or it
+    # is nothing, so the frame is all extremes and no middle -- which is
+    # exactly what those three numbers describe.
+    #
+    # The tints come from the map's own palette and the sets are the ones the
+    # street sector already generates. Wet is carried in the roughness and the
+    # tint rather than in a separate material: soaked concrete is about half
+    # the albedo of dry and far glossier.
+    var wall := level.pal("wall", Color(0.137, 0.192, 0.251))
+    var floor_c := level.pal("floor", Color(0.078, 0.114, 0.149))
+    var m: StandardMaterial3D
     match key:
         "concrete":
-            m.albedo_color = level.pal("wall", Color(0.137, 0.192, 0.251)) * 0.62
-            m.roughness = 0.46
-            m.metallic = 0.10
+            m = MaterialsC.pbr("concrete", 0.30, wall * 0.72, 0.12)
+            m.roughness = 0.52
         "steel":
-            m.albedo_color = level.pal("wall", Color(0.137, 0.192, 0.251)) * 0.44
-            m.roughness = 0.30
-            m.metallic = 0.62
-        "rust":
-            m.albedo_color = Color(0.052, 0.046, 0.044)
-            m.roughness = 0.68
-            m.metallic = 0.22
-        "panel":
-            m.albedo_color = level.pal("floorAlt", Color(0.094, 0.137, 0.180)) * 0.70
+            m = MaterialsC.pbr("steel", 0.55, wall * 0.52, 0.65)
             m.roughness = 0.38
-            m.metallic = 0.35
+        "rust":
+            m = MaterialsC.pbr("paintwork", 0.45, Color(0.24, 0.21, 0.19), 0.28)
+            m.roughness = 0.62
+        "panel":
+            m = MaterialsC.pbr("blockwork", 0.40, floor_c * 1.1, 0.35)
+            m.roughness = 0.42
+        "road":
+            # The deck. Asphalt at a large scale so the grain reads underfoot
+            # without tiling visibly down the span, kept dark and glossy.
+            m = MaterialsC.pbr("asphalt", 0.22, floor_c * 0.55, 0.30)
+            m.roughness = 0.24
         _:
-            m.albedo_color = Color(0.05, 0.06, 0.075)
-            m.roughness = 0.5
-    m.metallic_specular = 0.75
+            m = MaterialsC.pbr("concrete", 0.30, wall * 0.6, 0.1)
+    m.metallic_specular = 0.80
+    # World triplanar, as the sector uses, so nothing needs UVs and the grain
+    # stays continuous across the joins between deck, kerb and girder.
+    m.uv1_triplanar = true
+    m.uv1_world_triplanar = true
     _bmat[key] = m
     return m
 
@@ -2030,7 +2053,7 @@ func _bridge_fires() -> void:
             add_child(lamp)
         # The fire doubled in the road, which in the mockups runs most of the
         # way back down the deck toward the player.
-        _wet_streak(at, Color(1.0, 0.46, 0.17), 74.0, 5.5, 0.16)
+        _wet_streak(at, Color(1.0, 0.46, 0.17), 74.0, 5.5, 0.085)
         # Smoke: a dark column leaning with the map's own wind.
         var smoke := StandardMaterial3D.new()
         smoke.albedo_color = Color(0.045, 0.040, 0.038, 0.62)

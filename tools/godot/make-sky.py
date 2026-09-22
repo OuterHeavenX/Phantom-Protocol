@@ -87,9 +87,18 @@ def main(out_dir, night=False):
         # overcast rather than as clear. Values are low enough that the sky
         # contributes almost nothing as a light source, which is deliberate:
         # on this map the lamps and the fires are the light.
-        zenith = np.array([0.0065, 0.0092, 0.0155])
-        horizon = np.array([0.0260, 0.0335, 0.0495])
-        ground = np.array([0.0040, 0.0050, 0.0068])
+        # Raised roughly four times from the first pass, which was wrong in a
+        # way that only a band-by-band comparison showed. The mockups are
+        # BRIGHTEST AT THE TOP -- sky 0.166 to 0.208, upper-middle 0.185 to
+        # 0.247 -- and darken toward the road, which sits at 0.112 to 0.116.
+        # The first night sky rendered at 0.084 and the deck at 0.168, so the
+        # whole frame's gradient ran the wrong way: a black lid over a hot
+        # floor, where the reference is a luminous overcast over a dark wet
+        # road. A storm sky at night over a city is not dark; it is a low
+        # ceiling picking up every light beneath it.
+        zenith = np.array([0.0290, 0.0370, 0.0530])
+        horizon = np.array([0.0930, 0.1080, 0.1420])
+        ground = np.array([0.0150, 0.0180, 0.0230])
     else:
         zenith = np.array([0.155, 0.275, 0.520])
         # The band visible between rooflines is the first few degrees above
@@ -132,8 +141,8 @@ def main(out_dir, night=False):
         # Cloud lit from BELOW by sodium light off the city, so the base is
         # warm and the tops stay dead. Inverting which side is lit is what
         # separates a night storm from a grey daytime overcast.
-        cloud_col = (np.array([0.0300, 0.0225, 0.0150])
-                     + np.array([-0.0175, -0.0130, -0.0060]) * lit[..., None])
+        cloud_col = (np.array([0.1150, 0.0960, 0.0790])
+                     + np.array([-0.0620, -0.0500, -0.0330]) * lit[..., None])
     else:
         cloud_col = np.array([0.52, 0.54, 0.585]) + np.array([0.44, 0.42, 0.395]) * lit[..., None]
     sky = sky * (1 - cloud[..., None]) + cloud_col * cloud[..., None]

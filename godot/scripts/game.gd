@@ -455,8 +455,8 @@ func _night_overrides(env: Environment, bounce: DirectionalLight3D) -> void:
     env.fog_enabled = true
     env.fog_mode = Environment.FOG_MODE_DEPTH
     env.fog_light_color = level.pal("fog", Color(0.075, 0.095, 0.130))
-    env.fog_light_energy = 0.55
-    env.fog_density = 0.024
+    env.fog_light_energy = 1.25
+    env.fog_density = 0.034
     env.fog_depth_begin = 6.0
     env.fog_depth_end = 150.0
     env.fog_sky_affect = 0.85
@@ -579,7 +579,7 @@ func _spawn_player() -> void:
     # A night scene needs the weapon at night exposure too, or the rig that
     # keeps it readable in shade turns it into the brightest thing in frame.
     if level.is_night():
-        vm.rig_scale = 0.42
+        vm.rig_scale = 0.28
     cam.add_child(vm)
     viewmodel = vm
 
