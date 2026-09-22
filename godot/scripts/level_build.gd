@@ -1488,6 +1488,13 @@ var _bmat: Dictionary = {}
 
 ## A colour reduced to its hue, at unit mean, so a reflectance can be applied
 ## to it without inheriting the palette's own brightness.
+## The tint that makes a textured material land on a chosen reflectance.
+##
+## Capped just under 1.0: a tint above unity multiplies the texture past what a
+## dielectric can reflect, which is physically impossible and blows highlights.
+func _tint(target: float, texture_mean: float) -> float:
+    return minf(0.98, target / maxf(0.01, texture_mean))
+
 func _hue_of(c: Color) -> Color:
     var m: float = maxf(0.001, (c.r + c.g + c.b) / 3.0)
     return Color(c.r / m, c.g / m, c.b / m)
@@ -1526,33 +1533,50 @@ func _bridge_mat(key: String) -> Material:
     # reflectance the material actually has. Wet asphalt is about 0.18 dry-
     # equivalent, concrete 0.40, painted steel 0.32. Those are the numbers
     # that put a surface in the 0.11 to 0.16 the mockups hold their deck at.
+    # A tint is a MULTIPLIER on the albedo texture, which already carries the
+    # material's own reflectance. Getting that wrong is what kept the deck
+    # black through seven attempted fixes.
+    #
+    # The previous pass reasoned correctly that wet asphalt is about 0.20
+    # reflectance and then passed 0.20 as the TINT -- where it was multiplied
+    # by the asphalt texture's own 0.217, giving 0.043. Every bridge material
+    # was between two and five times too dark for the same reason, and no
+    # amount of adjusting ambient, fog, occlusion or the water could recover
+    # it, because none of those were the term that was wrong.
+    #
+    # Proved by experiment rather than by argument: forcing the road tint to
+    # 0.90 took the crushed share from 40.8 percent to 22.7, inside the band,
+    # and put the road at 0.1195 against the mockups' 0.112 to 0.116.
+    #
+    # So the tint is now derived -- target reflectance divided by the
+    # texture's measured mean -- and each target is what the real surface has.
+    # The measured means are from the generated sets and are stable because
+    # make-textures.py is seeded.
     var wall_hue := _hue_of(level.pal("wall", Color(0.137, 0.192, 0.251)))
     var floor_hue := _hue_of(level.pal("floor", Color(0.078, 0.114, 0.149)))
     var m: StandardMaterial3D
     match key:
         "concrete":
-            m = MaterialsC.pbr("concrete", 0.30, wall_hue * 0.40, 0.12)
+            m = MaterialsC.pbr("concrete", 0.30, wall_hue * _tint(0.34, 0.385), 0.12)
             m.roughness = 0.52
         "tower":
-            # The pylons stand above the lamps with nothing lighting them
-            # directly, so they lean on ambient alone and need the reflectance
-            # to carry them.
-            m = MaterialsC.pbr("concrete", 0.22, wall_hue * 0.46, 0.08)
+            m = MaterialsC.pbr("concrete", 0.22, wall_hue * _tint(0.40, 0.385), 0.08)
             m.roughness = 0.58
         "steel":
-            m = MaterialsC.pbr("steel", 0.55, wall_hue * 0.32, 0.55)
+            m = MaterialsC.pbr("steel", 0.55, wall_hue * _tint(0.28, 0.473), 0.55)
             m.roughness = 0.38
         "rust":
-            m = MaterialsC.pbr("paintwork", 0.45, Color(0.30, 0.26, 0.23), 0.25)
+            m = MaterialsC.pbr("paintwork", 0.45,
+                Color(1.10, 0.95, 0.84) * _tint(0.24, 0.572), 0.25)
             m.roughness = 0.62
         "panel":
-            m = MaterialsC.pbr("blockwork", 0.40, floor_hue * 0.34, 0.30)
+            m = MaterialsC.pbr("blockwork", 0.40, floor_hue * _tint(0.26, 0.534), 0.30)
             m.roughness = 0.42
         "road":
-            m = MaterialsC.pbr("asphalt", 0.22, floor_hue * 0.20, 0.0)
+            m = MaterialsC.pbr("asphalt", 0.22, floor_hue * _tint(0.19, 0.217), 0.0)
             m.roughness = 0.26
         _:
-            m = MaterialsC.pbr("concrete", 0.30, wall_hue * 0.36, 0.1)
+            m = MaterialsC.pbr("concrete", 0.30, wall_hue * _tint(0.30, 0.385), 0.1)
     m.metallic_specular = 0.80
     # World triplanar, as the sector uses, so nothing needs UVs and the grain
     # stays continuous across the joins between deck, kerb and girder.
@@ -1574,6 +1598,32 @@ func _build_bridge() -> void:
     _bridge_skyline(w, h)
     _bridge_helicopter(w, h)
     _merge_static()
+    _bridge_probe(w, h)
+
+## The probe that gives the wet deck something to reflect.
+##
+## Built LAST, and not allowed to touch ambient.
+##
+## It used to be created inside _bridge_deck, which runs before the lamps, the
+## fires, the towers and the skyline exist -- and with UPDATE_ONCE it captures
+## the scene at that moment, so it captured an empty black bridge and then
+## imposed that on every surface inside its box. The controlled experiment
+## that found the albedo error also removed this probe, and the two together
+## reached 22.7 percent crushed where the albedo fix alone reaches 36.5: the
+## probe was costing about fourteen points on its own.
+##
+## AMBIENT_DISABLED because the environment's ambient is the deck's main light
+## on this map and a probe set to AMBIENT_ENVIRONMENT replaces it inside the
+## box with its own captured version.
+func _bridge_probe(w: float, h: float) -> void:
+    var probe := ReflectionProbe.new()
+    probe.size = Vector3(w * 0.5, 40.0, h)
+    probe.position = Vector3(w * 0.5, 9.0, h * 0.5)
+    probe.update_mode = ReflectionProbe.UPDATE_ONCE
+    probe.intensity = 0.9
+    probe.max_distance = 260.0
+    probe.ambient_mode = ReflectionProbe.AMBIENT_DISABLED
+    add_child(probe)
 
 func _bridge_water(w: float, h: float) -> void:
     var m := StandardMaterial3D.new()
@@ -1646,15 +1696,6 @@ func _bridge_deck(w: float, h: float) -> void:
     # Without one a metallic surface reflects the environment sky only, which
     # at night is nearly black, and the road goes flat matte no matter what
     # its roughness says.
-    var probe := ReflectionProbe.new()
-    probe.size = Vector3(w * 0.5, 40.0, h)
-    probe.position = Vector3(w * 0.5, 9.0, h * 0.5)
-    probe.update_mode = ReflectionProbe.UPDATE_ONCE
-    probe.intensity = 1.5
-    probe.max_distance = 260.0
-    probe.ambient_mode = ReflectionProbe.AMBIENT_ENVIRONMENT
-    add_child(probe)
-
     var lanes := 4
     var n := int(w / 5.5)
     for lane in range(lanes):
