@@ -37,5 +37,12 @@ write('durations',plain(DURATIONS));
 write('difficulties',plain(DIFFICULTIES));
 write('bosses',plain(BOSSES));
 write('operatives',plain(OPERATIVES));
-// The first level only, for now.
+// The whole campaign, not just its first entry.
+//
+// Only op1 was exported while the Godot build could run exactly one contract.
+// It now runs them in sequence, and the operation carries the map, the
+// duration, the difficulty and the objective, so the list has to come across
+// whole or the second contract has nothing to read. op1.json stays beside it
+// because the port's opening sector is hand-authored against that file.
+write('campaign',plain(CAMPAIGN));
 write('op1',plain(CAMPAIGN.find(o=>o.id==='op1')));

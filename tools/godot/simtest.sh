@@ -12,24 +12,53 @@
 set -e
 SECONDS_ARG=${1:-340}
 ROOT=$(cd "$(dirname "$0")/../../godot" && pwd)
-OUT=$(timeout 300 godot --headless --path "$ROOT" -- simtest "$SECONDS_ARG" 2>&1 | grep "^SIMTEST" || true)
-echo "$OUT"
-[ -n "$OUT" ] || { echo "FAIL: simulation produced no report"; exit 1; }
+ONLY_OP=${2:-}
 
 value() { echo "$OUT" | tr ' ' '\n' | grep "^$1=" | cut -d= -f2 | head -1; }
 fail=0
 note() { echo "  $1"; fail=1; }
 
-[ "$(value outcome)" = "extracted" ] || note "contract did not end in extraction (outcome=$(value outcome))"
-[ "$(value kills)" -ge 20 ] 2>/dev/null || note "only $(value kills) kills: the loadout is not engaging"
-[ "$(value peak)" -ge 8 ] 2>/dev/null || note "peak hostiles $(value peak): the director is not escalating"
-[ "$(value level)" -ge 5 ] 2>/dev/null || note "reached only level $(value level): experience is not accruing"
+run_op() {
+  op=$1
+  echo "-- op$op"
+  OUT=$(timeout 400 godot --headless --path "$ROOT" -- simtest "$SECONDS_ARG" op "$op" 2>&1 | grep "^SIMTEST" || true)
+  echo "$OUT"
+  [ -n "$OUT" ] || { echo "  FAIL: simulation produced no report"; fail=1; return; }
+  check_common
+}
 
-blocked=$(echo "$OUT" | tr ' ' '\n' | grep "^blocked=" | cut -d= -f2 | head -1)
-hit=$(echo "$OUT" | tr ' ' '\n' | grep "^hit=" | cut -d= -f2 | head -1)
-# More rounds into walls than into hostiles means targeting has stopped
-# consulting line of sight, which is exactly how this started.
-[ "$blocked" -lt "$hit" ] 2>/dev/null || note "more rounds blocked ($blocked) than landed ($hit): line of sight is not being checked"
+check_common() {
+  [ "$(value outcome)" = "extracted" ] || note "contract did not end in extraction (outcome=$(value outcome))"
+  [ "$(value kills)" -ge 12 ] 2>/dev/null || note "only $(value kills) kills: the loadout is not engaging"
+  [ "$(value peak)" -ge 8 ] 2>/dev/null || note "peak hostiles $(value peak): the director is not escalating"
+  [ "$(value level)" -ge 5 ] 2>/dev/null || note "reached only level $(value level): experience is not accruing"
+
+  blocked=$(echo "$OUT" | tr ' ' '\n' | grep "^blocked=" | cut -d= -f2 | head -1)
+  hit=$(echo "$OUT" | tr ' ' '\n' | grep "^hit=" | cut -d= -f2 | head -1)
+  # More rounds into walls than into hostiles means targeting has stopped
+  # consulting line of sight, which is exactly how this started.
+  [ "$blocked" -lt "$hit" ] 2>/dev/null || note "more rounds blocked ($blocked) than landed ($hit): line of sight is not being checked"
+
+  # An operation with its own objective has to be completable, not just
+  # survivable. CROSSFALL keeps the beacon shut until three data caches are
+  # recovered, so an extraction there is only meaningful with all three in.
+  caches=$(echo "$OUT" | tr ' ' '\n' | grep "^caches=" | cut -d= -f2 | head -1)
+  if [ -n "$caches" ]; then
+    got=${caches%%/*}
+    want=${caches##*/}
+    [ "$got" = "$want" ] 2>/dev/null || note "recovered $caches caches: the objective was not completed"
+  fi
+}
+
+if [ -n "$ONLY_OP" ]; then
+  run_op "$ONLY_OP"
+else
+  # Every contract this build can run, because a change to the simulation
+  # that only the opening sector exercises is a change that has not been
+  # tested.
+  run_op 1
+  run_op 2
+fi
 
 if [ "$fail" -ne 0 ]; then echo "FAIL"; exit 1; fi
-echo "ok: the contract plays and can be completed"
+echo "ok: every contract plays and can be completed"

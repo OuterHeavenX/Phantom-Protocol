@@ -62,9 +62,24 @@ func _draw() -> void:
         WARN if sim.extraction_active else INK)
 
     # Objective line under the clock.
-    var objective := "REACH EXTRACTION" if sim.extraction_active else "SURVIVE THE CONTRACT WINDOW"
+    #
+    # An operation with its own objective keeps the beacon shut until that is
+    # met, so once the window closes the line has to say what is still owed
+    # rather than sending the operative to a beacon that will not take them.
+    var blocked := sim.blocked_reason()
+    var objective := "SURVIVE THE CONTRACT WINDOW"
+    if sim.extraction_active:
+        objective = "REACH EXTRACTION" if blocked == "" else "EXTRACTION LOCKED // " + blocked
     draw_string(font, Vector2(c.x - 150, pad + 46), objective, HORIZONTAL_ALIGNMENT_CENTER, 300, 14,
         Color(WARN if sim.extraction_active else INK, 0.85))
+
+    # The objective's own counter, when the contract has one.
+    var line := sim.objective_line()
+    if not line.is_empty():
+        var done: bool = line["done"]
+        draw_string(font, Vector2(c.x - 150, pad + 78),
+            "%s  %s" % [String(line["label"]), String(line["value"])],
+            HORIZONTAL_ALIGNMENT_CENTER, 300, 15, ACCENT if done else Color(INK, 0.9))
     if sim.extraction_active and sim.extraction_hold > 0.0:
         var hold: float = clampf(sim.extraction_hold / Sim.EXTRACTION_HOLD, 0.0, 1.0)
         draw_rect(Rect2(c.x - 90, pad + 58, 180.0 * hold, 5), ACCENT)

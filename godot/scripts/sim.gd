@@ -28,6 +28,13 @@ const SPAWN_DISTANCE_MIN := 520.0
 const SPAWN_DISTANCE_MAX := 1100.0
 const EXTRACTION_RADIUS := 95.0
 const EXTRACTION_HOLD := 2.5
+## Cache download, matching the 2D game: standing on one takes two seconds,
+## stepping off pauses at a fifth of that rather than resetting, so a dodge
+## mid-download does not cost the whole thing.
+const CACHE_RADIUS := 86.0
+const CACHE_SECONDS := 2.0
+const CACHE_DECAY := 0.2
+const CACHE_MIN_SPACING := 520.0
 
 enum WaveState { LULL, DEPLOY, SUSTAIN, SURGE }
 
@@ -63,6 +70,15 @@ var speed_bonus: float = 0.0
 # Contract
 var extraction_active: bool = false
 var extraction_hold: float = 0.0
+## The operation's objective, straight from the campaign entry.
+##
+## The base contract is survive the window and reach the beacon. A campaign
+## operation can also require data caches to be recovered first, and an unmet
+## objective keeps the beacon shut rather than ending the contract early.
+var objective: Dictionary = {}
+## {pos: Vector2, recovered: bool, progress: float} per cache.
+var caches: Array = []
+var recovered: int = 0
 
 # Director
 var state: int = WaveState.LULL
@@ -88,6 +104,7 @@ signal enemy_died(e)
 signal weapon_fired(target_dir, target_pos)
 signal player_hurt(amount)
 signal level_gained(level)
+signal cache_recovered(index, total)
 
 func setup(lvl: Level, seed_value: int, op: Dictionary, diff: Dictionary,
         minutes: float, weapon_def: Dictionary, bias: Dictionary) -> void:
@@ -100,6 +117,42 @@ func setup(lvl: Level, seed_value: int, op: Dictionary, diff: Dictionary,
     player_max_hp = float(op.get("hp", 100))
     player_hp = player_max_hp
     player_pos = lvl.spawn_point
+    _setup_objective()
+
+## Place whatever the objective needs, once the level and the rng exist.
+func _setup_objective() -> void:
+    caches.clear()
+    recovered = 0
+    if String(objective.get("type", "extract")) != "recover":
+        return
+    var target := int(objective.get("caches", 3))
+    var attempts := 0
+    while caches.size() < target and attempts < 400:
+        attempts += 1
+        var x := rng.range_f(200.0, level.width - 200.0)
+        var y := rng.range_f(200.0, level.height - 200.0)
+        if not level.playable(x, y, 120.0):
+            continue
+        if level.overlaps_solid(x, y, 60.0):
+            continue
+        # Spread them out, and keep the first one off the operative's start.
+        var p := Vector2(x, y)
+        if p.distance_squared_to(level.spawn_point) < 420.0 * 420.0:
+            continue
+        var clash := false
+        for c in caches:
+            if (c["pos"] as Vector2).distance_squared_to(p) < CACHE_MIN_SPACING * CACHE_MIN_SPACING:
+                clash = true
+                break
+        if clash:
+            continue
+        caches.append({"pos": p, "recovered": false, "progress": 0.0})
+    if caches.size() < target:
+        # Better a shorter objective than one that cannot be completed. The
+        # bridge deck is a long thin playable area and the spacing the 2D
+        # game uses for an open map does not always fit three on it.
+        push_warning("Placed %d of %d caches after %d attempts" % [
+            caches.size(), target, attempts])
 
 func progress() -> float:
     return clampf(elapsed / duration_seconds, 0.0, 1.0)
@@ -574,9 +627,15 @@ func _gain_xp(amount: float) -> void:
 # ---- Objective ------------------------------------------------------------
 
 func _step_objective(dt: float) -> void:
+    _step_caches(dt)
     if not extraction_active and elapsed >= duration_seconds:
         extraction_active = true
     if not extraction_active:
+        return
+    # An unmet objective keeps the beacon shut. The window still closes and
+    # the director still thins out; what the operative cannot do is leave.
+    if not objective_met():
+        extraction_hold = 0.0
         return
     var d := (player_pos - level.extraction_point).length()
     if d < EXTRACTION_RADIUS:
@@ -586,6 +645,45 @@ func _step_objective(dt: float) -> void:
             outcome = "extracted"
     else:
         extraction_hold = maxf(0.0, extraction_hold - dt * 0.6)
+
+func _step_caches(dt: float) -> void:
+    if caches.is_empty():
+        return
+    for i in range(caches.size()):
+        var c: Dictionary = caches[i]
+        if c["recovered"]:
+            continue
+        if (player_pos - (c["pos"] as Vector2)).length() < CACHE_RADIUS:
+            c["progress"] = minf(1.0, c["progress"] + dt / CACHE_SECONDS)
+            if c["progress"] >= 1.0:
+                c["recovered"] = true
+                recovered += 1
+                cache_recovered.emit(i, caches.size())
+        else:
+            c["progress"] = maxf(0.0, c["progress"] - dt * CACHE_DECAY)
+
+## Whether the extraction beacon will accept the operative.
+func objective_met() -> bool:
+    if String(objective.get("type", "extract")) == "recover":
+        return recovered >= caches.size()
+    return true
+
+## What the HUD says while the beacon is shut, or "" when nothing blocks it.
+func blocked_reason() -> String:
+    if objective_met():
+        return ""
+    if String(objective.get("type", "extract")) == "recover":
+        return "CACHES %d/%d" % [recovered, caches.size()]
+    return "OBJECTIVE INCOMPLETE"
+
+## One line for the HUD, or an empty dictionary when the base contract is the
+## whole job.
+func objective_line() -> Dictionary:
+    if String(objective.get("type", "extract")) != "recover":
+        return {}
+    return {"label": "DATA CACHES",
+        "value": "%d/%d" % [recovered, caches.size()],
+        "done": objective_met()}
 
 func time_remaining() -> float:
     return maxf(0.0, duration_seconds - elapsed)

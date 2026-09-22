@@ -53,4 +53,12 @@ if echo "$OUT" | grep -qE "SCRIPT ERROR|Parse Error|Compile Error"; then
   echo "FAIL: GDScript did not compile, or threw while building the scene"
   exit 1
 fi
-echo "ok: all scripts compile"
+# Finally the assertions that do not need a contract to run: campaign
+# progression, which decides which sector loads and what follows what.
+TESTS=$(timeout 120 godot --headless --path "$ROOT" --script res://tests/progression_test.gd 2>&1 || true)
+if ! echo "$TESTS" | grep -q "PROGRESSION OK"; then
+  echo "$TESTS" | grep -E "Assertion|SCRIPT ERROR|  at: " | head -10
+  echo "FAIL: campaign progression assertions"
+  exit 1
+fi
+echo "ok: all scripts compile, campaign progression asserted"

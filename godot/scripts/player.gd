@@ -79,10 +79,23 @@ func _unhandled_input(event: InputEvent) -> void:
     if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
         apply_look(event.relative * MOUSE_SENS)
 
+## A world-space heading to walk, in place of the keys, or ZERO for input.
+##
+## Set by `-- autoplay`. It goes through the same acceleration, collision and
+## slide as a player's input rather than moving the body directly: teleporting
+## a CharacterBody3D to a point the collider cannot occupy puts it back the
+## same frame, and the stand-in wedged against the first wall it met and sat
+## there while the contract clock ran out.
+var drive := Vector3.ZERO
+
 func _physics_process(delta: float) -> void:
     dash_cooldown = maxf(0.0, dash_cooldown - delta)
-    var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
-    var wish := (transform.basis * Vector3(input_dir.x, 0.0, input_dir.y)).normalized()
+    var wish: Vector3
+    if drive != Vector3.ZERO:
+        wish = drive.normalized()
+    else:
+        var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+        wish = (transform.basis * Vector3(input_dir.x, 0.0, input_dir.y)).normalized()
 
     if Input.is_action_just_pressed("dash") and dash_cooldown <= 0.0:
         dash_dir = wish if wish.length() > 0.1 else -transform.basis.z

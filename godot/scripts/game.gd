@@ -61,7 +61,16 @@ var perf_frames := 0
 ## Which sector to build. The game ships two: the daylit opening street and
 ## CROSSFALL SPAN, a suspension crossing in rain at night. Driven by
 ## -- level <id> so a capture can be taken of either without a code change.
+## Which sector to build. Derived from the current contract's map unless the
+## command line or the query string names one, which is how a sector can be
+## looked at without playing the contract that owns it.
 var level_id := "blacksite"
+var _level_forced := false
+## Minutes, or 0 to use the operation's own duration.
+var duration_override: float = 0.0
+## Drive the operative from the stand-in rather than from input.
+var autoplay := false
+var _autoplay_report := 0.0
 
 var sim: Sim
 var hud: Hud
@@ -182,6 +191,7 @@ func _ready() -> void:
 const STARTUP_YIELD := 0.75
 
 var _loading: CanvasLayer = null
+var _debrief: CanvasLayer = null
 
 ## Something to look at during the wait above and the build after it.
 ##
@@ -229,6 +239,25 @@ func _parse_args() -> void:
                 i += 1
             "level":
                 level_id = args[i + 1] if i + 1 < args.size() else "blacksite"
+                _level_forced = true
+                i += 1
+            "autoplay":
+                # Drive rendered play with the same stand-in the headless gate
+                # uses, so the whole of a contract -- including what happens
+                # when one ends -- can be watched without a player at the
+                # keyboard.
+                autoplay = true
+            "duration":
+                # The contract window in minutes, overriding the operation's
+                # own. Five minutes is a long time to wait to see what happens
+                # at the end of one.
+                duration_override = float(args[i + 1]) if i + 1 < args.size() else 0.0
+                i += 1
+            "op":
+                # A campaign index, so `-- op 2` is CROSSFALL.
+                if i + 1 < args.size():
+                    if not GameData.select_op_index(int(args[i + 1])):
+                        push_warning("No operation with index " + args[i + 1])
                 i += 1
             "idpass":
                 idpass_path = args[i + 1] if i + 1 < args.size() else "user://id.png"
@@ -249,6 +278,17 @@ func _parse_args() -> void:
                 i += 1
         i += 1
     _level_from_query()
+    # The contract owns the sector. `-- level` and `?level=` override it so a
+    # sector can be looked at on its own, which is what the capture harness
+    # and the dream-loop do.
+    if not _level_forced:
+        var op: Dictionary = GameData.current_op()
+        var want := String(op.get("map", "blacksite"))
+        if GameData.sector_ids.has(want):
+            level_id = want
+        else:
+            push_warning("Operation %s wants map '%s', which this build does not have; staying on %s" % [
+                String(op.get("id", "?")), want, level_id])
 
 ## Pick the level from the page's query string on the web build.
 ##
@@ -260,10 +300,15 @@ func _parse_args() -> void:
 ##
 ##     https://<host>/?level=crossfall
 ##
-## Restricted to the ids that actually ship, so a typo or a hand-edited URL
-## falls back to the opening sector rather than failing to load a level and
-## leaving a black screen with an error in the console.
-const LEVEL_IDS := ["blacksite", "crossfall"]
+## Restricted to the sectors that actually ship -- which GameData works out by
+## looking for the exported level rather than from a list kept by hand -- so a
+## typo or a hand-edited URL falls back to the current contract's sector
+## rather than failing to load a level and leaving a black screen with an
+## error in the console.
+##
+## `?op=2` picks the contract instead, which is the one to use to play
+## CROSSFALL rather than merely stand in it: `?level=` swaps the geometry and
+## leaves the contract alone, which is what the capture harness wants.
 
 func _level_from_query() -> void:
     if not OS.has_feature("web"):
@@ -277,13 +322,22 @@ func _level_from_query() -> void:
         return
     for part in search.trim_prefix("?").split("&"):
         var kv := part.split("=")
-        if kv.size() == 2 and kv[0] == "level":
-            var want := kv[1].to_lower().strip_edges()
-            if LEVEL_IDS.has(want):
-                level_id = want
-                print("LEVEL from query: %s" % level_id)
-            else:
-                push_warning("Unknown level '%s'; keeping %s" % [want, level_id])
+        if kv.size() != 2:
+            continue
+        match kv[0]:
+            "level":
+                var want := kv[1].to_lower().strip_edges()
+                if GameData.sector_ids.has(want):
+                    level_id = want
+                    _level_forced = true
+                    print("LEVEL from query: %s" % level_id)
+                else:
+                    push_warning("Unknown level '%s'; keeping %s" % [want, level_id])
+            "op":
+                if GameData.select_op_index(int(kv[1])):
+                    print("OP from query: %d" % int(kv[1]))
+                else:
+                    push_warning("No operation with index " + kv[1])
 
 ## Every render layer except the viewmodel's. World lights use this as their
 ## cull mask so the weapon is lit only by the rig parented to the camera.
@@ -1112,7 +1166,13 @@ func _start_contract() -> void:
         if w.get("id", "") == want:
             weapon_def = w
             break
-    var map := GameData.map_named("blacksite")
+    # The contract's own map, not always the first one.
+    #
+    # This read "blacksite" literally, so every sector was populated with the
+    # opening sector's enemy bias however it was loaded -- CROSSFALL got the
+    # blacksite's scouts and shields instead of its own weighting.
+    var contract: Dictionary = GameData.current_op()
+    var map := GameData.map_named(String(contract.get("map", "blacksite")))
     sim = SimC.new()
     sim.name = "Sim"
     add_child(sim)
@@ -1124,8 +1184,16 @@ func _start_contract() -> void:
     # every earlier one, and it is measuring the simulation rather than the
     # aiming anyway.
     sim.manual_aim = simtest_seconds <= 0.0
-    sim.setup(level, 1234, op, GameData.difficulty(int(GameData.op1.get("difficulty", 0))),
-        float(GameData.op1.get("duration", 5)), weapon_def, map.get("enemyBias", {}))
+    print("CONTRACT op%d %s map=%s objective=%s difficulty=%d duration=%s" % [
+        int(contract.get("index", 1)), String(contract.get("name", "")),
+        String(contract.get("map", "?")),
+        String(contract.get("objective", {}).get("type", "extract")),
+        int(contract.get("difficulty", 0)),
+        str(duration_override if duration_override > 0.0 else contract.get("duration", 5))])
+    sim.objective = contract.get("objective", {"type": "extract"})
+    sim.setup(level, 1234, op, GameData.difficulty(int(contract.get("difficulty", 0))),
+        duration_override if duration_override > 0.0 else float(contract.get("duration", 5)),
+        weapon_def, map.get("enemyBias", {}))
     sim.enemy_spawned.connect(_on_enemy_spawned)
     sim.enemy_died.connect(_on_enemy_died)
     sim.weapon_fired.connect(_on_weapon_fired)
@@ -1142,13 +1210,14 @@ func _start_contract() -> void:
     hud.sim = sim
     var mdef: Dictionary = GameData.map_named(level.map_id)
     hud.theatre = String(mdef.get("name", level.map_id.to_upper()))
-    hud.operation = "OP %d // %s" % [int(GameData.op1.get("index", 1)),
-        String(GameData.op1.get("name", ""))]
+    hud.operation = "OP %d // %s" % [int(contract.get("index", 1)),
+        String(contract.get("name", ""))]
     var layer := CanvasLayer.new()
     layer.add_child(hud)
     add_child(layer)
 
     _build_extraction_marker()
+    _build_caches()
 
 ## The simulation runs on the physics clock, not the render clock.
 ##
@@ -1175,16 +1244,109 @@ func _start_contract() -> void:
 func _physics_process(delta: float) -> void:
     if sim == null or capture_path != "":
         return
-    sim.fire_held = Input.is_action_pressed("fire")
     sim.player_pos = level.to_plan(player.global_position)
-    # Plan space shares its axes with world space, so a world heading is a
-    # plan heading once the vertical is dropped.
-    var fwd := -player.global_transform.basis.z
-    var flat := Vector2(fwd.x, fwd.z)
-    if flat.length() > 0.001:
-        sim.aim_dir = flat.normalized()
+    if autoplay:
+        _autoplay_step(delta)
+    else:
+        sim.fire_held = Input.is_action_pressed("fire")
+        # Plan space shares its axes with world space, so a world heading is a
+        # plan heading once the vertical is dropped.
+        var fwd := -player.global_transform.basis.z
+        var flat := Vector2(fwd.x, fwd.z)
+        if flat.length() > 0.001:
+            sim.aim_dir = flat.normalized()
     sim.advance(delta)
     _sync_enemies()
+    if sim.finished and _debrief == null:
+        _build_debrief()
+
+
+## The end of a contract, and the way into the next one.
+##
+## Nothing happened here before: `sim.finished` was set, the simulation stopped
+## and the player was left standing in a sector that had ended, because the
+## build only ever ran one contract. The campaign now runs in sequence, so
+## finishing one has to say what happened and offer the next.
+##
+## Advancing rebuilds rather than swaps. game.gd constructs the whole sector in
+## code -- geometry, materials, lights, weather, simulation -- so there is no
+## cheaper way to change the map, the objective and the difficulty than to
+## build it again, and `GameData.contract_index` is on an autoload precisely so
+## it survives the reload.
+func _build_debrief() -> void:
+    var contract: Dictionary = GameData.current_op()
+    var won := sim.outcome == "extracted"
+    var next: Dictionary = GameData.next_op() if won else {}
+    _debrief = CanvasLayer.new()
+    _debrief.layer = 9
+    var bg := ColorRect.new()
+    bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+    bg.color = Color(0.02, 0.025, 0.032, 0.86)
+    bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _debrief.add_child(bg)
+
+    var lines := PackedStringArray()
+    lines.append("OP %d // %s" % [int(contract.get("index", 1)),
+        String(contract.get("name", ""))])
+    lines.append("")
+    lines.append("EXTRACTED" if won else "OPERATIVE DOWN")
+    lines.append("")
+    # The debrief copy is authored per operation in the campaign data, so a
+    # won contract says what the 2D game says rather than a generic line.
+    if won:
+        for entry in contract.get("debrief", []):
+            lines.append("%s: %s" % [String(entry.get("speaker", "")),
+                String(entry.get("text", ""))])
+        lines.append("")
+    if won and not next.is_empty():
+        lines.append("NEXT  OP %d // %s" % [int(next.get("index", 2)),
+            String(next.get("name", ""))])
+        var tagline := String(next.get("tagline", ""))
+        if tagline != "":
+            lines.append(tagline)
+        lines.append("")
+        lines.append("PRESS FIRE TO DEPLOY")
+    elif won:
+        lines.append("CAMPAIGN COMPLETE")
+        lines.append("")
+        lines.append("PRESS FIRE TO RUN IT AGAIN")
+    else:
+        lines.append("PRESS FIRE TO RETRY")
+
+    var label := Label.new()
+    label.set_anchors_preset(Control.PRESET_FULL_RECT)
+    label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    label.text = "\n".join(lines)
+    label.add_theme_color_override("font_color", Color(0.82, 0.86, 0.90))
+    label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _debrief.add_child(label)
+    add_child(_debrief)
+    print("DEBRIEF op%d outcome=%s next=%s" % [int(contract.get("index", 1)),
+        sim.outcome, String(next.get("id", "-")) if not next.is_empty() else "-"])
+    _debrief_won = won
+    # A moment before the input is live, or the shot that finished the
+    # contract also dismisses the screen it just put up.
+    _debrief_ready_at = Time.get_ticks_msec() + 900
+
+var _debrief_won := false
+var _debrief_ready_at := 0
+
+func _debrief_input() -> void:
+    if _debrief == null or Time.get_ticks_msec() < _debrief_ready_at:
+        return
+    # With no player at the keyboard, take the next contract by itself after
+    # long enough to read the screen.
+    if not Input.is_action_just_pressed("fire"):
+        if not (autoplay and Time.get_ticks_msec() > _debrief_ready_at + 2500):
+            return
+    if _debrief_won:
+        # At the end of the campaign, start it over rather than sitting on a
+        # dead screen.
+        if not GameData.advance_contract():
+            GameData.contract_index = 0
+    get_tree().reload_current_scene()
 
 ## Only what has to be per-frame: the viewmodel's sway, which is a visual
 ## response to how fast the operative is moving and has nothing to step.
@@ -1192,6 +1354,9 @@ func _process(delta: float) -> void:
     if perf_frames > 0:
         _perf_tick(delta)
     if sim == null or capture_path != "":
+        return
+    if _debrief != null:
+        _debrief_input()
         return
     if viewmodel:
         var planar := Vector2(player.velocity.x, player.velocity.z).length()
@@ -1291,6 +1456,102 @@ func _on_weapon_fired(_dir: Vector2, target_pos: Vector2) -> void:
         gunfeel.fire(viewmodel.muzzle.global_position,
             level.to_world(target_pos, 1.2))
 
+## The operation's data caches, where the simulation placed them.
+##
+## The simulation owns their positions -- it is what tests whether the
+## operative is standing on one -- so these are presentation only. They have
+## no collision: the 2D game's caches do not block movement, and adding a
+## solid here would close a sightline the simulation believes is open.
+const CACHE_COLOUR := Color(0.56, 0.85, 1.0)
+const CACHE_DONE_COLOUR := Color(0.45, 1.0, 0.62)
+var _cache_nodes: Array = []
+
+func _build_caches() -> void:
+    _cache_nodes.clear()
+    if sim == null or sim.caches.is_empty():
+        return
+    for i in range(sim.caches.size()):
+        var at: Vector2 = sim.caches[i]["pos"]
+        var node := Node3D.new()
+        node.name = "Cache%d" % i
+        node.position = level.to_world(at, 0.0)
+
+        var body := MeshInstance3D.new()
+        var crate := BoxMesh.new()
+        crate.size = Vector3(0.62, 0.44, 0.44)
+        body.mesh = crate
+        var shell := StandardMaterial3D.new()
+        shell.albedo_color = Color(0.09, 0.10, 0.12)
+        shell.metallic = 0.5
+        shell.roughness = 0.44
+        body.mesh.surface_set_material(0, shell)
+        body.position.y = 0.22
+        body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        node.add_child(body)
+
+        # A lit panel on the crate and a soft column above it, so a cache can
+        # be found across a sector at night without a map.
+        var panel := MeshInstance3D.new()
+        var pm := BoxMesh.new()
+        pm.size = Vector3(0.64, 0.12, 0.10)
+        panel.mesh = pm
+        panel.position = Vector3(0.0, 0.30, 0.23)
+        panel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        node.add_child(panel)
+
+        var column := MeshInstance3D.new()
+        var cm := CylinderMesh.new()
+        cm.top_radius = 0.07
+        cm.bottom_radius = 0.07
+        cm.height = 5.0
+        column.mesh = cm
+        column.position.y = 2.6
+        column.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        node.add_child(column)
+
+        var lamp := OmniLight3D.new()
+        lamp.position.y = 0.6
+        lamp.light_color = CACHE_COLOUR
+        lamp.light_energy = 1.6
+        lamp.omni_range = 7.0
+        lamp.shadow_enabled = false
+        node.add_child(lamp)
+
+        add_child(node)
+        _cache_nodes.append({"panel": panel, "column": column, "lamp": lamp})
+        _paint_cache(i, false)
+    sim.cache_recovered.connect(_on_cache_recovered)
+
+## Recolour one cache. Separate from the build so the recovered state and the
+## initial state cannot drift apart.
+func _paint_cache(i: int, done: bool) -> void:
+    if i < 0 or i >= _cache_nodes.size():
+        return
+    var parts: Dictionary = _cache_nodes[i]
+    var tint := CACHE_DONE_COLOUR if done else CACHE_COLOUR
+    var glow := StandardMaterial3D.new()
+    glow.albedo_color = Color(tint, 0.85)
+    glow.emission_enabled = true
+    glow.emission = tint
+    glow.emission_energy_multiplier = 1.4 if not done else 0.7
+    glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    (parts["panel"] as MeshInstance3D).material_override = glow
+    var shaft := StandardMaterial3D.new()
+    shaft.albedo_color = Color(tint, 0.20 if not done else 0.07)
+    shaft.emission_enabled = true
+    shaft.emission = tint
+    shaft.emission_energy_multiplier = 0.55 if not done else 0.2
+    shaft.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    shaft.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    (parts["column"] as MeshInstance3D).material_override = shaft
+    var lamp: OmniLight3D = parts["lamp"]
+    lamp.light_color = tint
+    lamp.light_energy = 1.6 if not done else 0.5
+
+func _on_cache_recovered(index: int, total: int) -> void:
+    _paint_cache(index, true)
+    print("CACHE %d/%d recovered" % [index + 1, total])
+
 ## A beacon at the extraction point, lit once the contract window closes.
 func _build_extraction_marker() -> void:
     var marker := Node3D.new()
@@ -1317,6 +1578,113 @@ func _build_extraction_marker() -> void:
 
 ## Drive the contract on a fixed clock with no renderer, walking the operative
 ## toward the extraction point once the window closes, and report the result.
+## Walk and aim the operative from the stand-in. See `autoplay`.
+func _autoplay_step(delta: float) -> void:
+    if _debrief != null:
+        return
+    _autoplay_report += delta
+    if _autoplay_report >= 10.0:
+        _autoplay_report = 0.0
+        print("AUTOPLAY t=%.0f hp=%.0f pos=%s extraction=%s met=%s hold=%.2f" % [
+            sim.elapsed, sim.player_hp, str(sim.player_pos.round()),
+            sim.extraction_active, sim.objective_met(), sim.extraction_hold])
+    # Hand the heading to the body and let it walk, collide and slide the way
+    # a player's would. Plan space shares its axes with world space, so a plan
+    # heading is a world heading once the vertical is put back.
+    var move := _standin_move()
+    player.drive = Vector3(move.x, 0.0, move.y)
+    # Face and shoot the nearest hostile, so the contract is actually fought
+    # rather than walked through.
+    var nearest := INF
+    var at := Vector2.ZERO
+    for e in sim.enemies:
+        var d: float = (Vector2(e["pos"]) - sim.player_pos).length()
+        if d < nearest:
+            nearest = d
+            at = Vector2(e["pos"])
+    if nearest < INF:
+        var dir: Vector2 = (at - sim.player_pos)
+        if dir.length() > 0.001:
+            sim.aim_dir = dir.normalized()
+            player.rotation.y = atan2(-dir.x, -dir.y)
+    sim.fire_held = nearest < 900.0
+
+## Consecutive steps the stand-in has had nowhere to go, and how many of them
+## count as being stuck rather than as a moment of standing off. Three seconds
+## at the simulation's fixed 60 Hz.
+var _standin_stalled := 0
+const STANDIN_STALL_STEPS := 180
+
+## Where a stand-in for the player would walk this step.
+##
+## Shared by the headless gate and by `-- autoplay`, so the thing that decides
+## whether a contract can be finished is the same thing in both, rather than
+## two bots that can disagree about it.
+func _standin_move() -> Vector2:
+    # Kite the whole nearby group rather than the single closest hostile,
+    # which is what walks a bot into a corner.
+    var push := Vector2.ZERO
+    var nearest := INF
+    for e in sim.enemies:
+        var v: Vector2 = sim.player_pos - Vector2(e["pos"])
+        var d: float = maxf(1.0, v.length())
+        nearest = minf(nearest, d)
+        if d < 320.0:
+            push += v.normalized() * (320.0 - d) / 320.0
+
+    # Where it would go if nothing were shooting at it: the next thing the
+    # objective still wants, then the beacon once the objective is met and the
+    # window has closed.
+    var pull := Vector2.ZERO
+    var target := _simtest_objective_target()
+    if target == Vector2.INF and sim.extraction_active:
+        target = level.extraction_point
+    if target != Vector2.INF:
+        var to_t: Vector2 = target - sim.player_pos
+        if to_t.length() > 4.0:
+            pull = to_t.normalized()
+
+    # Both at once, which is what a player does. The first version let the
+    # objective override the kiting entirely and the stand-in walked into the
+    # first group it met: dead at 12.5 seconds with two of three caches down.
+    # Danger outweighs the errand at close range and fades with distance, so
+    # it still makes progress across an open sector.
+    var danger: float = clampf((320.0 - minf(nearest, 320.0)) / 320.0, 0.0, 1.0)
+    var combined: Vector2 = pull * (1.0 - danger * 0.85) + push * (0.5 + danger * 1.6)
+    if combined.length() > 0.05:
+        _standin_stalled = 0
+        return combined.normalized()
+    # Errand and danger can cancel exactly -- a cache directly behind a group
+    # pulls as hard as the group pushes -- and the stand-in then stands still.
+    # Usually that resolves on its own within a step or two as the group
+    # drifts, and breaking out of it immediately is worse than waiting: a
+    # strafe on every cancelled frame took the headless gate from three
+    # caches recovered and extracted to one and unfinished, because it circled
+    # instead of letting the situation open. So this only fires on a stall
+    # that has lasted, which is the case actually seen going wrong -- frozen
+    # on one spot on CROSSFALL for forty seconds at full health.
+    _standin_stalled += 1
+    if _standin_stalled > STANDIN_STALL_STEPS and pull != Vector2.ZERO and push != Vector2.ZERO:
+        var side := Vector2(-push.y, push.x).normalized()
+        return side if side.dot(pull) >= 0.0 else -side
+    return Vector2.ZERO
+
+## The nearest thing the stand-in still has to collect, or Vector2.INF when
+## the objective is met and the beacon is the only place left to go.
+func _simtest_objective_target() -> Vector2:
+    if sim.objective_met():
+        return Vector2.INF
+    var best := Vector2.INF
+    var best_d := INF
+    for c in sim.caches:
+        if c["recovered"]:
+            continue
+        var d: float = ((c["pos"] as Vector2) - sim.player_pos).length()
+        if d < best_d:
+            best_d = d
+            best = c["pos"]
+    return best
+
 func _run_simtest() -> void:
     var step := Sim.FIXED_STEP
     var steps := int(simtest_seconds / step)
@@ -1327,31 +1695,7 @@ func _run_simtest() -> void:
         # Stand-in for a player. A stationary operative is not a fair test of
         # the contract -- the game is built around moving -- so this kites away
         # from the nearest hostile, and walks to the beacon once it is live.
-        var move := Vector2.ZERO
-        if sim.extraction_active:
-            var to: Vector2 = level.extraction_point - sim.player_pos
-            if to.length() > 4.0:
-                move = to.normalized()
-        else:
-            var nearest := INF
-            var away := Vector2.ZERO
-            for e in sim.enemies:
-                var d: float = (Vector2(e["pos"]) - sim.player_pos).length()
-                if d < nearest:
-                    nearest = d
-                    away = (sim.player_pos - Vector2(e["pos"])).normalized()
-            # Kite the whole nearby group rather than the single closest
-            # hostile, which is what walks a bot into a corner.
-            var push := Vector2.ZERO
-            for e in sim.enemies:
-                var v: Vector2 = sim.player_pos - Vector2(e["pos"])
-                var d: float = maxf(1.0, v.length())
-                if d < 320.0:
-                    push += v.normalized() * (320.0 - d) / 320.0
-            if push.length() > 0.05:
-                move = push.normalized()
-            elif nearest < 260.0:
-                move = away
+        var move := _standin_move()
         if move != Vector2.ZERO:
             var want: Vector2 = sim.player_pos + move * 212.0 * step
             if not level.overlaps_solid(want.x, want.y, 13.0) and level.playable(want.x, want.y, 20.0):
@@ -1359,6 +1703,9 @@ func _run_simtest() -> void:
         sim._step(step)
         peak = maxi(peak, sim.enemies.size())
     print("SIMTEST rounds hit=%d expired=%d blocked=%d" % [sim.rounds_hit, sim.rounds_expired, sim.rounds_blocked])
+    if not sim.caches.is_empty():
+        print("SIMTEST objective=%s caches=%d/%d" % [
+            String(sim.objective.get("type", "extract")), sim.recovered, sim.caches.size()])
     print("SIMTEST elapsed=%.1fs finished=%s outcome=%s shots=%d peak=%d alive=%d kills=%d level=%d weapon_level=%d hp=%.0f/%.0f extraction=%s hold=%.2f" % [
         sim.elapsed, sim.finished, sim.outcome, sim.shots_fired, peak, sim.enemies.size(),
         sim.kills, sim.player_level, sim.weapon_level, sim.player_hp, sim.player_max_hp,

@@ -15,6 +15,61 @@ var hazards: Dictionary = {}
 var difficulties: Array = []
 var operatives: Array = []
 var op1: Dictionary = {}
+## The campaign as far as this build can play it, in order.
+##
+## The campaign has twelve entries and this build ships two sectors, so the
+## list stops at the first operation whose map has no exported level. Without
+## that, finishing CROSSFALL advanced to an operation on HOLLOW VALLEY, found
+## no level_hollow.json, and left the player on the bridge with the previous
+## sector's geometry under a HUD naming a different one.
+##
+## Deciding it here, from what is on disk, rather than against a list kept by
+## hand means the campaign extends itself the moment another sector is
+## exported.
+var campaign: Array = []
+
+## Which sector ids have an exported level, for the query-string whitelist.
+var sector_ids: Array = []
+
+## Which contract the player is on, as an index into `campaign`.
+##
+## Lives on the autoload rather than in the scene because advancing a contract
+## reloads the scene: game.gd builds the whole sector in code, so there is no
+## cheaper way to swap the map, the objective and the difficulty than to build
+## it again. An autoload survives that; a member of the scene does not.
+##
+## It is session state, not a save. Nothing here writes to disk yet, so
+## closing the tab starts again at the first contract.
+var contract_index: int = 0
+
+## The operation the player is on.
+func current_op() -> Dictionary:
+    if campaign.is_empty():
+        return op1
+    return campaign[clampi(contract_index, 0, campaign.size() - 1)]
+
+## The next operation, or an empty dictionary at the end of the campaign.
+func next_op() -> Dictionary:
+    if contract_index + 1 >= campaign.size():
+        return {}
+    return campaign[contract_index + 1]
+
+## Advance, and report whether there was anywhere to advance to.
+func advance_contract() -> bool:
+    if contract_index + 1 >= campaign.size():
+        return false
+    contract_index += 1
+    return true
+
+## Select a contract by its campaign index (op1 is 1), for the command line
+## and the page's query string. Returns false for an index that does not
+## exist, leaving the current contract alone.
+func select_op_index(one_based: int) -> bool:
+    for i in range(campaign.size()):
+        if int(campaign[i].get("index", i + 1)) == one_based:
+            contract_index = i
+            return true
+    return false
 
 var _by_id: Dictionary = {}
 
@@ -40,6 +95,26 @@ func _ready() -> void:
     difficulties = _load("difficulties")
     operatives = _load("operatives")
     op1 = _load("op1")
+    var all_ops: Array = _load("campaign")
+    campaign = []
+    sector_ids = []
+    for op in all_ops:
+        var map_id := String(op.get("map", ""))
+        # Truncate at the first missing sector rather than skipping over it.
+        #
+        # Filtering instead of stopping looks equivalent and is not: the
+        # campaign's tenth operation returns to BLACKSITE ZERO, so a filtered
+        # list runs op1, op2, op10 and finishing CROSSFALL jumps seven
+        # contracts into the story. This build ships the first two sectors, so
+        # it offers the first two contracts, and extends by one each time
+        # another sector is exported.
+        if not FileAccess.file_exists("res://data/level_%s.json" % map_id):
+            break
+        campaign.append(op)
+        if not sector_ids.has(map_id):
+            sector_ids.append(map_id)
+    if campaign.is_empty():
+        push_error("No campaign operation has an exported level.")
     for list in [weapons, enemies, elites, maps, operatives]:
         for entry in list:
             _by_id[entry.get("id", "")] = entry
