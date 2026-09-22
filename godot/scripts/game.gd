@@ -516,7 +516,7 @@ func _night_overrides(env: Environment, bounce: DirectionalLight3D) -> void:
     # 49.4, 49.4. At some point the right move is the lever that is certainly
     # connected to every pixel rather than a fourth guess at which object is
     # responsible. Mean is failing LOW now as well, so exposure serves both.
-    env.tonemap_exposure = 1.02 if GameData.has_rendering_device() else 0.86
+    env.tonemap_exposure = 0.90 if GameData.has_rendering_device() else 0.78
     env.tonemap_white = 4.0
 
     # Occlusion goes DOWN at night, not up.

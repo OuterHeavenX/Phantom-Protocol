@@ -1956,7 +1956,7 @@ func _bridge_cable(x0: float, x1: float, top: float, z: float, w: float, main: b
     lamp.albedo_color = Color(1.0, 0.86, 0.62)
     lamp.emission_enabled = true
     lamp.emission = Color(1.0, 0.84, 0.58)
-    lamp.emission_energy_multiplier = 3.0
+    lamp.emission_energy_multiplier = 2.0
     lamp.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     var drops := int(absf(x1 - x0) / 4.4)
     for i in range(1, drops):
@@ -1987,7 +1987,7 @@ func _bridge_lamps() -> void:
     head.albedo_color = Color(0.9, 0.78, 0.55)
     head.emission_enabled = true
     head.emission = Color(1.0, 0.80, 0.52)
-    head.emission_energy_multiplier = 2.5
+    head.emission_energy_multiplier = 1.7
     head.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     # The simulation authored five pairs over 115 m of deck, which is one lamp
     # every 23 m per side -- correct for a real bridge but far short of what
@@ -2183,7 +2183,7 @@ func _bridge_fires() -> void:
     flame.albedo_color = Color(1.0, 0.42, 0.10)
     flame.emission_enabled = true
     flame.emission = Color(1.0, 0.44, 0.12)
-    flame.emission_energy_multiplier = 4.5
+    flame.emission_energy_multiplier = 3.0
     flame.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     flame.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
 
