@@ -519,10 +519,28 @@ func _night_overrides(env: Environment, bounce: DirectionalLight3D) -> void:
     env.tonemap_exposure = 1.02 if GameData.has_rendering_device() else 0.86
     env.tonemap_white = 4.0
 
-    # The occlusion passes are worth more here than in daylight, since there
-    # is no fill to recover a corner the pass over-darkens.
+    # Occlusion goes DOWN at night, not up.
+    #
+    # This block used to raise SSAO to 2.4 against the daylight sector's 1.1,
+    # reasoning that "the occlusion passes are worth more here, since there is
+    # no fill to recover a corner the pass over-darkens". That is exactly
+    # backwards. ssao_light_affect is 0, so the pass attenuates the AMBIENT
+    # term and nothing else -- and on this map ambient is the only light most
+    # of the deck, the parapets and the towers ever receive. With no fill to
+    # work against, a strong pass does not add contact shading; it deletes the
+    # only light present.
+    #
+    # This was expected to be the clamp behind six failed attempts at the
+    # crushed share, and it was not: the figure went from 40.792 to 40.773.
+    # The change stays because the reasoning behind 2.4 was wrong regardless
+    # -- but it is recorded here as a correction, not as a fix, so the next
+    # reader does not credit it with something it did not do.
+    #
+    # Worth knowing either way: ssao_enabled is Forward+ only, so the browser
+    # build never ran this pass at all and has been rendering a brighter deck
+    # than these captures throughout.
     if GameData.has_rendering_device():
-        env.ssao_intensity = 2.4
+        env.ssao_intensity = 0.5
         env.ssil_intensity = 0.25
 
 ## Rain, carried by the camera rather than placed in the world.
