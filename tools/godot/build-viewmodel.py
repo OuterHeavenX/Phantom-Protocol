@@ -403,14 +403,21 @@ def build_smg():
     # world -- it has its own rig on its own layer -- and every reference is
     # lit far hotter than the scene behind it, because a weapon that tracks
     # the world's exposure disappears whenever the player walks into shade.
-    # Measured: reference 1's body averages 0.672 against this build's first
-    # SMG at 0.198, with the reference running from 0.144 in the shadows to
-    # clipped white on the machined edges. The old numbers were chosen by eye
-    # against a dark street and were three stops short.
-    body = mat("vm_body", (0.185, 0.196, 0.218), metallic=0.62, rough=0.40)
-    body_dark = mat("vm_body_dark", (0.086, 0.092, 0.106), metallic=0.58, rough=0.50)
-    poly = mat("vm_poly", (0.074, 0.076, 0.082), metallic=0.0, rough=0.64)
-    steel = mat("vm_steel2", (0.215, 0.224, 0.236), metallic=0.88, rough=0.22)
+    # Measured against the reference, with one correction already burned in:
+    # that PNG is a cutout on an OPAQUE WHITE background, not a transparent
+    # one -- its alpha is 1.0 everywhere -- so the first pass masked nothing
+    # and read the weapon's mean as 0.672 when 57% of those pixels were
+    # background. The weapon's real mean is 0.284.
+    #
+    # What the reference actually has is a value HIERARCHY, which this did
+    # not: the black polymer furniture is the darkest thing on the weapon
+    # (0.143), the metal sits in the middle, and only the machined chamfers
+    # are bright. The first SMG had that inverted, with the polymer stock the
+    # brightest object in the frame.
+    body = mat("vm_body", (0.108, 0.115, 0.132), metallic=0.62, rough=0.30)
+    body_dark = mat("vm_body_dark", (0.046, 0.050, 0.060), metallic=0.58, rough=0.50)
+    poly = mat("vm_poly", (0.031, 0.032, 0.036), metallic=0.0, rough=0.70)
+    steel = mat("vm_steel2", (0.200, 0.210, 0.228), metallic=0.88, rough=0.13)
     bore = mat("vm_bore2", (0.010, 0.010, 0.012), metallic=0.2, rough=0.9)
     # The charging handle and the selector are the one warm accent in the
     # reference -- a tan/bronze lever that reads instantly against the blue
@@ -530,9 +537,9 @@ def build_smg_gloves():
     hand at this distance is a smooth blob no matter how good its silhouette
     is.
     """
-    glove = mat("vm_glove2", (0.042, 0.040, 0.038), metallic=0.0, rough=0.80)
+    glove = mat("vm_glove2", (0.028, 0.030, 0.034), metallic=0.0, rough=0.78)
     plate = mat("vm_plate", (0.066, 0.066, 0.070), metallic=0.10, rough=0.46)
-    cuff = mat("vm_cuff", (0.068, 0.072, 0.060), metallic=0.0, rough=0.92)
+    cuff = mat("vm_cuff", (0.052, 0.055, 0.058), metallic=0.0, rough=0.90)
 
     def field(name, material, build_fn, resolution=0.0022):
         mb = bpy.data.metaballs.new(name)

@@ -76,6 +76,15 @@ var _kick := 0.0
 var _aim := 0.0
 
 var _weapon := ""
+## The active weapon's rest pose, resolved once in use_weapon.
+##
+## These exist because the constants alone were dead code: use_weapon set the
+## SMG's pose on the node, and update_motion then recomputed `position` from
+## the pistol's REST_POS on the very next frame and every frame after. The
+## SMG was drawn at the Needle's pose for every capture that followed, so the
+## reframing that was supposed to get its stock out of the lens did nothing.
+var _rest_pos := REST_POS
+var _rest_rot := REST_ROT
 
 func _ready() -> void:
     _build_rig()
@@ -92,7 +101,7 @@ func _build_rig() -> void:
     key.position = Vector3(-0.22, 0.30, 0.16)
     # Warm, to match the world. A blue-lit weapon in an amber street is
     # exactly what makes a viewmodel look composited in rather than held.
-    key.light_color = Color(1.0, 0.92, 0.80)
+    key.light_color = Color(0.94, 0.96, 1.0)
     # Sky ambient is not cull-masked, so it still reaches the weapon and
     # already carries most of its exposure; this rig only has to add shape.
     # Set to 2.1 the glove blew to near-white at an albedo of 0.03, which is
@@ -103,7 +112,7 @@ func _build_rig() -> void:
     # and both this and the albedos were short -- the earlier retreat to 0.55
     # was a correct response to a blown GLOVE at albedo 0.03, not evidence
     # that the weapon was bright enough. The glove's albedo carries that now.
-    key.light_energy = 1.35
+    key.light_energy = 0.85
     key.omni_range = 1.4
     key.shadow_enabled = false
     key.light_cull_mask = VM_LAYER
@@ -158,8 +167,10 @@ func use_weapon(id: String) -> void:
     model = packed.instantiate()
     model.scale = Vector3.ONE * VM_SCALE
     add_child(model)
-    position = REST_POS_FOR.get(id, REST_POS)
-    rotation_degrees = REST_ROT_FOR.get(id, REST_ROT)
+    _rest_pos = REST_POS_FOR.get(id, REST_POS)
+    _rest_rot = REST_ROT_FOR.get(id, REST_ROT)
+    position = _rest_pos
+    rotation_degrees = _rest_rot
     if muzzle != null:
         muzzle.position = MUZZLES.get(id, MUZZLE)
     # The viewmodel must never cast into the world or receive the world's
@@ -194,9 +205,9 @@ func update_motion(delta: float, look_delta: Vector2, speed01: float, aiming: bo
     _kick = move_toward(_kick, 0.0, delta * 5.5)
 
     var bob := Vector3(cos(_bob) * 0.010, -absf(sin(_bob)) * 0.012, 0.0) * speed01
-    var base: Vector3 = REST_POS.lerp(ADS_POS, _aim)
+    var base: Vector3 = _rest_pos.lerp(ADS_POS, _aim)
     position = base + Vector3(_sway.x, _sway.y, 0.0) + bob + Vector3(0.0, 0.0, _kick * 0.06)
-    var r: Vector3 = REST_ROT * (1.0 - _aim * 0.85)
+    var r: Vector3 = _rest_rot * (1.0 - _aim * 0.85)
     rotation_degrees = r + Vector3(-_kick * 9.0, _sway.x * 45.0, _sway.y * 28.0)
 
     if flash.light_energy > 0.0:

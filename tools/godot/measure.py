@@ -17,7 +17,17 @@ import sys, os, json
 import numpy as np
 from PIL import Image
 
-REFS = ["target.jpg", "target-b.jpg", "target-c.jpg"]
+## Two reference sets, because the game now has two lighting regimes and one
+## band cannot serve both. The daylight set is the CS screenshots the opening
+## sector is scored against; the bridge set is the night/rain mockups for
+## CROSSFALL SPAN, which measure a mean of 0.151 to 0.182 against the day
+## set's 0.37 to 0.41, and a 5th percentile of 0.003 against their 0.12. A
+## night scene judged against a daylight band would be told to triple its
+## exposure, which is exactly the wrong note.
+REF_SETS = {
+    "day": (".", ["target.jpg", "target-b.jpg", "target-c.jpg"]),
+    "bridge": ("bridge", ["target1.png", "target2.png", "target3.png"]),
+}
 DL = os.path.join(os.path.dirname(__file__), "..", "..", ".dream-loop")
 
 def load(path):
@@ -131,10 +141,11 @@ def band(refs, key):
     # Nothing below zero is meaningful for any of these metrics.
     return (max(0.0, lo - pad), hi + pad)
 
-def main(path):
+def main(path, ref_set="day"):
+    sub, refs = REF_SETS[ref_set]
     rows = []
-    for r in REFS:
-        p = os.path.join(DL, r)
+    for r in refs:
+        p = os.path.join(DL, sub, r)
         if os.path.exists(p):
             a = load(p)
             s = stats(a, r)
@@ -171,4 +182,7 @@ def main(path):
     return 0
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1] if len(sys.argv) > 1 else ".dream-loop/current.png"))
+    # tools/godot/measure.py SHOT.png [day|bridge]
+    args = sys.argv[1:]
+    sys.exit(main(args[0] if args else ".dream-loop/current.png",
+                  args[1] if len(args) > 1 else "day"))

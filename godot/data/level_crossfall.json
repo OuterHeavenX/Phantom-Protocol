@@ -1,0 +1,651 @@
+{
+ "map": "crossfall",
+ "seed": 1234,
+ "width": 3675,
+ "height": 1092,
+ "weather": {
+  "type": "rain",
+  "density": 1,
+  "wind": -0.34,
+  "color": "rgba(176,214,232,.5)",
+  "flashes": true,
+  "ambient": "rgba(28,44,62,.36)"
+ },
+ "palette": {
+  "floor": "#141d26",
+  "floorAlt": "#18232e",
+  "grid": "rgba(150,190,220,.05)",
+  "wall": "#233140",
+  "wallEdge": "#6d93ad",
+  "accent": "#8fb8dd",
+  "hazard": "#ffcf6a",
+  "fog": "rgba(10,18,28,.6)",
+  "light": "rgba(143,184,221,.1)"
+ },
+ "layout": {
+  "type": "bridge",
+  "density": 0.55,
+  "coverDensity": 0.25,
+  "roomSize": [
+   240,
+   460
+  ],
+  "corridorWidth": 150
+ },
+ "architecture": "crossfall",
+ "spawn": {
+  "x": 1837.5,
+  "y": 546
+ },
+ "extraction": {
+  "x": 1102.5,
+  "y": 546
+ },
+ "walls": [
+  {
+   "x": 1837.5,
+   "y": -30,
+   "w": 3795,
+   "h": 60,
+   "type": "perimeter",
+   "height": 90,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1837.5,
+   "y": 1122,
+   "w": 3795,
+   "h": 60,
+   "type": "perimeter",
+   "height": 90,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": -30,
+   "y": 546,
+   "w": 60,
+   "h": 1212,
+   "type": "perimeter",
+   "height": 90,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 3705,
+   "y": 546,
+   "w": 60,
+   "h": 1212,
+   "type": "perimeter",
+   "height": 90,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1837.5,
+   "y": 196.56,
+   "w": 3675,
+   "h": 38,
+   "type": "parapet",
+   "height": 62,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1837.5,
+   "y": 895.44,
+   "w": 3675,
+   "h": 38,
+   "type": "parapet",
+   "height": 62,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 367.5,
+   "y": 261.56,
+   "w": 84,
+   "h": 94,
+   "type": "pier",
+   "height": 124,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 367.5,
+   "y": 830.44,
+   "w": 84,
+   "h": 94,
+   "type": "pier",
+   "height": 124,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1102.5,
+   "y": 261.56,
+   "w": 84,
+   "h": 94,
+   "type": "pier",
+   "height": 124,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1102.5,
+   "y": 830.44,
+   "w": 84,
+   "h": 94,
+   "type": "pier",
+   "height": 124,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1837.5,
+   "y": 261.56,
+   "w": 84,
+   "h": 94,
+   "type": "pier",
+   "height": 124,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 1837.5,
+   "y": 830.44,
+   "w": 84,
+   "h": 94,
+   "type": "pier",
+   "height": 124,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 2572.5,
+   "y": 261.56,
+   "w": 84,
+   "h": 94,
+   "type": "pier",
+   "height": 124,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 2572.5,
+   "y": 830.44,
+   "w": 84,
+   "h": 94,
+   "type": "pier",
+   "height": 124,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 3307.5,
+   "y": 261.56,
+   "w": 84,
+   "h": 94,
+   "type": "pier",
+   "height": 124,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 3307.5,
+   "y": 830.44,
+   "w": 84,
+   "h": 94,
+   "type": "pier",
+   "height": 124,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 772.28,
+   "y": 684.875,
+   "w": 148,
+   "h": 16,
+   "type": "vault",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 772.28,
+   "y": 816.875,
+   "w": 148,
+   "h": 16,
+   "type": "vault",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 706.28,
+   "y": 750.875,
+   "w": 16,
+   "h": 148,
+   "type": "vault",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 3455.505,
+   "y": 261.114,
+   "w": 148,
+   "h": 16,
+   "type": "vault",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 3521.505,
+   "y": 327.114,
+   "w": 16,
+   "h": 148,
+   "type": "vault",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 3389.505,
+   "y": 327.114,
+   "w": 16,
+   "h": 148,
+   "type": "vault",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 2298.419,
+   "y": 233.14,
+   "w": 148,
+   "h": 16,
+   "type": "vault",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 2298.419,
+   "y": 365.14,
+   "w": 148,
+   "h": 16,
+   "type": "vault",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 2232.419,
+   "y": 299.14,
+   "w": 16,
+   "h": 148,
+   "type": "vault",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  }
+ ],
+ "cover": [
+  {
+   "x": 1252.5,
+   "y": 391,
+   "w": 130,
+   "h": 66,
+   "type": "container",
+   "height": 48,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 982.5,
+   "y": 381,
+   "w": 74,
+   "h": 38,
+   "type": "barrier",
+   "height": 32,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 1252.5,
+   "y": 701,
+   "w": 130,
+   "h": 66,
+   "type": "container",
+   "height": 48,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 982.5,
+   "y": 711,
+   "w": 74,
+   "h": 38,
+   "type": "barrier",
+   "height": 32,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 1987.5,
+   "y": 391,
+   "w": 130,
+   "h": 66,
+   "type": "container",
+   "height": 48,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 1717.5,
+   "y": 381,
+   "w": 74,
+   "h": 38,
+   "type": "barrier",
+   "height": 32,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 1987.5,
+   "y": 701,
+   "w": 130,
+   "h": 66,
+   "type": "container",
+   "height": 48,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 1717.5,
+   "y": 711,
+   "w": 74,
+   "h": 38,
+   "type": "barrier",
+   "height": 32,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 2722.5,
+   "y": 391,
+   "w": 130,
+   "h": 66,
+   "type": "container",
+   "height": 48,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 2452.5,
+   "y": 381,
+   "w": 74,
+   "h": 38,
+   "type": "barrier",
+   "height": 32,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 2722.5,
+   "y": 701,
+   "w": 130,
+   "h": 66,
+   "type": "container",
+   "height": 48,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 2452.5,
+   "y": 711,
+   "w": 74,
+   "h": 38,
+   "type": "barrier",
+   "height": 32,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 1310.977,
+   "y": 598.344,
+   "w": 34,
+   "h": 34,
+   "type": "vaultTerminal",
+   "height": 64,
+   "blocksSight": false,
+   "destructible": true
+  },
+  {
+   "x": 838.28,
+   "y": 750.875,
+   "w": 16,
+   "h": 148,
+   "type": "vaultSeal",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": false
+  },
+  {
+   "x": 3455.505,
+   "y": 393.114,
+   "w": 148,
+   "h": 16,
+   "type": "vaultSeal",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": true
+  },
+  {
+   "x": 2364.419,
+   "y": 299.14,
+   "w": 16,
+   "h": 148,
+   "type": "vaultSeal",
+   "height": 64,
+   "blocksSight": true,
+   "destructible": true
+  }
+ ],
+ "floorZones": [
+  {
+   "x": 1837.5,
+   "y": 546,
+   "w": 3555,
+   "h": 660.88,
+   "label": "CROSSFALL / TRANSIT DECK",
+   "style": "road"
+  }
+ ],
+ "doorways": [],
+ "lights": [
+  {
+   "x": 367.5,
+   "y": 316.56,
+   "color": "#ffd095",
+   "radius": 205
+  },
+  {
+   "x": 367.5,
+   "y": 775.44,
+   "color": "#ffd095",
+   "radius": 205
+  },
+  {
+   "x": 1102.5,
+   "y": 316.56,
+   "color": "#ffd095",
+   "radius": 205
+  },
+  {
+   "x": 1102.5,
+   "y": 775.44,
+   "color": "#ffd095",
+   "radius": 205
+  },
+  {
+   "x": 1837.5,
+   "y": 316.56,
+   "color": "#ffd095",
+   "radius": 205
+  },
+  {
+   "x": 1837.5,
+   "y": 775.44,
+   "color": "#ffd095",
+   "radius": 205
+  },
+  {
+   "x": 2572.5,
+   "y": 316.56,
+   "color": "#ffd095",
+   "radius": 205
+  },
+  {
+   "x": 2572.5,
+   "y": 775.44,
+   "color": "#ffd095",
+   "radius": 205
+  },
+  {
+   "x": 3307.5,
+   "y": 316.56,
+   "color": "#ffd095",
+   "radius": 205
+  },
+  {
+   "x": 3307.5,
+   "y": 775.44,
+   "color": "#ffd095",
+   "radius": 205
+  }
+ ],
+ "hazards": [
+  {
+   "id": "slickDeck",
+   "x": 3032.134,
+   "y": 650.405,
+   "radius": 130,
+   "passive": true,
+   "color": "#8fb8dd"
+  },
+  {
+   "id": "slickDeck",
+   "x": 203.493,
+   "y": 543.654,
+   "radius": 130,
+   "passive": true,
+   "color": "#8fb8dd"
+  },
+  {
+   "id": "slickDeck",
+   "x": 617.091,
+   "y": 739.106,
+   "radius": 130,
+   "passive": true,
+   "color": "#8fb8dd"
+  },
+  {
+   "id": "slickDeck",
+   "x": 770.099,
+   "y": 544.954,
+   "radius": 130,
+   "passive": true,
+   "color": "#8fb8dd"
+  },
+  {
+   "id": "slickDeck",
+   "x": 3276.753,
+   "y": 471.972,
+   "radius": 130,
+   "passive": true,
+   "color": "#8fb8dd"
+  },
+  {
+   "id": "slickDeck",
+   "x": 228.8,
+   "y": 359.454,
+   "radius": 130,
+   "passive": true,
+   "color": "#8fb8dd"
+  },
+  {
+   "id": "slickDeck",
+   "x": 2140.48,
+   "y": 397.095,
+   "radius": 130,
+   "passive": true,
+   "color": "#8fb8dd"
+  },
+  {
+   "id": "snappedCable",
+   "x": 2254.503,
+   "y": 648.952,
+   "radius": 92,
+   "passive": false,
+   "color": "#ffcf6a"
+  },
+  {
+   "id": "snappedCable",
+   "x": 1556.233,
+   "y": 415.23,
+   "radius": 92,
+   "passive": false,
+   "color": "#ffcf6a"
+  },
+  {
+   "id": "snappedCable",
+   "x": 1873.639,
+   "y": 531.359,
+   "radius": 92,
+   "passive": false,
+   "color": "#ffcf6a"
+  }
+ ],
+ "rooms": [
+  {
+   "x": 1837.5,
+   "y": 546,
+   "w": 3465,
+   "h": 570.88
+  },
+  {
+   "x": 367.5,
+   "y": 546,
+   "w": 635,
+   "h": 419.328
+  },
+  {
+   "x": 1102.5,
+   "y": 546,
+   "w": 635,
+   "h": 419.328
+  },
+  {
+   "x": 1837.5,
+   "y": 546,
+   "w": 635,
+   "h": 419.328
+  },
+  {
+   "x": 2572.5,
+   "y": 546,
+   "w": 635,
+   "h": 419.328
+  },
+  {
+   "x": 3307.5,
+   "y": 546,
+   "w": 635,
+   "h": 419.328
+  }
+ ]
+}
