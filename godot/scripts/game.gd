@@ -27,6 +27,24 @@ var env_node: WorldEnvironment
 ## take a live screenshot without a human at the keyboard.
 var capture_path: String = ""
 var capture_view: String = "corridor"
+## Pixel probe: position the capture camera, cast a ray through one pixel and
+## report every visual instance the ray crosses, nearest first. Driven by
+## --  probe X,Y.
+##
+## This exists because six rounds were spent attributing a blown-out blob in
+## the bottom-left of the bridge frame to one emitter after another by
+## turning each candidate down and re-rendering, at fourteen seconds a frame.
+## Every one of those guesses was wrong. Asking the scene graph which node is
+## under the pixel takes no render at all.
+var probe_pixel: Vector2 = Vector2(-1, -1)
+## Identity pass: repaint every visual instance in a flat unshaded colour
+## keyed by its index, kill every light and every post-process, and render.
+## The colour read back at a pixel names the node that drew it, which is the
+## only way to be certain on a scene whose static geometry has been merged
+## into chunks that each span the whole bridge. Driven by --  idpass OUT.png.
+var idpass_path: String = ""
+## Debug: disable lights by class before capturing. See --  lightsoff.
+var lights_off: String = ""
 ## Headless contract test: run the simulation for N seconds of game time with
 ## no renderer and report what happened. This is how the mechanics are checked
 ## without a human at the keyboard.
@@ -144,6 +162,15 @@ func _ready() -> void:
         # three second lull and deploys 520 units out: a capture taken at t=0
         # shows an empty sector and proves nothing about the game.
         _advance_for_capture(70.0 if capture_view == "combat" else 2.0)
+        if lights_off != "":
+            var killed := _kill_lights(self, lights_off)
+            print("LIGHTSOFF %s disabled %d" % [lights_off, killed])
+        if idpass_path != "":
+            _run_idpass()
+            return
+        if probe_pixel.x >= 0.0:
+            _run_probe()
+            return
         _run_capture()
 
 ## How long to leave the main thread alone before building the sector.
@@ -202,6 +229,23 @@ func _parse_args() -> void:
                 i += 1
             "level":
                 level_id = args[i + 1] if i + 1 < args.size() else "blacksite"
+                i += 1
+            "idpass":
+                idpass_path = args[i + 1] if i + 1 < args.size() else "user://id.png"
+                i += 1
+            "nostreaks":
+                LevelBuildC.no_streaks = true
+            "lightsoff":
+                # A class name, or "all". Disables every matching light after
+                # the build, so a saturated region can be attributed to a
+                # source instead of guessed at one candidate per render.
+                lights_off = args[i + 1] if i + 1 < args.size() else "all"
+                i += 1
+            "probe":
+                var raw := args[i + 1] if i + 1 < args.size() else "0,0"
+                var bits := raw.split(",")
+                if bits.size() == 2:
+                    probe_pixel = Vector2(float(bits[0]), float(bits[1]))
                 i += 1
         i += 1
 
@@ -496,7 +540,32 @@ func _night_overrides(env: Environment, bounce: DirectionalLight3D) -> void:
     env.fog_density = 0.052
     env.fog_depth_begin = 4.0
     env.fog_depth_end = 115.0
-    env.fog_sky_affect = 0.85
+    # The sky keeps its own light. 0.85 was throwing the panorama away.
+    #
+    # Measured rather than argued: the rendered sky band sits at a median
+    # luminance of 0.067 while the three mockups hold theirs at 0.216 to
+    # 0.237, and the night panorama this scene loads is authored at 0.250
+    # overall and 0.356 in the band just above the horizon. So the texture is
+    # right and something between it and the frame is losing three quarters
+    # of it. Depth fog reaches the sky at maximum depth, so at 0.85 almost the
+    # whole backdrop was being replaced by the fog colour -- a flat wash --
+    # and with it went every cloud in the panorama. 26.9 percent of the
+    # 48-pixel windows in the sky band measure a contrast under 0.02 here
+    # against none at all in any of the three mockups.
+    #
+    # That is the same fault the three failing detail statistics describe:
+    # large-scale contrast too high because the backdrop is far darker than
+    # the deck, fine variation and window contrast too low because a quarter
+    # of the frame is a flat field. This is the term that produced it.
+    #
+    # 0.25 overshot: the sky band came back at a median of 0.268 against the
+    # mockups' 0.158 to 0.225, and mean and the 95th percentile went with it
+    # to within a hundredth of their ceilings. 0.50 keeps the clouds and the
+    # horizon haze and puts the backdrop back inside the band. The detail
+    # statistics moved further on this one term than on any of the seven
+    # previous attempts at them: patch from 0.026 to 0.034 and micro from
+    # 0.063 to 0.071.
+    env.fog_sky_affect = 0.50
 
     # Glow carries the look. Every light source in the mockups has a halo in
     # the rain and the fires bloom hard; at the day scene's 0.18 intensity and
@@ -537,7 +606,17 @@ func _night_overrides(env: Environment, bounce: DirectionalLight3D) -> void:
     # connected to every pixel rather than a fourth guess at which object is
     # responsible. Mean is failing LOW now as well, so exposure serves both.
     env.tonemap_exposure = 0.90 if GameData.has_rendering_device() else 0.78
-    env.tonemap_white = 4.0
+    # The white point comes down to 2.0.
+    #
+    # Everything in this frame now sits under 0.42. ACES with a white point of
+    # 4.0 compresses the top of the range hard, which was wanted while the
+    # deck's metallic slab was putting a saturated ellipse in the corner and
+    # is exactly wrong now that it is gone: the frame measures a 95th
+    # percentile of 0.336 against the mockups' 0.372 to 0.399, and the road's
+    # 99th percentile reaches 0.419 against their 0.732 to 0.883. There is
+    # nothing bright left in the picture. 2.0 gives the lamps, the fires and
+    # their reflections somewhere to go without touching the shadows.
+    env.tonemap_white = 2.0
 
     # Occlusion goes DOWN at night, not up.
     #
@@ -768,6 +847,158 @@ func _capture_after_warmup() -> void:
         push_error("Capture failed: %d" % err)
     print("CAPTURED %s %dx%d" % [capture_path, img.get_width(), img.get_height()])
     get_tree().quit()
+
+## Disable every light whose class matches, returning how many. See
+## `lights_off`.
+func _kill_lights(n: Node, which: String) -> int:
+    var killed := 0
+    if n is Light3D and (which == "all" or n.get_class() == which):
+        (n as Light3D).visible = false
+        killed += 1
+    for c in n.get_children():
+        killed += _kill_lights(c, which)
+    return killed
+
+## Render the scene as flat node identities. See `idpass_path`.
+func _run_idpass() -> void:
+    var vp := _viewpoint(capture_view)
+    player.global_position = level.to_world(vp[0], 1.0)
+    player.rotation_degrees = Vector3(0.0, vp[1], 0.0)
+    var head: Node3D = player.get_node("Head")
+    head.rotation_degrees = Vector3(vp[2], 0.0, 0.0)
+    for r in rain_nodes:
+        r.restart()
+    # Nothing that could shade, bloom, fog or tonemap the identity colours.
+    var env: Environment = env_node.environment
+    env.background_mode = Environment.BG_COLOR
+    env.background_color = Color(0, 0, 0)
+    env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+    env.ambient_light_color = Color(0, 0, 0)
+    env.ambient_light_energy = 0.0
+    env.fog_enabled = false
+    env.volumetric_fog_enabled = false
+    env.glow_enabled = false
+    env.ssao_enabled = false
+    env.ssil_enabled = false
+    env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
+    env.tonemap_exposure = 1.0
+    env.tonemap_white = 1.0
+    env.adjustment_enabled = false
+    var index := 0
+    var names: Array = []
+    _idpass_paint(self, index, names)
+    await RenderingServer.frame_post_draw
+    await RenderingServer.frame_post_draw
+    await RenderingServer.frame_post_draw
+    var img := get_viewport().get_texture().get_image()
+    img.save_png(idpass_path)
+    print("IDPASS %s %dx%d instances=%d" % [idpass_path, img.get_width(),
+        img.get_height(), names.size()])
+    for i in range(names.size()):
+        print("ID %d\t%s" % [i + 1, names[i]])
+    get_tree().quit()
+
+## Walk the tree, hiding lights and repainting geometry. The index is carried
+## in an array cell because GDScript passes integers by value.
+func _idpass_paint(n: Node, index: int, names: Array) -> void:
+    if n is Light3D:
+        (n as Light3D).visible = false
+        return
+    if n is VisualInstance3D and (n as VisualInstance3D).visible:
+        var vi := n as VisualInstance3D
+        if vi is GeometryInstance3D:
+            var gi := vi as GeometryInstance3D
+            var mesh_kind := "-"
+            var box: AABB = vi.global_transform * vi.get_aabb()
+            if vi is MeshInstance3D and (vi as MeshInstance3D).mesh != null:
+                mesh_kind = (vi as MeshInstance3D).mesh.get_class()
+            names.append("%s name=%s mesh=%s at=(%.1f,%.1f,%.1f) size=(%.1f,%.1f,%.1f) %s" % [
+                vi.get_class(), vi.name, mesh_kind,
+                box.get_center().x, box.get_center().y, box.get_center().z,
+                box.size.x, box.size.y, box.size.z, _probe_mat(vi)])
+            var id := names.size()
+            var m := StandardMaterial3D.new()
+            # Six bits per channel at a spacing of four, so that sRGB
+            # round-tripping through the framebuffer cannot move a value into
+            # its neighbour's slot.
+            m.albedo_color = Color8((id % 64) * 4, ((id / 64) % 64) * 4,
+                ((id / 4096) % 64) * 4)
+            m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+            m.cull_mode = BaseMaterial3D.CULL_DISABLED
+            m.disable_receive_shadows = true
+            gi.material_override = m
+            gi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    for c in n.get_children():
+        _idpass_paint(c, index, names)
+
+## Report every visual instance under one pixel of the capture frame.
+##
+## Positions the camera exactly as `_run_capture` does, builds the view ray
+## for the pixel and intersects it against each instance's world-space
+## bounding box, nearest first. Bounding boxes over-report -- a merged static
+## chunk covers a lot of sky it does not draw -- so the tight ones near the
+## top of the list are the answer, and the report prints enough of each
+## material to recognise it without going back to the builder.
+func _run_probe() -> void:
+    var vp := _viewpoint(capture_view)
+    player.global_position = level.to_world(vp[0], 1.0)
+    player.rotation_degrees = Vector3(0.0, vp[1], 0.0)
+    var head: Node3D = player.get_node("Head")
+    head.rotation_degrees = Vector3(vp[2], 0.0, 0.0)
+    var cam: Camera3D = head.get_node("Camera3D")
+    await RenderingServer.frame_post_draw
+    var size := get_viewport().get_visible_rect().size
+    print("PROBE viewport=%dx%d pixel=%s" % [int(size.x), int(size.y), probe_pixel])
+    var from := cam.project_ray_origin(probe_pixel)
+    var dir := cam.project_ray_normal(probe_pixel)
+    var hits: Array = []
+    _probe_walk(self, from, dir, hits)
+    hits.sort_custom(func(a, b): return a[0] < b[0])
+    print("PROBE %d instances under the pixel:" % hits.size())
+    for h in hits.slice(0, 24):
+        print("  %7.2fm  %-28s %-16s extent=%s %s" % [h[0], h[1], h[2], h[3], h[4]])
+    get_tree().quit()
+
+func _probe_walk(n: Node, from: Vector3, dir: Vector3, hits: Array) -> void:
+    if n is VisualInstance3D and (n as VisualInstance3D).visible:
+        var vi := n as VisualInstance3D
+        var box: AABB = vi.global_transform * vi.get_aabb()
+        var at = box.intersects_ray(from, dir)
+        if at != null:
+            var d: float = (at as Vector3).distance_to(from)
+            var ext := box.size
+            hits.append([d, String(vi.name), vi.get_class(),
+                "%.1fx%.1fx%.1f" % [ext.x, ext.y, ext.z], _probe_mat(vi)])
+    for c in n.get_children():
+        _probe_walk(c, from, dir, hits)
+
+func _probe_mat(vi: VisualInstance3D) -> String:
+    if not (vi is MeshInstance3D):
+        return ""
+    var mi := vi as MeshInstance3D
+    var m: Material = mi.material_override
+    if m == null and mi.mesh != null and mi.mesh.get_surface_count() > 0:
+        m = mi.get_active_material(0)
+    if m == null:
+        return "(no material)"
+    if not (m is StandardMaterial3D):
+        return m.get_class()
+    var sm := m as StandardMaterial3D
+    var s := "albedo=(%.2f,%.2f,%.2f)" % [sm.albedo_color.r, sm.albedo_color.g, sm.albedo_color.b]
+    if sm.emission_enabled:
+        s += " emit=(%.2f,%.2f,%.2f)x%.2f" % [sm.emission.r, sm.emission.g, sm.emission.b,
+            sm.emission_energy_multiplier]
+    if sm.blend_mode != BaseMaterial3D.BLEND_MODE_MIX:
+        s += " blend=%d" % int(sm.blend_mode)
+    if sm.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED:
+        s += " unshaded"
+    s += " rough=%.2f metal=%.2f spec=%.2f" % [sm.roughness, sm.metallic,
+        sm.metallic_specular]
+    if sm.albedo_texture != null:
+        s += " tex"
+    if sm.resource_name != "":
+        s = "[%s] %s" % [sm.resource_name, s]
+    return s
 
 func _count_nodes(n: Node) -> int:
     var total := 1

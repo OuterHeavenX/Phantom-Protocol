@@ -124,6 +124,14 @@ def wet_road(out, rng):
     albedo = np.stack([base * 1.00, base * 1.02, base * 1.07], -1)
 
     # THE map that matters. Standing water is near-mirror; damp asphalt is not.
+    #
+    # Tried at 0.60/0.20 and reverted. It did not touch the blob at all --
+    # the saturated ellipse stayed at 10494 pixels against 10488 -- and it
+    # cost the frame everywhere else: the wider lobe put specular over most
+    # of the deck, glow picked it up above its 0.90 threshold and smeared it
+    # into the sky, and the 95th percentile went from 0.439 to 0.641 with
+    # large-scale contrast following it from 0.136 to 0.149. Whatever holds
+    # that ellipse at saturation, it is not the width of this lobe.
     rough = 0.48 - puddle * 0.42 + (aggregate - 0.5) * 0.10
     rough = rough + (1.0 - puddle) * (grime - 0.5) * 0.08
 

@@ -1607,7 +1607,16 @@ func _bridge_mat(key: String) -> Material:
             m = MaterialsC.pbr("blockwork", 1.45, floor_hue * _tint(0.26, 0.534), 0.30)
             m.roughness = 0.42
         "road":
-            m = MaterialsC.pbr("wetroad", 1.35, floor_hue * _tint(0.105, 0.420), 0.0)
+            # 0.105 was measured when the deck was a separate flat slab and
+            # this entry only reached the kerbs. Now that the roadway itself
+            # uses it, the same number is the diffuse reflectance of the
+            # largest surface in the frame, and 41 lamps over it lift the
+            # whole deck: the dark share of the road came out at 17.5 percent
+            # against the mockups' 33.7 to 46.2, and the frame's crushed share
+            # fell out the bottom of the band with it. A wet road at night is
+            # darker than this in diffuse and carries its brightness in the
+            # specular, which the roughness map already provides.
+            m = MaterialsC.pbr("wetroad", 1.35, floor_hue * _tint(0.055, 0.420), 0.0)
         _:
             m = MaterialsC.pbr("wetconcrete", 1.15, wall_hue * _tint(0.30, 0.516), 0.1)
     m.metallic_specular = 0.80
@@ -1715,11 +1724,40 @@ func _bridge_deck(w: float, h: float) -> void:
     # Compatibility renderer where even less is available, so this is built
     # from the two things that do work everywhere -- a low-roughness metallic
     # surface with a probe to reflect, and the streaks themselves as geometry.
-    var road := StandardMaterial3D.new()
-    road.albedo_color = Color(0.018, 0.020, 0.024)
-    road.metallic = 0.42
-    road.roughness = 0.13
-    road.metallic_specular = 0.9
+    #
+    # The deck uses the wet road PBR set, like every other bridge surface.
+    #
+    # It did not, and that is the single fault behind both of the statistics
+    # that would not move. This slab was a flat StandardMaterial3D with no
+    # albedo texture, no normal map, a hardcoded roughness of 0.13, metallic
+    # 0.42 and specular 0.9, built here rather than taken from `_bridge_mat`.
+    # The road is the largest thing in the frame, so:
+    #
+    #  * Every attempt at fine surface variation went into the "road" entry of
+    #    `_bridge_mat` -- the project's standard sets, then finer tiling, then
+    #    scattered puddle cards, then a whole texture pipeline built around
+    #    roughness in tools/godot/make-wet-textures.py. The deck used none of
+    #    them. Window contrast measured 0.026 to 0.035 against a floor of
+    #    0.064 through all seven attempts because the surface those attempts
+    #    were aimed at was not the surface on screen.
+    #
+    #  * Metallic 0.42 at roughness 0.13 over 116 by 24 metres is a mirror,
+    #    and the fill light glints off it into a saturated ellipse 84 by 165
+    #    pixels in the bottom left. That ellipse is the whole of the clipped
+    #    share and it is what holds the large-scale maximum at 0.528 against
+    #    the mockups' 0.284 to 0.318. It was attributed in turn to the
+    #    searchlight, twice, to the bloom, to the street lamps, to the moon's
+    #    specular and to the puddle cards, and turned down each time with no
+    #    effect, because a hardcoded roughness on an untextured material does
+    #    not care what any of those are set to.
+    #
+    # Established by experiment, not by argument: with all 41 omni lights
+    # disabled the ellipse is unchanged at 10463 pixels; with every additive
+    # card in the scene removed it is unchanged at 10481; with the two
+    # directional lights disabled it disappears entirely. An identity pass --
+    # every instance repainted a flat colour keyed to its index, all lights
+    # off -- then named the surface under those pixels as this slab.
+    var road := _bridge_mat("road")
     var deck := _box(Vector3(w + 2.0, 0.55, h * 0.70),
         Vector3(w * 0.5, -0.275, h * 0.5), road, true, 0.5)
     deck.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -1780,14 +1818,20 @@ func _bridge_deck(w: float, h: float) -> void:
             clampf(1.0 - px / (w * 0.6), 0.0, 1.0) * warm)
         var length: float = 1.1 + float(hs % 37) * 0.145
         var width: float = 0.20 + float(hx % 23) * 0.024
-        # Raised 1.6x now that `energy` scales the additive albedo as well as
-        # the emission. Before that fix these were adding close to 1.0 at
-        # their cores whatever this number said; with it honest, the same
-        # number produced a far subtler puddle and micro and patch fell out of
-        # band with it. The 95th percentile is at 0.413 against a ceiling of
-        # 0.445, so this spends that headroom on the two detail statistics.
+        # Roughly tripled. These were halved twice while the frame still had
+        # the deck's metallic slab in it, and every brightness judgement made
+        # against that frame was made against a blown highlight that had
+        # nothing to do with them.
+        #
+        # What they are for is the one thing the mockups have that this build
+        # does not. Their road holds 1 percent of its pixels above 0.73
+        # luminance and a median window contrast of 0.515 to 0.762; with the
+        # deck textured and the lamps restored this build reaches 0.419 and
+        # 0.422. The remaining gap is bright points, not spill: these are
+        # additive cards lying in the road, so they raise the top of the
+        # deck's range without lifting its floor.
         _wet_streak(Vector3(px, 0.0, pz), col, length, width,
-            0.034 + float(hz % 17) * 0.0042)
+            0.100 + float(hz % 17) * 0.0125)
 
     var lanes := 4
     var n := int(w / 5.5)
@@ -1848,7 +1892,19 @@ static func streak_texture() -> ImageTexture:
     _streak_tex = ImageTexture.create_from_image(img)
     return _streak_tex
 
+## Debug: build the bridge with no additive road cards at all.
+##
+## Set from --  nostreaks. The saturated ellipse in the bottom left survived a
+## halving of the lamp energy, a 3.3x change to the road's roughness floor, a
+## complete replacement of every surface material, a fourfold cut to the
+## searchlight and the removal of the moon's specular. An identity pass splits
+## its pixels between the road itself and two of these cards, so this turns
+## the cards off and settles which half is load-bearing.
+static var no_streaks := false
+
 func _wet_streak(at: Vector3, colour: Color, length: float, width: float, energy: float) -> void:
+    if no_streaks:
+        return
     var m := StandardMaterial3D.new()
     # The albedo is scaled by the energy too, not just the emission.
     #
@@ -2069,32 +2125,49 @@ func _bridge_lamps() -> void:
         var lamp := OmniLight3D.new()
         lamp.position = at + Vector3(0, 7.5, inward * 2.5)
         lamp.light_color = col
-        # 9.5 put a pool of pure white under every post.
+        # Cut from 9.5 to 4.2 to 2.0 over three rounds to kill a saturated
+        # ellipse in the bottom left of the frame. It was never the lamps.
         #
-        # This was the invariant behind three rounds of chasing the wrong
-        # emitter: the clipped fraction sat at 1.156 percent while the
-        # searchlight came down from 14 to 4.5 to 2.6 and the streaks halved
-        # twice, because none of those were producing it. Mapping the clipped
-        # pixels found one blob filling 21 percent of the bottom-left cell at
-        # (0.998, 1.0, 1.0) -- the nearest lamp's own pool, made worse in the
-        # same round by the road's albedo going up 2.4 times underneath it.
-        # 4.2 blew the road white directly under the nearest post.
+        # Disabling all 41 omni lights in the scene leaves that ellipse at
+        # 10463 pixels against 10488 with them on, so none of those cuts could
+        # ever have worked, and each one took real light out of a night scene
+        # to no purpose. It was the deck slab's own hardcoded metallic
+        # roughness, which `_bridge_deck` now explains at length.
         #
-        # This is what the clipped share has actually been measuring, and it
-        # is why that number sat at exactly 0.739 percent through a streak
-        # material rewrite, a puddle change, a complete replacement of every
-        # surface material on the bridge, and a fourfold cut to the
-        # searchlight: a saturated light pool is saturated regardless of the
-        # albedo underneath it, so none of those could move it. It was
-        # mis-attributed to the searchlight twice and to the bloom once.
-        #
-        # The crushed share is at 22.9 against a ceiling of 32.5, so there is
-        # room to take this down.
-        lamp.light_energy = 2.0
+        # So the energy goes back up. With the deck reading as wet asphalt
+        # rather than as a mirror, what this buys is the thing the mockups
+        # actually have and this build did not: their road carries 1 percent
+        # of its pixels above 0.73 luminance, in scattered reflections of the
+        # lamps, while this build's topped out at 0.314 across the whole deck.
+        lamp.light_energy = 2.5
         lamp.omni_range = level.metres(float(entry[2])) * 2.0
         lamp.omni_attenuation = 1.15
         lamp.shadow_enabled = false
         add_child(lamp)
+        # The lamp's reflection in the wet road, as geometry.
+        #
+        # Lamps here stand every 7.7 m on a 7.5 m mast, so the point directly
+        # under one is 7.5 m from it and the midpoint between two is 8.4 m --
+        # near enough the same distance that no falloff curve can separate
+        # them. Raising the energy to get bright pools therefore lit the whole
+        # deck evenly instead, which is what turned the road a flat sandy
+        # colour and took the frame's dark share down to 8 percent in the
+        # bottom band against the mockups' 29 to 51.
+        #
+        # In the mockups the road is black asphalt and its brightness is
+        # almost entirely REFLECTION: narrow vertical streaks running toward
+        # the camera under each lamp, not a diffuse wash. The bridge runs
+        # along X and so does the view, so a streak laid along X under each
+        # lamp is that reflection, and it puts the light back as a bright
+        # narrow feature against a dark road rather than as a lift under
+        # everything.
+        # 0.44 was not a highlight. An additive card at that energy peaks
+        # around 0.4 after the tonemapper, which is the same value as the road
+        # it lies on, so the deck kept its dark share but gave nothing back at
+        # the top: the 95th percentile fell to 0.320 against the mockups' 0.372
+        # to 0.399 and window contrast went with it. A reflection of a lamp is
+        # as bright as the lamp.
+        _wet_streak(Vector3(at.x, 0.0, at.z + inward * 2.2), col, 15.0, 1.15, 1.15)
 
 ## Every cover rectangle the simulation placed becomes a wrecked vehicle.
 ##
