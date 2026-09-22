@@ -83,6 +83,15 @@ var _weapon := ""
 ## the pistol's REST_POS on the very next frame and every frame after. The
 ## SMG was drawn at the Needle's pose for every capture that followed, so the
 ## reframing that was supposed to get its stock out of the lens did nothing.
+## Multiplies the rig, so the weapon sits in the scene's own exposure.
+##
+## The rig is deliberately independent of the world's lighting, which is what
+## keeps a weapon readable in shade -- but independent is not the same as
+## fixed. On the night bridge the unchanged rig made the weapon the brightest
+## object in a frame whose band wants a mean of 0.15, and it read as a white
+## prop held in front of a dark photograph.
+var rig_scale := 1.0
+
 var _rest_pos := REST_POS
 var _rest_rot := REST_ROT
 
@@ -112,7 +121,7 @@ func _build_rig() -> void:
     # and both this and the albedos were short -- the earlier retreat to 0.55
     # was a correct response to a blown GLOVE at albedo 0.03, not evidence
     # that the weapon was bright enough. The glove's albedo carries that now.
-    key.light_energy = 0.85
+    key.light_energy = 0.85 * rig_scale
     key.omni_range = 1.4
     key.shadow_enabled = false
     key.light_cull_mask = VM_LAYER
@@ -123,7 +132,7 @@ func _build_rig() -> void:
     var rim := OmniLight3D.new()
     rim.position = Vector3(0.26, 0.24, -0.10)
     rim.light_color = Color(0.78, 0.86, 1.0)
-    rim.light_energy = 0.70
+    rim.light_energy = 0.70 * rig_scale
     rim.omni_range = 1.2
     rim.shadow_enabled = false
     rim.light_cull_mask = VM_LAYER

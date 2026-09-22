@@ -576,6 +576,10 @@ func _spawn_player() -> void:
 
     var vm := ViewmodelC.new()
     vm.name = "Viewmodel"
+    # A night scene needs the weapon at night exposure too, or the rig that
+    # keeps it readable in shade turns it into the brightest thing in frame.
+    if level.is_night():
+        vm.rig_scale = 0.42
     cam.add_child(vm)
     viewmodel = vm
 

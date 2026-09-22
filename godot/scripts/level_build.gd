@@ -2129,10 +2129,16 @@ class Helicopter:
 
 func _bridge_helicopter(w: float, h: float) -> void:
     var heli := Helicopter.new()
-    heli.centre = Vector3(w * 0.42, 0.0, h * 0.5 - 95.0)
-    heli.radius = 62.0
-    heli.height = 52.0
-    heli.phase = 0.7
+    # Placed to be IN the shot rather than merely present. The first attempt
+    # orbited 95 m off the span's centreline at a 62 m radius, which is where
+    # a real patrol would fly and which put it outside the frame from every
+    # viewpoint on the deck. The mockups all keep it high and roughly 30
+    # degrees off the axis the player is looking down, close enough that the
+    # airframe reads and the beam reaches the water.
+    heli.centre = Vector3(w * 0.26, 0.0, h * 0.5 + 30.0)
+    heli.radius = 26.0
+    heli.height = 44.0
+    heli.phase = 2.4
     add_child(heli)
 
     var dark := StandardMaterial3D.new()
