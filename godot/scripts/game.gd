@@ -472,10 +472,10 @@ func _night_overrides(env: Environment, bounce: DirectionalLight3D) -> void:
     env.fog_enabled = true
     env.fog_mode = Environment.FOG_MODE_DEPTH
     env.fog_light_color = level.pal("fog", Color(0.075, 0.095, 0.130))
-    env.fog_light_energy = 1.55
-    env.fog_density = 0.034
-    env.fog_depth_begin = 6.0
-    env.fog_depth_end = 150.0
+    env.fog_light_energy = 2.0
+    env.fog_density = 0.052
+    env.fog_depth_begin = 4.0
+    env.fog_depth_end = 115.0
     env.fog_sky_affect = 0.85
 
     # Glow carries the look. Every light source in the mockups has a halo in
@@ -499,9 +499,9 @@ func _night_overrides(env: Environment, bounce: DirectionalLight3D) -> void:
     # the crushed share went from 36 to 51 percent. About 40 percent of the
     # cut comes back, which is enough glow to make the lamps and fires read
     # through rain without the pass feeding on itself.
-    env.glow_intensity = 0.52
+    env.glow_intensity = 0.44
     env.glow_bloom = 0.08
-    env.glow_hdr_threshold = 0.82
+    env.glow_hdr_threshold = 0.90
     env.glow_hdr_scale = 1.45
     env.glow_strength = 1.05
 
