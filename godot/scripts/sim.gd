@@ -118,15 +118,35 @@ func enemy_cap() -> int:
 
 ## Advance by real time, stepping the simulation at a fixed rate so the
 ## contract plays out identically regardless of frame rate.
+## Steps the simulation at a fixed rate, catching up across slow frames.
+##
+## The catch-up has to be allowed to give up, and the first version could not.
+## It added up to 0.25 s of real time to the accumulator per frame but drained
+## at most six steps, which is 0.1 s. Below ten frames a second that is a
+## deficit every frame, and the accumulator grows without bound: the
+## simulation falls further behind wall-clock time for as long as the game
+## runs and never recovers, even once the framerate does. From inside, hostiles
+## slow to a crawl and then appear to stop entirely, while the operative --
+## who moves in _physics_process and does not depend on this at all -- keeps
+## walking around a frozen sector.
+##
+## So when the step budget is spent, the backlog is dropped rather than
+## carried. The simulation then runs coarsely on a slow device instead of
+## accurately in the past, which is the right trade: a hostile that advances
+## in bigger jumps is a game, and one that stopped forty seconds ago is not.
+const MAX_STEPS := 6
+
 func advance(delta: float) -> void:
     if finished:
         return
     accumulator += minf(delta, 0.25)
     var steps := 0
-    while accumulator >= FIXED_STEP and steps < 6:
+    while accumulator >= FIXED_STEP and steps < MAX_STEPS:
         _step(FIXED_STEP)
         accumulator -= FIXED_STEP
         steps += 1
+    if steps >= MAX_STEPS:
+        accumulator = 0.0
 
 func _step(dt: float) -> void:
     elapsed += dt

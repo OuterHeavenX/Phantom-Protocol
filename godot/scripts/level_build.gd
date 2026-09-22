@@ -968,6 +968,7 @@ func _clutter_piece(kind: int, base: Vector3, axis: Vector3, out: Vector3,
 func _shallow(size: Vector3, at: Vector3, mat: Material) -> MeshInstance3D:
     var mi := _box(size, at, mat, false)
     mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+    _detail(mi)
     return mi
 
 ## Small hardware bolted to a facade: conduit, junction boxes, vents.
@@ -1028,9 +1029,29 @@ func _wall_fixtures(o: Dictionary, size: Vector3, pos: Vector3) -> void:
                 _face_box(slat, pos + axis * vx + out * (half_depth + 0.06)
                     + Vector3(0, vy - 0.22 + float(i) * 0.11, 0), "kerb")
 
+## Beyond this, small dressing stops being drawn.
+##
+## The sector builds about ten thousand mesh instances and Godot does not batch
+## them, so every one is a draw call. Most are centimetres across -- saddle
+## clamps, mullions, junction boxes -- and contribute nothing past a few tens
+## of metres, but they were being submitted from anywhere in the level. On a
+## phone that is most of the frame budget spent on things too small to see.
+##
+## Only the small stuff takes this. Walls, cover and rooflines are what the
+## player navigates by and are never culled.
+const DETAIL_FADE := 38.0
+const DETAIL_FADE_MARGIN := 6.0
+
+func _detail(mi: GeometryInstance3D) -> GeometryInstance3D:
+    mi.visibility_range_end = DETAIL_FADE
+    mi.visibility_range_end_margin = DETAIL_FADE_MARGIN
+    mi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+    return mi
+
 func _face_box(size: Vector3, at: Vector3, mat: String = "machinery") -> void:
     var mi := _box(size, at, _mat(mat), false)
     mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+    _detail(mi)
 
 ## A canopy projecting from the facade, well above head height.
 ##

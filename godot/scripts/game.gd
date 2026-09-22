@@ -418,13 +418,39 @@ func _count_nodes(n: Node) -> int:
         total += _count_nodes(c)
     return total
 
+## Overrides the operative's issued weapon while the port is being tested.
+##
+## The Vector SMG cycles every 0.2 s against the Needle's slower beat, which
+## makes it the right thing to judge the shot feedback and the framerate
+## against: a weapon that fires twice a second tells you very little about
+## either. Set this back to "" to restore whatever the operative carries.
+const TEST_WEAPON := "vector"
+
 # ---- Contract -------------------------------------------------------------
 
 func _start_contract() -> void:
     var op: Dictionary = GameData.operatives[0]
     var weapon_def := {}
+    # Issue whatever the operative carries, unless the command line overrides
+    # it: `-- weapon vector` puts the Vector SMG in their hands instead, which
+    # is a far better thing to test feedback and framerate against than a
+    # suppressed sidearm on a one-in-two-second cycle.
+    var want := String(op.get("weapon", "needle"))
+    # Never during the headless replay. That run is the gate on the shipped
+    # loadout, and swapping the weapon under it makes it measure something
+    # nobody plays: the Vector carries 4.7 times the Needle's spread over a
+    # shorter range, so a stationary operative misses most of what it fires
+    # and the contract drops from 55 kills to 17. That is the weapon being a
+    # close-range weapon, not a regression, and the gate should not have to
+    # tell the difference.
+    if TEST_WEAPON != "" and simtest_seconds <= 0.0:
+        want = TEST_WEAPON
+    var args := OS.get_cmdline_user_args()
+    for i in range(args.size() - 1):
+        if args[i] == "weapon":
+            want = args[i + 1]
     for w in GameData.weapons:
-        if w.get("id", "") == op.get("weapon", "needle"):
+        if w.get("id", "") == want:
             weapon_def = w
             break
     var map := GameData.map_named("blacksite")
