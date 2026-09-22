@@ -1511,6 +1511,14 @@ func _bridge_mat(key: String) -> Material:
         "concrete":
             m = MaterialsC.pbr("concrete", 0.30, wall * 0.72, 0.12)
             m.roughness = 0.52
+        "tower":
+            # Brighter than the deck furniture. The pylons stand above the
+            # lamps with nothing lighting them directly, so at the kerb's
+            # albedo they came out as flat black cut-outs filling the top
+            # centre of the frame -- a cell the mockups have at 0 percent
+            # crushed, because a concrete pylon picks up the whole sky.
+            m = MaterialsC.pbr("concrete", 0.22, wall * 1.55, 0.08)
+            m.roughness = 0.58
         "steel":
             m = MaterialsC.pbr("steel", 0.55, wall * 0.52, 0.65)
             m.roughness = 0.38
@@ -1756,14 +1764,16 @@ func _bridge_towers(w: float, h: float) -> void:
     for tx in tower_x:
         for tz in [z0, z1]:
             # Leg, tapering in two stages.
-            _box(Vector3(3.2, TOWER_H * 0.55, 3.2), Vector3(tx, TOWER_H * 0.275, tz), conc, true)
+            _box(Vector3(3.2, TOWER_H * 0.55, 3.2), Vector3(tx, TOWER_H * 0.275, tz),
+                _bridge_mat("tower"), true)
             _box(Vector3(2.6, TOWER_H * 0.45, 2.6),
-                Vector3(tx, TOWER_H * 0.55 + TOWER_H * 0.225, tz), conc, false)
+                Vector3(tx, TOWER_H * 0.55 + TOWER_H * 0.225, tz), _bridge_mat("tower"), false)
         # Cross braces between the legs, and the arch the mockups frame the
         # far span through.
         for y in [TOWER_H * 0.42, TOWER_H * 0.70]:
-            _box(Vector3(2.4, 1.8, z1 - z0), Vector3(tx, y, (z0 + z1) * 0.5), conc, false)
-        _box(Vector3(2.8, 3.0, z1 - z0 + 3.0), Vector3(tx, TOWER_H - 1.5, (z0 + z1) * 0.5), conc, false)
+            _box(Vector3(2.4, 1.8, z1 - z0), Vector3(tx, y, (z0 + z1) * 0.5), _bridge_mat("tower"), false)
+        _box(Vector3(2.8, 3.0, z1 - z0 + 3.0), Vector3(tx, TOWER_H - 1.5, (z0 + z1) * 0.5),
+            _bridge_mat("tower"), false)
         # A red aircraft warning lamp on each tower, which is the only pure
         # red in the mockups' upper half.
         var warn := OmniLight3D.new()

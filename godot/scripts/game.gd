@@ -446,8 +446,25 @@ func _night_overrides(env: Environment, bounce: DirectionalLight3D) -> void:
     # colour with a low energy leaves the lamps to do the work.
     env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
     env.ambient_light_sky_contribution = 0.0
-    env.ambient_light_color = level.pal("fog", Color(0.055, 0.075, 0.105))
-    env.ambient_light_energy = 0.72
+    # The ambient colour is derived from the map's fog hue, not used raw.
+    #
+    # The palette's `fog` is rgba(10,18,28), which is a 2D canvas overlay
+    # colour -- something drawn ON TOP of a finished frame -- and using it
+    # directly as an ambient light meant a contribution of (0.028, 0.051,
+    # 0.079) at energy 0.72. Four rounds were spent raising that energy from
+    # 0.22 to 0.72 and wondering why the crushed share would not fall: the
+    # energy was multiplying almost nothing.
+    #
+    # The hue is worth keeping -- it is the map's own cold cast -- so it is
+    # normalised and re-scaled to a real overcast dome instead. Measured
+    # against the mockups, the regions with no direct light on them sit around
+    # 0.11 to 0.14 rather than at zero, because an overcast sky lights
+    # everything under it from every direction.
+    var fog_hue := level.pal("fog", Color(0.055, 0.075, 0.105))
+    var hue_mean: float = maxf(0.001, (fog_hue.r + fog_hue.g + fog_hue.b) / 3.0)
+    env.ambient_light_color = Color(fog_hue.r / hue_mean, fog_hue.g / hue_mean,
+        fog_hue.b / hue_mean) * 0.20
+    env.ambient_light_energy = 1.0
 
     # Storm haze. Heavy, close and blue: the mockups lose the far tower to it
     # and the city across the water is a glow rather than a skyline. This is
@@ -482,8 +499,8 @@ func _night_overrides(env: Environment, bounce: DirectionalLight3D) -> void:
     # the crushed share went from 36 to 51 percent. About 40 percent of the
     # cut comes back, which is enough glow to make the lamps and fires read
     # through rain without the pass feeding on itself.
-    env.glow_intensity = 0.62
-    env.glow_bloom = 0.10
+    env.glow_intensity = 0.52
+    env.glow_bloom = 0.08
     env.glow_hdr_threshold = 0.82
     env.glow_hdr_scale = 1.45
     env.glow_strength = 1.05
