@@ -670,7 +670,16 @@ func _build_rain() -> void:
         # error. The CPU path runs everywhere and a few thousand quads is
         # nothing next to the 629 draw calls the sector already costs.
         var p := CPUParticles3D.new()
-        p.amount = int((900 if near else 1600) * level.rain_density())
+        # Denser, because the mockups are a rainstorm.
+        #
+        # 900 near and 1600 far put a drop every few metres, which reads as
+        # drizzle. In the three mockups the rain is the most consistent
+        # texture in the frame -- it is the only thing that puts contrast into
+        # the sky, and their sky windows never measure flat while 26.9 percent
+        # of this build's did. Window contrast is a MEDIAN over the whole
+        # frame, so a texture that covers all of it moves that number in a way
+        # that detail on any one surface cannot.
+        p.amount = int((4200 if near else 6400) * level.rain_density())
         p.lifetime = 1.1 if near else 2.6
         p.preprocess = 1.2
         p.local_coords = false
@@ -688,12 +697,18 @@ func _build_rain() -> void:
         # A drop is a stretched quad, unshaded and additive: rain is seen
         # because it catches the lamps, not because it has a colour.
         var q := QuadMesh.new()
-        q.size = Vector2(0.018 if near else 0.010, 0.62 if near else 0.34)
+        # Finer and longer, not fatter. At 0.020 by 0.88 with an alpha of
+        # 0.55 the drops rendered as thick white dashes lying over the frame;
+        # rain in the mockups is a fine dense fall that is read from many thin
+        # streaks rather than from a few heavy ones. More of them, a third the
+        # width, half again the length, and dim enough that a drop is seen
+        # because it catches a lamp rather than because it is white.
+        q.size = Vector2(0.011 if near else 0.007, 1.35 if near else 0.80)
         var dm := StandardMaterial3D.new()
         dm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
         dm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
         dm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-        dm.albedo_color = Color(0.62, 0.74, 0.88, 0.45 if near else 0.20)
+        dm.albedo_color = Color(0.62, 0.74, 0.88, 0.34 if near else 0.17)
         dm.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
         dm.billboard_keep_scale = true
         dm.disable_receive_shadows = true

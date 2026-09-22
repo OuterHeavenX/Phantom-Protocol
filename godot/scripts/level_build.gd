@@ -1805,7 +1805,16 @@ func _bridge_deck(w: float, h: float) -> void:
     # the answer is not simply to dim them: it is to keep the count of bright
     # points up while cutting how much of the frame each one covers. Half the
     # energy, two thirds the size, half again as many.
-    var puddle_n := int(w * 5.0)
+    # More of them and smaller, at the same total area.
+    #
+    # Window contrast is measured over a 48-pixel window and rewards features
+    # SMALLER than one. At 1.1 to 6.3 m long these cards spanned several
+    # windows of near road each, so a window sat entirely inside one and read
+    # it as a smooth gradient. 2.8 times as many at 40 percent the length puts
+    # roughly the same light on the deck as many more separate edges, which is
+    # what the mockups' road actually is: dozens of small bright reflections
+    # on a near-black surface rather than a few long ones.
+    var puddle_n := int(w * 14.0)
     for i in range(puddle_n):
         var hx := _hash64(i * 6367 + 11)
         var hz := _hash64(i * 9283 + 29)
@@ -1816,8 +1825,8 @@ func _bridge_deck(w: float, h: float) -> void:
         # Ahead of the player the fires dominate; behind, the lamps do.
         var col := Color(1.0, 0.78, 0.50).lerp(Color(1.0, 0.50, 0.22),
             clampf(1.0 - px / (w * 0.6), 0.0, 1.0) * warm)
-        var length: float = 1.1 + float(hs % 37) * 0.145
-        var width: float = 0.20 + float(hx % 23) * 0.024
+        var length: float = 0.44 + float(hs % 37) * 0.058
+        var width: float = 0.13 + float(hx % 23) * 0.016
         # Roughly tripled. These were halved twice while the frame still had
         # the deck's metallic slab in it, and every brightness judgement made
         # against that frame was made against a blown highlight that had
