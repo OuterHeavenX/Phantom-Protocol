@@ -61,6 +61,14 @@ func _height_for(o: Dictionary) -> float:
 func build(lvl: Level, mats: Dictionary) -> void:
     level = lvl
     materials = mats
+    # A bridge is not a street with different textures. Facades, rooflines,
+    # awnings, alley clutter and doorframes all assume a room you stand
+    # inside, and CROSSFALL is a deck over open water with nothing on either
+    # side. So it gets its own pass rather than a pile of exceptions in this
+    # one.
+    if level.layout != null and String(level.layout.get("type", "")) == "bridge":
+        _build_bridge()
+        return
     _build_ground()
     _build_solids()
     _build_doorframes()
@@ -1344,11 +1352,19 @@ func _merge_static() -> void:
             if std != null and std.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED:
                 continue
             var origin := local.origin
+            # surface_get_format lives on ArrayMesh only. Every PrimitiveMesh
+            # -- the boxes, planes, spheres and cylinders the bridge builds
+            # with -- shares one vertex format, so they take a single sentinel
+            # that cannot collide with a real format value. Asking a PlaneMesh
+            # for its format is what broke the first bridge build outright.
+            var fmt := -1
+            if mi.mesh is ArrayMesh:
+                fmt = int((mi.mesh as ArrayMesh).surface_get_format(si))
             var key := "%d_%d_%d_%d_%d_%.2f_%.2f_%d" % [
                 mat.get_instance_id(),
                 int(floor(origin.x / MERGE_CHUNK)),
                 int(floor(origin.z / MERGE_CHUNK)),
-                int(mi.mesh.surface_get_format(si)),
+                fmt,
                 int(mi.cast_shadow),
                 mi.visibility_range_end,
                 mi.visibility_range_end_margin,
@@ -1427,3 +1443,484 @@ func _surface_material(mi: MeshInstance3D, surface: int) -> Material:
     if over != null:
         return over
     return mi.mesh.surface_get_material(surface)
+
+
+# ---- CROSSFALL SPAN --------------------------------------------------------
+#
+# A suspension crossing rather than a street, so almost none of the sector
+# dressing above applies: there are no facades, no rooflines, no awnings and
+# no alleys. What the 2D simulation hands over is still the same list of
+# rectangles, and it is already bridge-shaped -- a single 3465-unit room, two
+# `parapet` walls running the full length of the deck, five PAIRS of structure
+# lights in sodium (#ffd095) down both edges, and containers and barriers
+# scattered across the roadway. So the job here is to read those as what they
+# are: barriers, lamp posts and wrecks on a road deck over open water.
+#
+# Everything this adds that the simulation does not know about obeys the same
+# rule the sector does. Towers and cables stand outside the parapets or far
+# above head height; wrecks sit exactly on the cover rectangles the simulation
+# already collides with; the water is below the deck. Nothing new blocks a
+# sightline the simulation thinks is open.
+
+const DECK_Y := 0.0
+## How far below the deck the water sits, and how far out it runs. The mockups
+## put the camera close enough to the parapet to see water on both sides, and
+## the far shore is a glow rather than a line.
+const WATER_DROP := 26.0
+const WATER_SPAN := 900.0
+
+func _build_bridge() -> void:
+    var w := level.metres(level.width)
+    var h := level.metres(level.height)
+    _bridge_water(w, h)
+    _bridge_deck(w, h)
+    _bridge_solids()
+    _bridge_towers(w, h)
+    _bridge_lamps()
+    _bridge_wrecks()
+    _bridge_fires()
+    _bridge_skyline(w, h)
+    _merge_static()
+
+func _bridge_water(w: float, h: float) -> void:
+    var m := StandardMaterial3D.new()
+    # Near-black, and smooth enough to carry the lamps and the fire as long
+    # vertical streaks. In the mockups the water is almost entirely reflection
+    # -- there is no diffuse colour in it at all at this hour.
+    m.albedo_color = Color(0.012, 0.018, 0.028)
+    m.metallic = 0.55
+    m.roughness = 0.16
+    m.metallic_specular = 0.85
+    var plane := PlaneMesh.new()
+    plane.size = Vector2(WATER_SPAN, WATER_SPAN)
+    var mi := MeshInstance3D.new()
+    mi.mesh = plane
+    mi.material_override = m
+    mi.position = Vector3(w * 0.5, -WATER_DROP, h * 0.5)
+    mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    add_child(mi)
+
+## The roadway itself: one slab between the parapets, with lane markings.
+func _bridge_deck(w: float, h: float) -> void:
+    var road := _mat("ground_2")
+    var deck := _box(Vector3(w + 2.0, 0.55, h * 0.70),
+        Vector3(w * 0.5, -0.275, h * 0.5), road, true, 0.5)
+    deck.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    # The underside, so the deck reads as a structure with thickness when seen
+    # from the parapet rather than as a plane floating on the water.
+    _box(Vector3(w + 2.0, 2.2, h * 0.72), Vector3(w * 0.5, -1.6, h * 0.5),
+        _mat("machinery"), false)
+    # Box girders under the deck, which is what a suspension span actually
+    # hangs from and what the mockups show in silhouette against the water.
+    for i in range(3):
+        var z := h * 0.5 + (i - 1) * h * 0.22
+        _box(Vector3(w, 1.6, 0.9), Vector3(w * 0.5, -2.6, z), _mat("machinery"), false)
+    # Lane markings. Long dashes down the centre of a six-lane deck: in the
+    # mockups these are the brightest thing on the road other than the
+    # reflections, because wet paint throws light straight back.
+    var paint := StandardMaterial3D.new()
+    paint.albedo_color = Color(0.40, 0.39, 0.36)
+    paint.roughness = 0.42
+    var lanes := 4
+    var n := int(w / 5.5)
+    for lane in range(lanes):
+        var z := h * 0.5 + (float(lane) - (lanes - 1) * 0.5) * (h * 0.60 / float(lanes))
+        for i in range(n):
+            var x := 1.0 + i * 5.5
+            if int(i + lane) % 3 == 0:
+                continue
+            var strip := _box(Vector3(2.6, 0.02, 0.16), Vector3(x, 0.02, z), paint, false)
+            strip.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+            _detail(strip)
+
+## Parapets become steel railings rather than walls, and everything else the
+## simulation calls a wall stays a solid so collision is unchanged.
+func _bridge_solids() -> void:
+    for o in level.walls:
+        var t := String(o.get("type", "wall"))
+        var ow := level.metres(float(o["w"]))
+        var oh := level.metres(float(o["h"]))
+        var pos := Vector3(level.metres(float(o["x"])), 0.0, level.metres(float(o["y"])))
+        if t == "parapet":
+            _bridge_railing(pos, ow, oh)
+        elif t == "perimeter":
+            # The ends of the span. Kept solid, since the simulation stops the
+            # operative there, but low and concrete rather than a building.
+            _box(Vector3(ow, 2.4, oh), pos + Vector3(0, 1.2, 0), _mat("kerb"), true)
+        else:
+            _box(Vector3(ow, 2.0, oh), pos + Vector3(0, 1.0, 0), _mat("machinery"), true)
+
+## A concrete kerb with a steel rail above it, which is the section every
+## mockup shows along both edges of the deck.
+func _bridge_railing(pos: Vector3, ow: float, oh: float) -> void:
+    var long_axis := ow > oh
+    var length: float = ow if long_axis else oh
+    var thick: float = oh if long_axis else ow
+    # The kerb is the part the simulation collides with, so it keeps the
+    # footprint it was given.
+    _box(Vector3(ow, 1.15, oh), pos + Vector3(0, 0.575, 0), _mat("kerb"), true)
+    var ax := Vector3(1, 0, 0) if long_axis else Vector3(0, 0, 1)
+    var steel := _mat("machinery")
+    # Two horizontal rails and a post every 2.4 m. Posts are inside the kerb's
+    # own footprint, so they add nothing the simulation does not already stop.
+    for y in [1.55, 2.05]:
+        var rail := _box(Vector3(ow if long_axis else 0.09, 0.09, 0.09 if long_axis else oh),
+            pos + Vector3(0, y, 0), steel, false)
+        rail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    var posts := int(length / 2.4)
+    for i in range(posts):
+        var t := (float(i) + 0.5) / float(posts) - 0.5
+        var at := pos + ax * (t * length) + Vector3(0, 1.6, 0)
+        var p := _box(Vector3(0.10, 1.0, 0.10), at, steel, false)
+        p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        _detail(p)
+
+## Two towers, the main cables between them, the suspenders, and the strings
+## of lamps along the cables that every mockup leads with.
+func _bridge_towers(w: float, h: float) -> void:
+    var steel := _mat("machinery")
+    var conc := _mat("kerb")
+    var z0 := level.metres(196.56)
+    var z1 := level.metres(895.44)
+    var tower_x := [w * 0.22, w * 0.78]
+    const TOWER_H := 46.0
+    for tx in tower_x:
+        for tz in [z0, z1]:
+            # Leg, tapering in two stages.
+            _box(Vector3(3.2, TOWER_H * 0.55, 3.2), Vector3(tx, TOWER_H * 0.275, tz), conc, true)
+            _box(Vector3(2.6, TOWER_H * 0.45, 2.6),
+                Vector3(tx, TOWER_H * 0.55 + TOWER_H * 0.225, tz), conc, false)
+        # Cross braces between the legs, and the arch the mockups frame the
+        # far span through.
+        for y in [TOWER_H * 0.42, TOWER_H * 0.70]:
+            _box(Vector3(2.4, 1.8, z1 - z0), Vector3(tx, y, (z0 + z1) * 0.5), conc, false)
+        _box(Vector3(2.8, 3.0, z1 - z0 + 3.0), Vector3(tx, TOWER_H - 1.5, (z0 + z1) * 0.5), conc, false)
+        # A red aircraft warning lamp on each tower, which is the only pure
+        # red in the mockups' upper half.
+        var warn := OmniLight3D.new()
+        warn.position = Vector3(tx, TOWER_H + 1.0, (z0 + z1) * 0.5)
+        warn.light_color = Color(1.0, 0.16, 0.12)
+        warn.light_energy = 3.0
+        warn.omni_range = 18.0
+        warn.shadow_enabled = false
+        add_child(warn)
+
+    # Main cables: a catenary from tower top to tower top, sagging toward the
+    # deck at midspan, plus the back-stays running down to the deck ends.
+    for tz in [z0, z1]:
+        _bridge_cable(tower_x[0], tower_x[1], TOWER_H, tz, w, true)
+        _bridge_cable(-w * 0.10, tower_x[0], TOWER_H, tz, w, false)
+        _bridge_cable(tower_x[1], w * 1.10, TOWER_H, tz, w, false)
+
+func _cable_y(x: float, x0: float, x1: float, top: float, sag: float) -> float:
+    var t: float = clampf((x - x0) / maxf(0.001, x1 - x0), 0.0, 1.0)
+    # A parabola is close enough to a catenary at this span and costs nothing.
+    return top - sag * 4.0 * t * (1.0 - t)
+
+func _bridge_cable(x0: float, x1: float, top: float, z: float, w: float, main: bool) -> void:
+    var steel := _mat("machinery")
+    var sag := (x1 - x0) * 0.22 if main else 0.0
+    var segs := int(absf(x1 - x0) / 2.2)
+    var prev := Vector3(x0, top if main else 1.6, z)
+    for i in range(1, segs + 1):
+        var t := float(i) / float(segs)
+        var x: float = x0 + (x1 - x0) * t
+        var y: float = _cable_y(x, x0, x1, top, sag) if main \
+            else lerpf(top if x0 > x1 else 1.6, 1.6 if x0 > x1 else top, t)
+        var here := Vector3(x, y, z)
+        var mid := (prev + here) * 0.5
+        var span := here - prev
+        var seg := _box(Vector3(span.length(), 0.22, 0.22), mid, steel, false)
+        seg.rotation = Vector3(0.0, 0.0, atan2(span.y, span.x))
+        seg.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        prev = here
+    if not main:
+        return
+    # Suspenders down to the deck, and the string of lamps along the cable.
+    var lamp := StandardMaterial3D.new()
+    lamp.albedo_color = Color(1.0, 0.86, 0.62)
+    lamp.emission_enabled = true
+    lamp.emission = Color(1.0, 0.84, 0.58)
+    lamp.emission_energy_multiplier = 22.0
+    lamp.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    var drops := int(absf(x1 - x0) / 4.4)
+    for i in range(1, drops):
+        var x: float = x0 + (x1 - x0) * (float(i) / float(drops))
+        var y := _cable_y(x, x0, x1, top, sag)
+        var hang := _box(Vector3(0.09, y - 2.2, 0.09), Vector3(x, (y + 2.2) * 0.5, z), steel, false)
+        hang.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        _detail(hang)
+        # Every other suspender carries a lamp, which is the dotted catenary
+        # of lights running up to the tower in all three mockups.
+        if i % 2 == 0:
+            var bulb := SphereMesh.new()
+            bulb.radius = 0.16
+            bulb.height = 0.32
+            bulb.radial_segments = 6
+            bulb.rings = 4
+            var b := MeshInstance3D.new()
+            b.mesh = bulb
+            b.material_override = lamp
+            b.position = Vector3(x, y - 0.45, z)
+            b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+            add_child(b)
+
+## Lamp posts on the deck, at the positions the simulation authored.
+func _bridge_lamps() -> void:
+    var steel := _mat("machinery")
+    var head := StandardMaterial3D.new()
+    head.albedo_color = Color(0.9, 0.78, 0.55)
+    head.emission_enabled = true
+    head.emission = Color(1.0, 0.80, 0.52)
+    head.emission_energy_multiplier = 16.0
+    head.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    for l in level.lights:
+        var at := level.to_world(Vector2(float(l["x"]), float(l["y"])), 0.0)
+        var col := Color(String(l.get("color", "#ffd095")))
+        var mast := _box(Vector3(0.22, 8.0, 0.22), at + Vector3(0, 4.0, 0), steel, false)
+        mast.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        # The arm reaches in over the roadway, which is what throws the long
+        # pool of light down the wet deck.
+        var inward: float = 1.0 if at.z < level.metres(level.height) * 0.5 else -1.0
+        var arm := _box(Vector3(0.16, 0.16, 2.6), at + Vector3(0, 7.9, inward * 1.3), steel, false)
+        arm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        var hd := MeshInstance3D.new()
+        var q := BoxMesh.new()
+        q.size = Vector3(0.5, 0.18, 0.9)
+        hd.mesh = q
+        hd.material_override = head
+        hd.position = at + Vector3(0, 7.75, inward * 2.5)
+        hd.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        add_child(hd)
+        var lamp := OmniLight3D.new()
+        lamp.position = at + Vector3(0, 7.5, inward * 2.5)
+        lamp.light_color = col
+        lamp.light_energy = 9.0
+        lamp.omni_range = level.metres(float(l.get("radius", 205))) * 1.5
+        lamp.omni_attenuation = 1.4
+        lamp.shadow_enabled = false
+        add_child(lamp)
+
+## Every cover rectangle the simulation placed becomes a wrecked vehicle.
+##
+## They keep the footprint they were given, so what stops the operative is
+## still exactly what the 2D game stops them on. The type decides the shape: a
+## container is a box truck or a bus, a barrier is a car or a jersey block.
+func _bridge_wrecks() -> void:
+    var body := _mat("machinery")
+    var rust := _mat("brick")
+    var glass := _mat("glass")
+    var tyre := StandardMaterial3D.new()
+    tyre.albedo_color = Color(0.020, 0.020, 0.022)
+    tyre.roughness = 0.92
+    var tail := StandardMaterial3D.new()
+    tail.albedo_color = Color(0.35, 0.03, 0.03)
+    tail.emission_enabled = true
+    tail.emission = Color(1.0, 0.07, 0.05)
+    tail.emission_energy_multiplier = 9.0
+    tail.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+
+    var idx := 0
+    for c in level.cover:
+        idx += 1
+        var cw := level.metres(float(c["w"]))
+        var ch := level.metres(float(c["h"]))
+        var at := Vector3(level.metres(float(c["x"])), 0.0, level.metres(float(c["y"])))
+        var kind := String(c.get("type", "barrier"))
+        var long_x := cw > ch
+        var yaw := 0.0 if long_x else PI * 0.5
+        # A wreck sitting dead straight on the lane reads as parked, not as
+        # abandoned under fire, so each is canted a little off the axis. The
+        # angle comes from the footprint hash, so it is the same every run.
+        yaw += (float(_pick(c, 37, 9)) - 4.0) * 0.045
+        if kind == "container":
+            _wreck_truck(at, maxf(cw, ch), minf(cw, ch), yaw, body, rust, glass, tyre, tail, idx)
+        else:
+            _wreck_car(at, maxf(cw, ch), minf(cw, ch), yaw, body, glass, tyre, tail, idx)
+
+func _wreck_car(at: Vector3, length: float, width: float, yaw: float,
+        body: Material, glass: Material, tyre: Material, tail: Material, idx: int) -> void:
+    var h := 0.72
+    var b := _box(Vector3(length, h, width), at + Vector3(0, h * 0.5, 0), body, true)
+    b.rotation.y = yaw
+    # Cabin, set back and narrower, which is the whole of a car's silhouette
+    # at this distance.
+    var cab := _box(Vector3(length * 0.46, 0.52, width * 0.86),
+        at + Vector3(0, h + 0.26, 0), glass, false)
+    cab.rotation.y = yaw
+    var roof := _box(Vector3(length * 0.42, 0.10, width * 0.80),
+        at + Vector3(0, h + 0.54, 0), body, false)
+    roof.rotation.y = yaw
+    for sx in [-1.0, 1.0]:
+        for sz in [-1.0, 1.0]:
+            var off := Vector3(cos(yaw) * sx * length * 0.33 - sin(yaw) * sz * width * 0.46,
+                0.30, sin(yaw) * sx * length * 0.33 + cos(yaw) * sz * width * 0.46)
+            var wheel := cyl_node(0.30, 0.18, at + off, tyre)
+            wheel.rotation = Vector3(0.0, yaw, PI * 0.5)
+            _detail(wheel)
+    # Tail lights, which are most of the red in the mockups' middle distance.
+    if idx % 2 == 0:
+        var off2 := Vector3(-cos(yaw) * length * 0.5, h * 0.62, -sin(yaw) * length * 0.5)
+        var t := _box(Vector3(0.10, 0.12, width * 0.26), at + off2, tail, false)
+        t.rotation.y = yaw
+        t.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        var lamp := OmniLight3D.new()
+        lamp.position = at + off2
+        lamp.light_color = Color(1.0, 0.10, 0.06)
+        lamp.light_energy = 2.2
+        lamp.omni_range = 5.5
+        lamp.shadow_enabled = false
+        add_child(lamp)
+
+func _wreck_truck(at: Vector3, length: float, width: float, yaw: float,
+        body: Material, rust: Material, glass: Material, tyre: Material,
+        tail: Material, idx: int) -> void:
+    var h := 1.35
+    var box_len := length * 0.62
+    var cargo := _box(Vector3(box_len, 2.5, width), at + Vector3(0, h + 1.25, 0), rust, true)
+    cargo.rotation.y = yaw
+    var chassis := _box(Vector3(length, h, width * 0.9), at + Vector3(0, h * 0.5, 0), body, true)
+    chassis.rotation.y = yaw
+    var cabin := _box(Vector3(length * 0.26, 1.5, width * 0.92),
+        at + Vector3(cos(yaw) * length * 0.36, h + 0.75, sin(yaw) * length * 0.36), body, false)
+    cabin.rotation.y = yaw
+    var wind := _box(Vector3(0.10, 0.7, width * 0.78),
+        at + Vector3(cos(yaw) * length * 0.485, h + 1.0, sin(yaw) * length * 0.485), glass, false)
+    wind.rotation.y = yaw
+    # Ribs down the cargo body, which is what stops a box truck being a box.
+    var ribs := int(box_len / 0.75)
+    for i in range(ribs):
+        var t := (float(i) + 0.5) / float(ribs) - 0.5
+        var off := Vector3(cos(yaw) * t * box_len, h + 1.25, sin(yaw) * t * box_len)
+        var rib := _box(Vector3(0.09, 2.4, width + 0.06), at + off, body, false)
+        rib.rotation.y = yaw
+        rib.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        _detail(rib)
+    for sx in [-0.34, 0.30]:
+        for sz in [-1.0, 1.0]:
+            var off2 := Vector3(cos(yaw) * sx * length - sin(yaw) * sz * width * 0.5,
+                0.42, sin(yaw) * sx * length + cos(yaw) * sz * width * 0.5)
+            var wheel := cyl_node(0.42, 0.24, at + off2, tyre)
+            wheel.rotation = Vector3(0.0, yaw, PI * 0.5)
+            _detail(wheel)
+
+## A cylinder as a node, since _box only makes boxes and wheels are the one
+## place on this map where that shows.
+func cyl_node(r: float, depth: float, at: Vector3, mat: Material) -> MeshInstance3D:
+    var m := CylinderMesh.new()
+    m.top_radius = r
+    m.bottom_radius = r
+    m.height = depth
+    m.radial_segments = 10
+    var mi := MeshInstance3D.new()
+    mi.mesh = m
+    mi.material_override = mat
+    mi.position = at
+    mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    add_child(mi)
+    return mi
+
+## The burning wrecks in the middle distance, which are the brightest thing in
+## every mockup and the reason the deck ahead is lit at all.
+##
+## Placed on cover rectangles rather than anywhere, so a fire is always
+## something that is actually burning rather than a light floating over open
+## road, and only on the far half of the span so the player is looking INTO
+## them down the deck.
+func _bridge_fires() -> void:
+    var w := level.metres(level.width)
+    var flame := StandardMaterial3D.new()
+    flame.albedo_color = Color(1.0, 0.42, 0.10)
+    flame.emission_enabled = true
+    flame.emission = Color(1.0, 0.44, 0.12)
+    flame.emission_energy_multiplier = 26.0
+    flame.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    flame.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+
+    var placed := 0
+    for c in level.cover:
+        var x := level.metres(float(c["x"]))
+        if x > w * 0.55 or placed >= 5:
+            continue
+        placed += 1
+        var at := Vector3(x, 0.0, level.metres(float(c["y"])))
+        # The body of fire: a stack of shrinking emissive blocks. Cheap, and
+        # at this distance through rain haze it reads as a fire rather than as
+        # geometry, which a single quad never does.
+        for i in range(5):
+            var t := float(i) / 4.0
+            var s := lerpf(2.2, 0.7, t)
+            var f := _box(Vector3(s, s * 0.9, s),
+                at + Vector3(sin(t * 7.0) * 0.5, 1.0 + t * 3.4, cos(t * 5.0) * 0.5),
+                flame, false)
+            f.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        # Two lights per fire: a hot close one and a wide one that reaches the
+        # deck and the parapets, which is what puts the orange down the road.
+        for spec in [[5.0, 14.0, 2.0], [2.2, 46.0, 9.0]]:
+            var lamp := OmniLight3D.new()
+            lamp.position = at + Vector3(0.0, spec[2], 0.0)
+            lamp.light_color = Color(1.0, 0.46, 0.16)
+            lamp.light_energy = spec[0]
+            lamp.omni_range = spec[1]
+            lamp.shadow_enabled = false
+            add_child(lamp)
+        # Smoke: a dark column leaning with the map's own wind.
+        var smoke := StandardMaterial3D.new()
+        smoke.albedo_color = Color(0.045, 0.040, 0.038, 0.62)
+        smoke.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+        smoke.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+        smoke.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+        var wind := level.wind()
+        for i in range(7):
+            var t := float(i) / 6.0
+            var q := QuadMesh.new()
+            q.size = Vector2(lerpf(3.0, 12.0, t), lerpf(3.0, 12.0, t))
+            var s := MeshInstance3D.new()
+            s.mesh = q
+            s.material_override = smoke
+            s.position = at + Vector3(wind * t * 16.0, 4.0 + t * 26.0, sin(t * 3.0) * 2.0)
+            s.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+            add_child(s)
+
+## The city across the water: a band of dark blocks with lit windows.
+##
+## It is scenery, far outside the deck and far below head height from the
+## player's position, so it blocks nothing. Without it the mockups' horizon --
+## a low glittering line under a black sky -- is just black.
+func _bridge_skyline(w: float, h: float) -> void:
+    var block := StandardMaterial3D.new()
+    block.albedo_color = Color(0.020, 0.024, 0.034)
+    block.roughness = 0.9
+    var win := StandardMaterial3D.new()
+    win.albedo_color = Color(0.55, 0.50, 0.36)
+    win.emission_enabled = true
+    win.emission = Color(1.0, 0.86, 0.58)
+    win.emission_energy_multiplier = 3.0
+    win.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    for side in [-1.0, 1.0]:
+        var z: float = h * 0.5 + side * 260.0
+        for i in range(46):
+            var seed := int(i * 7919 + (1 if side > 0 else 0) * 104729)
+            var r := float(_hash64(seed) % 1000) / 1000.0
+            var r2 := float(_hash64(seed + 17) % 1000) / 1000.0
+            var bw := 9.0 + r * 22.0
+            var bh := 14.0 + r2 * 74.0
+            var x := -120.0 + i * (w + 240.0) / 46.0 + r * 18.0
+            var zz: float = z + (r2 - 0.5) * 90.0
+            var b := _box(Vector3(bw, bh, bw * 0.8), Vector3(x, bh * 0.5 - WATER_DROP, zz), block, false)
+            b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+            # Lit windows, as one emissive strip per few floors rather than as
+            # individual panes -- at this distance they merge anyway.
+            var floors := int(bh / 6.0)
+            for f in range(floors):
+                if (_hash64(seed + f * 31) % 100) < 42:
+                    continue
+                var wy := 4.0 + f * 6.0 - WATER_DROP
+                var s := MeshInstance3D.new()
+                var q := BoxMesh.new()
+                q.size = Vector3(bw * 0.86, 1.5, 0.3)
+                s.mesh = q
+                s.material_override = win
+                s.position = Vector3(x, wy, zz - side * bw * 0.42)
+                s.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+                add_child(s)
