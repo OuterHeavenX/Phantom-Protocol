@@ -31,6 +31,15 @@ var capture_view: String = "corridor"
 ## no renderer and report what happened. This is how the mechanics are checked
 ## without a human at the keyboard.
 var simtest_seconds: float = 0.0
+## Frame-cost report: render N frames, print what the renderer was asked to do
+## and how long each frame took, then quit. Driven by -- perf <frames>.
+##
+## This exists because three separate player reports -- enemies frozen while
+## the player still moves, shots going out occasionally, shot sounds
+## occasionally -- are all one symptom if the frame rate is low enough, and
+## guessing at that from a screenshot is how rounds get wasted. The numbers it
+## prints are draw calls and milliseconds, which is what the fix has to move.
+var perf_frames := 0
 
 var sim: Sim
 var hud: Hud
@@ -114,6 +123,9 @@ func _parse_args() -> void:
                 i += 1
             "simtest":
                 simtest_seconds = float(args[i + 1]) if i + 1 < args.size() else 300.0
+                i += 1
+            "perf":
+                perf_frames = int(args[i + 1]) if i + 1 < args.size() else 60
                 i += 1
         i += 1
 
@@ -494,11 +506,32 @@ func _start_contract() -> void:
 
     _build_extraction_marker()
 
-func _process(delta: float) -> void:
-    if sim:
-        sim.fire_held = Input.is_action_pressed("fire")
+## The simulation runs on the physics clock, not the render clock.
+##
+## It used to run here, in _process. The operative, being a CharacterBody3D,
+## has always moved in _physics_process. Those are two different clocks, and
+## Godot treats them differently when a frame takes too long: it keeps
+## stepping physics to catch up, but _process runs exactly once per rendered
+## frame. So on a slow frame the player moved at full speed while the
+## simulation got one advance() call carrying a large delta, which the step
+## budget then truncated -- and the hostiles crawled or stopped while the
+## player walked around them at normal speed. That is the "enemies froze while
+## I could still move" report, and it is not a stutter: it is two clocks
+## drifting apart, so it does not recover.
+##
+## It also gated the weapon on the frame rate. fire_held was sampled once per
+## rendered frame, so at ten frames a second the trigger was read ten times a
+## second no matter what the weapon's cooldown was -- rounds and their reports
+## came out "occasionally", which is the other two reports.
+##
+## Both go away by running the simulation on the same clock as the body it is
+## following. Sim.FIXED_STEP is 1/60 and Godot's physics tick is 60 Hz, so
+## each call is exactly one step, and when a frame does run long both the
+## player and the simulation slow down together.
+func _physics_process(delta: float) -> void:
     if sim == null or capture_path != "":
         return
+    sim.fire_held = Input.is_action_pressed("fire")
     sim.player_pos = level.to_plan(player.global_position)
     # Plan space shares its axes with world space, so a world heading is a
     # plan heading once the vertical is dropped.
@@ -508,10 +541,51 @@ func _process(delta: float) -> void:
         sim.aim_dir = flat.normalized()
     sim.advance(delta)
     _sync_enemies()
+
+## Only what has to be per-frame: the viewmodel's sway, which is a visual
+## response to how fast the operative is moving and has nothing to step.
+func _process(delta: float) -> void:
+    if perf_frames > 0:
+        _perf_tick(delta)
+    if sim == null or capture_path != "":
+        return
     if viewmodel:
         var planar := Vector2(player.velocity.x, player.velocity.z).length()
         viewmodel.update_motion(delta, Vector2.ZERO,
             clampf(planar / maxf(0.1, player.speed_mps), 0.0, 1.0), false)
+
+## ---- Frame-cost report ----------------------------------------------------
+
+var _perf_seen := 0
+var _perf_ms: Array[float] = []
+
+func _perf_tick(_delta: float) -> void:
+    _perf_seen += 1
+    # The first frames pay for shader compilation and the first upload of every
+    # mesh, which is not what a player is standing in, so they are discarded.
+    const WARMUP := 5
+    if _perf_seen == WARMUP:
+        print("PERF objects=%d draw_calls=%d primitives=%d vram=%.1fMB" % [
+            RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME),
+            RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME),
+            RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME),
+            float(RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_VIDEO_MEM_USED)) / 1048576.0,
+        ])
+    if _perf_seen > WARMUP:
+        _perf_ms.append(Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
+            + Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0)
+    if _perf_seen < perf_frames:
+        return
+    var frame_ms := _perf_ms.duplicate()
+    frame_ms.sort()
+    var total := 0.0
+    for v in frame_ms:
+        total += v
+    var n: int = maxi(frame_ms.size(), 1)
+    print("PERF frames=%d cpu_mean=%.1fms cpu_p95=%.1fms" % [
+        frame_ms.size(), total / float(n), frame_ms[mini(int(n * 0.95), n - 1)]])
+    print("PERF fps=%.1f" % Performance.get_monitor(Performance.TIME_FPS))
+    get_tree().quit(0)
 
 func _char_scene(kind: String):
     var name: String = CHAR_FOR.get(kind, "soldier")

@@ -134,6 +134,13 @@ func enemy_cap() -> int:
 ## carried. The simulation then runs coarsely on a slow device instead of
 ## accurately in the past, which is the right trade: a hostile that advances
 ## in bigger jumps is a game, and one that stopped forty seconds ago is not.
+##
+## That stopped the drift from being permanent but not from happening, because
+## the cause was upstream: the caller was the render loop. It is now the
+## physics loop, at the same 60 Hz as FIXED_STEP, so each call is one step and
+## the budget below is never reached in play. It still matters for the
+## headless replay, which drives this directly, and as the floor under any
+## caller that feeds it real time.
 const MAX_STEPS := 6
 
 func advance(delta: float) -> void:
