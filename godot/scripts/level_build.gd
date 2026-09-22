@@ -1763,8 +1763,14 @@ func _bridge_deck(w: float, h: float) -> void:
             clampf(1.0 - px / (w * 0.6), 0.0, 1.0) * warm)
         var length: float = 1.1 + float(hs % 37) * 0.145
         var width: float = 0.20 + float(hx % 23) * 0.024
+        # Raised 1.6x now that `energy` scales the additive albedo as well as
+        # the emission. Before that fix these were adding close to 1.0 at
+        # their cores whatever this number said; with it honest, the same
+        # number produced a far subtler puddle and micro and patch fell out of
+        # band with it. The 95th percentile is at 0.413 against a ceiling of
+        # 0.445, so this spends that headroom on the two detail statistics.
         _wet_streak(Vector3(px, 0.0, pz), col, length, width,
-            0.021 + float(hz % 17) * 0.0026)
+            0.034 + float(hz % 17) * 0.0042)
 
     var lanes := 4
     var n := int(w / 5.5)
