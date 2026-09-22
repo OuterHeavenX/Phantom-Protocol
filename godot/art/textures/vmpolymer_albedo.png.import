@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/vmpolymer_albedo.png-25a2a1db545ce5fef7be09b1
 
 [params]
 
-compress/mode=0
+compress/mode=4
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

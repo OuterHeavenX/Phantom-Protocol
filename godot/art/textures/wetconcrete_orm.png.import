@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/wetconcrete_orm.png-b3ac6c76a9d009629f7878bfe
 
 [params]
 
-compress/mode=0
+compress/mode=4
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

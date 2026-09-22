@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/wetconcrete_albedo.png-66f0b8189ea89642f1c2e0
 
 [params]
 
-compress/mode=0
+compress/mode=4
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

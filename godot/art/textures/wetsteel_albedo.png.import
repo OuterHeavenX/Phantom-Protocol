@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/wetsteel_albedo.png-143bfa6c7ea70aa6bd6a77172
 
 [params]
 
-compress/mode=0
+compress/mode=4
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
