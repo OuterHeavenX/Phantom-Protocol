@@ -29,8 +29,11 @@ const MUZZLES := {
 ## The SMG is 60 cm from butt pad to flash hider against the pistol's 22, so it
 ## cannot sit where the pistol sat: at the pistol's rest pose the stock lands
 ## behind the camera and the weapon reads as a barrel floating in the corner.
+## Pushed well forward of the pistol's. The SMG's stock sits 17 cm behind its
+## own origin, so at the first rest pose the butt pad was 15 cm from the eye
+## and filled the bottom-right sixth of the frame as a bare white slab.
 const REST_POS_FOR := {
-    "vector": Vector3(0.150, -0.142, -0.325),
+    "vector": Vector3(0.138, -0.168, -0.478),
 }
 const REST_ROT_FOR := {
     "vector": Vector3(-1.5, 5.0, 0.5),
@@ -94,7 +97,13 @@ func _build_rig() -> void:
     # already carries most of its exposure; this rig only has to add shape.
     # Set to 2.1 the glove blew to near-white at an albedo of 0.03, which is
     # the same overcorrection the sector's key light needed undoing from.
-    key.light_energy = 0.55
+    #
+    # Raised again once the reference was measured rather than eyeballed. The
+    # weapon was rendering at a mean of 0.198 against the reference's 0.672,
+    # and both this and the albedos were short -- the earlier retreat to 0.55
+    # was a correct response to a blown GLOVE at albedo 0.03, not evidence
+    # that the weapon was bright enough. The glove's albedo carries that now.
+    key.light_energy = 1.35
     key.omni_range = 1.4
     key.shadow_enabled = false
     key.light_cull_mask = VM_LAYER
@@ -105,7 +114,7 @@ func _build_rig() -> void:
     var rim := OmniLight3D.new()
     rim.position = Vector3(0.26, 0.24, -0.10)
     rim.light_color = Color(0.78, 0.86, 1.0)
-    rim.light_energy = 0.32
+    rim.light_energy = 0.70
     rim.omni_range = 1.2
     rim.shadow_enabled = false
     rim.light_cull_mask = VM_LAYER
