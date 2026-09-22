@@ -433,6 +433,26 @@ func _night_overrides(env: Environment, bounce: DirectionalLight3D) -> void:
     sun.light_color = Color(0.60, 0.70, 0.95)
     sun.light_energy = 0.16
     sun.light_angular_distance = 1.4
+    # No specular from the moon.
+    #
+    # The clipped share held at 0.729 percent through five attributions and
+    # five fixes: the searchlight three times, the bloom, and the street
+    # lamps. Removing the beam cone took it to 0.666; removing the rain took
+    # it to 0.666 as well, so those contribute about 0.063 each and a constant
+    # 0.603 came from somewhere neither touched.
+    #
+    # Overlaying the mask showed a smooth VERTICAL ellipse standing on the
+    # road with a glow halo. A light pool lying on a surface is foreshortened
+    # by perspective; this was not, and it is blue-white, which in this scene
+    # is the moon's colour and nothing else. A specular lobe on a glossy plane
+    # is exactly that shape, and its position is fixed by camera-and-light
+    # geometry -- so it could not move for anything that was being cut, which
+    # is the invariance that was misread five times as "not enough of a cut".
+    #
+    # The moon is here to separate the deck from the water, which is a diffuse
+    # job. The wet look comes from the lamps and the fires reflecting in the
+    # road, which keep their own specular.
+    sun.light_specular = 0.0
     sun.directional_shadow_max_distance = 90.0
 
     # The fill goes almost entirely. In the mockups the only thing filling a
