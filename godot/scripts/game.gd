@@ -447,7 +447,7 @@ func _night_overrides(env: Environment, bounce: DirectionalLight3D) -> void:
     env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
     env.ambient_light_sky_contribution = 0.0
     env.ambient_light_color = level.pal("fog", Color(0.055, 0.075, 0.105))
-    env.ambient_light_energy = 0.56
+    env.ambient_light_energy = 0.72
 
     # Storm haze. Heavy, close and blue: the mockups lose the far tower to it
     # and the city across the water is a glow rather than a skyline. This is
@@ -455,7 +455,7 @@ func _night_overrides(env: Environment, bounce: DirectionalLight3D) -> void:
     env.fog_enabled = true
     env.fog_mode = Environment.FOG_MODE_DEPTH
     env.fog_light_color = level.pal("fog", Color(0.075, 0.095, 0.130))
-    env.fog_light_energy = 1.25
+    env.fog_light_energy = 1.55
     env.fog_density = 0.034
     env.fog_depth_begin = 6.0
     env.fog_depth_end = 150.0
@@ -466,11 +466,27 @@ func _night_overrides(env: Environment, bounce: DirectionalLight3D) -> void:
     # 1.6 threshold none of that happens, because almost nothing in a night
     # frame is over the threshold in the first place.
     env.glow_enabled = true
-    env.glow_intensity = 0.9
-    env.glow_bloom = 0.22
-    env.glow_hdr_threshold = 0.65
-    env.glow_hdr_scale = 2.2
-    env.glow_strength = 1.15
+    #
+    # These were the cause of a blown blob that survived four rounds of
+    # cutting emitters. The clipped fraction sat between 1.06 and 1.16 percent
+    # while the searchlight went from 14 to 1.1 and was re-aimed off the deck
+    # entirely, the beam cone was cut four times, the wet streaks were halved
+    # twice, the lamps came down by more than half and every unshaded emissive
+    # on the bridge was halved. None of it moved the number, because the
+    # saturated region was not a light at all: it was the bloom halo, which at
+    # a threshold of 0.65 with a 2.2 HDR scale takes whatever is currently
+    # brightest and amplifies it back into clipping. Cutting a source just
+    # handed the job to the next one down.
+    # Four parameters moved at once was too much: the halo stopped clipping
+    # but took a lot of the frame's light with it, mean fell out of band and
+    # the crushed share went from 36 to 51 percent. About 40 percent of the
+    # cut comes back, which is enough glow to make the lamps and fires read
+    # through rain without the pass feeding on itself.
+    env.glow_intensity = 0.62
+    env.glow_bloom = 0.10
+    env.glow_hdr_threshold = 0.82
+    env.glow_hdr_scale = 1.45
+    env.glow_strength = 1.05
 
     # Exposure. The band wants a mean near 0.15 against the day scene's 0.40,
     # and most of that has to come from there being no sky light rather than
