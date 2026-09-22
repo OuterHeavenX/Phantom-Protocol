@@ -1523,8 +1523,16 @@ func _bridge_mat(key: String) -> Material:
         "road":
             # The deck. Asphalt at a large scale so the grain reads underfoot
             # without tiling visibly down the span, kept dark and glossy.
-            m = MaterialsC.pbr("asphalt", 0.22, floor_c * 0.55, 0.30)
-            m.roughness = 0.24
+            # Tinted UP rather than down, and less metallic than it was.
+            #
+            # At floor * 0.55 with metallic 0.30 the road in front of the
+            # player measured 81 percent pure black: the albedo was almost
+            # nothing, the metallic term took a third of what remained, and
+            # the only thing a metallic surface has to reflect at night is a
+            # dark sky. The mockups' near deck sits at 0.112 -- dark, but
+            # never empty, because wet asphalt picks up the whole sky dome.
+            m = MaterialsC.pbr("asphalt", 0.22, floor_c * 1.30, 0.16)
+            m.roughness = 0.26
         _:
             m = MaterialsC.pbr("concrete", 0.30, wall * 0.6, 0.1)
     m.metallic_specular = 0.80
@@ -2277,7 +2285,7 @@ func _bridge_helicopter(w: float, h: float) -> void:
     # bottom-left of the frame. In the mockups the beam is a shaft you can see
     # THROUGH the rain with a soft ellipse at its foot -- it lights the deck,
     # it does not bleach it.
-    spot.light_energy = 4.5
+    spot.light_energy = 2.6
     spot.spot_range = 150.0
     spot.spot_angle = 11.0
     spot.spot_angle_attenuation = 0.6

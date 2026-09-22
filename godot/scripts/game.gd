@@ -447,7 +447,7 @@ func _night_overrides(env: Environment, bounce: DirectionalLight3D) -> void:
     env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
     env.ambient_light_sky_contribution = 0.0
     env.ambient_light_color = level.pal("fog", Color(0.055, 0.075, 0.105))
-    env.ambient_light_energy = 0.30
+    env.ambient_light_energy = 0.40
 
     # Storm haze. Heavy, close and blue: the mockups lose the far tower to it
     # and the city across the water is a glow rather than a skyline. This is
@@ -579,7 +579,7 @@ func _spawn_player() -> void:
     # A night scene needs the weapon at night exposure too, or the rig that
     # keeps it readable in shade turns it into the brightest thing in frame.
     if level.is_night():
-        vm.rig_scale = 0.28
+        vm.rig_scale = 0.20
     cam.add_child(vm)
     viewmodel = vm
 
