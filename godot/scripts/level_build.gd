@@ -1558,31 +1558,41 @@ func _bridge_mat(key: String) -> Material:
     # texture's measured mean -- and each target is what the real surface has.
     # The measured means are from the generated sets and are stable because
     # make-textures.py is seeded.
+    #
+    # The uv scales are in tiles per metre and are much finer than the street
+    # sector's. patch is the MEDIAN contrast inside a 48-pixel window and
+    # micro is what a blur at 4.5 percent of the frame removes -- both ask for
+    # features SMALLER than a window. At 0.22 tiles per metre the deck showed
+    # one tile every 4.5 m, which at this camera is a smooth gradient across
+    # several windows and reads to both metrics as a flat polygon: patch
+    # measured 0.036 against a floor of 0.064 even after the frame stopped
+    # being black. Finer tiling puts one to two full cycles of grain in every
+    # window, which is what a photograph of wet asphalt actually contains.
     var wall_hue := _hue_of(level.pal("wall", Color(0.137, 0.192, 0.251)))
     var floor_hue := _hue_of(level.pal("floor", Color(0.078, 0.114, 0.149)))
     var m: StandardMaterial3D
     match key:
         "concrete":
-            m = MaterialsC.pbr("concrete", 0.30, wall_hue * _tint(0.34, 0.385), 0.12)
+            m = MaterialsC.pbr("concrete", 1.15, wall_hue * _tint(0.34, 0.385), 0.12)
             m.roughness = 0.52
         "tower":
-            m = MaterialsC.pbr("concrete", 0.22, wall_hue * _tint(0.40, 0.385), 0.08)
+            m = MaterialsC.pbr("concrete", 0.85, wall_hue * _tint(0.40, 0.385), 0.08)
             m.roughness = 0.58
         "steel":
-            m = MaterialsC.pbr("steel", 0.55, wall_hue * _tint(0.28, 0.473), 0.55)
+            m = MaterialsC.pbr("steel", 1.90, wall_hue * _tint(0.28, 0.473), 0.55)
             m.roughness = 0.38
         "rust":
-            m = MaterialsC.pbr("paintwork", 0.45,
+            m = MaterialsC.pbr("paintwork", 1.60,
                 Color(1.10, 0.95, 0.84) * _tint(0.24, 0.572), 0.25)
             m.roughness = 0.62
         "panel":
-            m = MaterialsC.pbr("blockwork", 0.40, floor_hue * _tint(0.26, 0.534), 0.30)
+            m = MaterialsC.pbr("blockwork", 1.45, floor_hue * _tint(0.26, 0.534), 0.30)
             m.roughness = 0.42
         "road":
-            m = MaterialsC.pbr("asphalt", 0.22, floor_hue * _tint(0.19, 0.217), 0.0)
+            m = MaterialsC.pbr("asphalt", 1.35, floor_hue * _tint(0.105, 0.217), 0.0)
             m.roughness = 0.26
         _:
-            m = MaterialsC.pbr("concrete", 0.30, wall_hue * _tint(0.30, 0.385), 0.1)
+            m = MaterialsC.pbr("concrete", 1.15, wall_hue * _tint(0.30, 0.385), 0.1)
     m.metallic_specular = 0.80
     # World triplanar, as the sector uses, so nothing needs UVs and the grain
     # stays continuous across the joins between deck, kerb and girder.
@@ -1715,6 +1725,37 @@ func _bridge_deck(w: float, h: float) -> void:
     # Without one a metallic surface reflects the environment sky only, which
     # at night is nearly black, and the road goes flat matte no matter what
     # its roughness says.
+    # Puddles: scattered specular hits on a dark road.
+    #
+    # This is where the mockups' road contrast actually comes from, and three
+    # rounds of adding albedo texture detail could never have produced it.
+    # Measured on the same 48-pixel windows the band uses, the mockup's road
+    # has a median contrast of 0.716 while this build's had 0.318 -- and the
+    # mockup's road is DARKER, at a mean of 0.186 against 0.348. A wet road at
+    # night is not a mid-grey surface with grain on it; it is a near-black
+    # surface carrying dozens of small bright reflections of every light in
+    # the scene, and the contrast between those two is the whole look.
+    #
+    # So the base albedo comes down and these go on top: small additive cards
+    # lying in the road, scattered deterministically from the footprint hash,
+    # taking their colour from whichever source is nearest -- sodium from the
+    # lamps, orange from the fires ahead.
+    var puddle_n := int(w * 2.4)
+    for i in range(puddle_n):
+        var hx := _hash64(i * 6367 + 11)
+        var hz := _hash64(i * 9283 + 29)
+        var hs := _hash64(i * 4517 + 71)
+        var px: float = float(hx % 10000) / 10000.0 * w
+        var pz: float = h * 0.5 + (float(hz % 10000) / 10000.0 - 0.5) * h * 0.55
+        var warm: float = float(hs % 100) / 100.0
+        # Ahead of the player the fires dominate; behind, the lamps do.
+        var col := Color(1.0, 0.78, 0.50).lerp(Color(1.0, 0.50, 0.22),
+            clampf(1.0 - px / (w * 0.6), 0.0, 1.0) * warm)
+        var length: float = 1.6 + float(hs % 37) * 0.22
+        var width: float = 0.30 + float(hx % 23) * 0.035
+        _wet_streak(Vector3(px, 0.0, pz), col, length, width,
+            0.035 + float(hz % 17) * 0.004)
+
     var lanes := 4
     var n := int(w / 5.5)
     for lane in range(lanes):
@@ -2165,7 +2206,7 @@ func _bridge_fires() -> void:
             add_child(lamp)
         # The fire doubled in the road, which in the mockups runs most of the
         # way back down the deck toward the player.
-        _wet_streak(at, Color(1.0, 0.46, 0.17), 74.0, 5.5, 0.085)
+        _wet_streak(at, Color(1.0, 0.46, 0.17), 74.0, 5.5, 0.060)
         # Smoke: a dark column leaning with the map's own wind.
         var smoke := StandardMaterial3D.new()
         # Lit from below by the fire under it, as the mockups' columns are:
