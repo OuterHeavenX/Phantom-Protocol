@@ -1573,17 +1573,53 @@ func _bridge_deck(w: float, h: float) -> void:
 ## So they are drawn: an additive card lying on the deck under each source,
 ## long in X (down the span, which is where the camera looks from) and narrow
 ## in Z. They sit 3 cm above the road and cast nothing.
+## The falloff a streak fades out with, built once and shared.
+##
+## The first version was an untextured additive quad, which is a SOLID slab of
+## light with four hard edges -- it clipped 7.3 percent of the frame to white
+## against a band of 0.016 to 0.240 and read as a river of lava lying on the
+## road rather than as a reflection. A reflection has no edges at all: it is
+## brightest directly under the source and falls to nothing along its length
+## and across its width, and it is broken up lengthwise by the ripple that
+## made it a streak in the first place.
+static var _streak_tex: ImageTexture = null
+
+static func streak_texture() -> ImageTexture:
+    if _streak_tex != null:
+        return _streak_tex
+    const W := 160
+    const H := 48
+    var img := Image.create(W, H, false, Image.FORMAT_RGBAF)
+    for y in range(H):
+        # Across the width: a smooth bell, zero at both edges.
+        var v := (float(y) / float(H - 1)) * 2.0 - 1.0
+        var across: float = pow(maxf(0.0, 1.0 - v * v), 1.6)
+        for x in range(W):
+            # Along the length: brightest at the source end, trailing away.
+            var u := float(x) / float(W - 1)
+            var along: float = pow(maxf(0.0, 1.0 - u), 1.9)
+            # Ripple, so the streak breaks into bands the way a real one does
+            # on moving water rather than being a smooth wedge.
+            var ripple: float = 0.72 + 0.28 * sin(u * 34.0) * sin(u * 11.0 + 1.3)
+            var a: float = across * along * ripple
+            img.set_pixel(x, y, Color(1.0, 1.0, 1.0, a))
+    _streak_tex = ImageTexture.create_from_image(img)
+    return _streak_tex
+
 func _wet_streak(at: Vector3, colour: Color, length: float, width: float, energy: float) -> void:
     var m := StandardMaterial3D.new()
     m.albedo_color = Color(colour.r, colour.g, colour.b, 1.0)
+    m.albedo_texture = streak_texture()
     m.emission_enabled = true
     m.emission = colour
     m.emission_energy_multiplier = energy
+    m.emission_texture = streak_texture()
     m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
     m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
     m.cull_mode = BaseMaterial3D.CULL_DISABLED
     m.disable_receive_shadows = true
+    m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
     var q := PlaneMesh.new()
     q.size = Vector2(length, width)
     var mi := MeshInstance3D.new()
@@ -1699,7 +1735,7 @@ func _bridge_cable(x0: float, x1: float, top: float, z: float, w: float, main: b
     lamp.albedo_color = Color(1.0, 0.86, 0.62)
     lamp.emission_enabled = true
     lamp.emission = Color(1.0, 0.84, 0.58)
-    lamp.emission_energy_multiplier = 22.0
+    lamp.emission_energy_multiplier = 7.0
     lamp.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     var drops := int(absf(x1 - x0) / 4.4)
     for i in range(1, drops):
@@ -1730,7 +1766,7 @@ func _bridge_lamps() -> void:
     head.albedo_color = Color(0.9, 0.78, 0.55)
     head.emission_enabled = true
     head.emission = Color(1.0, 0.80, 0.52)
-    head.emission_energy_multiplier = 16.0
+    head.emission_energy_multiplier = 6.0
     head.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     # The simulation authored five pairs over 115 m of deck, which is one lamp
     # every 23 m per side -- correct for a real bridge but far short of what
@@ -1778,9 +1814,9 @@ func _bridge_lamps() -> void:
         var lamp := OmniLight3D.new()
         lamp.position = at + Vector3(0, 7.5, inward * 2.5)
         lamp.light_color = col
-        lamp.light_energy = 9.0
-        lamp.omni_range = level.metres(float(entry[2])) * 1.6
-        lamp.omni_attenuation = 1.4
+        lamp.light_energy = 13.0
+        lamp.omni_range = level.metres(float(entry[2])) * 2.6
+        lamp.omni_attenuation = 0.85
         lamp.shadow_enabled = false
         add_child(lamp)
 
@@ -1917,7 +1953,7 @@ func _bridge_fires() -> void:
     flame.albedo_color = Color(1.0, 0.42, 0.10)
     flame.emission_enabled = true
     flame.emission = Color(1.0, 0.44, 0.12)
-    flame.emission_energy_multiplier = 26.0
+    flame.emission_energy_multiplier = 8.0
     flame.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     flame.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
 
@@ -1940,7 +1976,7 @@ func _bridge_fires() -> void:
             f.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
         # Two lights per fire: a hot close one and a wide one that reaches the
         # deck and the parapets, which is what puts the orange down the road.
-        for spec in [[5.0, 14.0, 2.0], [2.2, 46.0, 9.0]]:
+        for spec in [[3.2, 13.0, 2.0], [1.3, 34.0, 8.0]]:
             var lamp := OmniLight3D.new()
             lamp.position = at + Vector3(0.0, spec[2], 0.0)
             lamp.light_color = Color(1.0, 0.46, 0.16)
@@ -1950,8 +1986,7 @@ func _bridge_fires() -> void:
             add_child(lamp)
         # The fire doubled in the road, which in the mockups runs most of the
         # way back down the deck toward the player.
-        _wet_streak(at, Color(1.0, 0.44, 0.14), 70.0, 5.0, 0.75)
-        _wet_streak(at, Color(1.0, 0.56, 0.26), 120.0, 2.0, 0.5)
+        _wet_streak(at, Color(1.0, 0.46, 0.17), 74.0, 5.5, 0.16)
         # Smoke: a dark column leaning with the map's own wind.
         var smoke := StandardMaterial3D.new()
         smoke.albedo_color = Color(0.045, 0.040, 0.038, 0.62)

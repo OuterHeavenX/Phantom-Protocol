@@ -61,6 +61,7 @@ var gunfeel: Node3D = null
 ## took several rounds to chase, because the element producing it was not even
 ## where the camera was looking.
 var _fast_forward := false
+var rain_nodes: Array = []
 var viewmodel: Node3D
 var _enemy_nodes: Dictionary = {}
 var _char_cache: Dictionary = {}
@@ -128,6 +129,7 @@ func _ready() -> void:
     var t2 := Time.get_ticks_msec()
     _build_environment()
     _spawn_player()
+    _build_rain()
     _start_contract()
     var t3 := Time.get_ticks_msec()
     print("BUILD materials=%dms level=%dms rest=%dms nodes=%d" % [t1 - t0, t2 - t1, t3 - t2, _count_nodes(self)])
@@ -436,7 +438,7 @@ func _night_overrides(env: Environment, bounce: DirectionalLight3D) -> void:
     # The fill goes almost entirely. In the mockups the only thing filling a
     # shadow is a sodium lamp or a fire, and the fill light was the single
     # lever keeping the day scene's shadows off the floor.
-    bounce.light_energy = 0.06
+    bounce.light_energy = 0.14
     bounce.light_color = Color(0.42, 0.52, 0.72)
 
     # Sky ambient stops being the light source. At sky contribution 1.0 the
@@ -445,7 +447,7 @@ func _night_overrides(env: Environment, bounce: DirectionalLight3D) -> void:
     env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
     env.ambient_light_sky_contribution = 0.0
     env.ambient_light_color = level.pal("fog", Color(0.055, 0.075, 0.105))
-    env.ambient_light_energy = 0.22
+    env.ambient_light_energy = 0.42
 
     # Storm haze. Heavy, close and blue: the mockups lose the far tower to it
     # and the city across the water is a glow rather than a skyline. This is
@@ -481,6 +483,66 @@ func _night_overrides(env: Environment, bounce: DirectionalLight3D) -> void:
     if GameData.has_rendering_device():
         env.ssao_intensity = 2.4
         env.ssil_intensity = 0.25
+
+## Rain, carried by the camera rather than placed in the world.
+##
+## CROSSFALL's weather block asks for density 1 with a wind of -0.34, and a
+## kilometre of open deck cannot be filled with particles -- so the rain is a
+## box that travels with the player, which is how every shooter does it. From
+## inside it is indistinguishable from weather over the whole span, and it
+## costs one emitter instead of a hundred.
+##
+## Two layers, because one never reads: a near layer of fast bright streaks
+## that sells the speed, and a far layer of slow faint ones that fills the
+## depth between the player and the towers. A single layer at one speed looks
+## like a screen effect rather than like falling water.
+func _build_rain() -> void:
+    if level.rain_density() <= 0.0 or player == null:
+        return
+    var wind := level.wind()
+    for layer in range(2):
+        var near := layer == 0
+        var p := GPUParticles3D.new()
+        p.amount = int((1400 if near else 2600) * level.rain_density())
+        p.lifetime = 1.1 if near else 2.6
+        p.preprocess = 1.2
+        p.explosiveness = 0.0
+        p.local_coords = false
+        p.draw_order = GPUParticles3D.DRAW_ORDER_VIEW_DEPTH
+
+        var mat := ParticleProcessMaterial.new()
+        mat.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+        mat.emission_box_extents = Vector3(22.0 if near else 46.0, 1.0, 22.0 if near else 46.0)
+        mat.direction = Vector3(wind, -1.0, 0.0)
+        mat.spread = 2.0
+        mat.initial_velocity_min = 16.0 if near else 9.0
+        mat.initial_velocity_max = 22.0 if near else 13.0
+        mat.gravity = Vector3(0.0, -6.0, 0.0)
+        mat.scale_min = 0.8
+        mat.scale_max = 1.5 if near else 1.0
+        p.process_material = mat
+
+        # A drop is a stretched quad, unshaded and additive: rain is seen
+        # because it catches the lamps, not because it has a colour.
+        var q := QuadMesh.new()
+        q.size = Vector2(0.018 if near else 0.010, 0.62 if near else 0.34)
+        var dm := StandardMaterial3D.new()
+        dm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+        dm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+        dm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+        dm.albedo_color = Color(0.62, 0.74, 0.88, 0.5 if near else 0.22)
+        dm.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+        dm.billboard_keep_scale = true
+        dm.disable_receive_shadows = true
+        dm.vertex_color_use_as_albedo = false
+        q.material = dm
+        p.draw_pass_1 = q
+        p.position = Vector3(0.0, 9.0, 0.0)
+        # On the viewmodel's layer as well as the world's, so drops pass in
+        # front of the weapon instead of being culled behind it.
+        p.layers = 0xFFFFF
+        rain_nodes.append(p)
+        player.add_child(p)
 
 func _spawn_player() -> void:
     player = PlayerC.new()
@@ -598,6 +660,15 @@ func _run_capture() -> void:
     player.rotation_degrees = Vector3(0.0, yaw, 0.0)
     var head: Node3D = player.get_node("Head")
     head.rotation_degrees = Vector3(pitch, 0.0, 0.0)
+    # Restart the rain where the camera actually ended up.
+    #
+    # The emitters preprocess their first second at the spawn point, which is
+    # where the player is built; the capture then teleports the player across
+    # the span, and every drop already in flight stays behind at the spawn in
+    # world coordinates. The frame came back with no rain in it at all while
+    # the emitters were running perfectly well a hundred metres away.
+    for r in rain_nodes:
+        r.restart()
     await _capture_after_warmup()
 
 func _capture_after_warmup() -> void:
