@@ -438,7 +438,7 @@ func _night_overrides(env: Environment, bounce: DirectionalLight3D) -> void:
     # The fill goes almost entirely. In the mockups the only thing filling a
     # shadow is a sodium lamp or a fire, and the fill light was the single
     # lever keeping the day scene's shadows off the floor.
-    bounce.light_energy = 0.14
+    bounce.light_energy = 0.09
     bounce.light_color = Color(0.42, 0.52, 0.72)
 
     # Sky ambient stops being the light source. At sky contribution 1.0 the
@@ -447,7 +447,7 @@ func _night_overrides(env: Environment, bounce: DirectionalLight3D) -> void:
     env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
     env.ambient_light_sky_contribution = 0.0
     env.ambient_light_color = level.pal("fog", Color(0.055, 0.075, 0.105))
-    env.ambient_light_energy = 0.42
+    env.ambient_light_energy = 0.30
 
     # Storm haze. Heavy, close and blue: the mockups lose the far tower to it
     # and the city across the water is a glow rather than a skyline. This is
@@ -502,25 +502,30 @@ func _build_rain() -> void:
     var wind := level.wind()
     for layer in range(2):
         var near := layer == 0
-        var p := GPUParticles3D.new()
-        p.amount = int((1400 if near else 2600) * level.rain_density())
+        # CPUParticles3D, not GPU.
+        #
+        # GPUParticles3D simulates in a compute shader, and the Compatibility
+        # renderer -- which is what the browser build runs, over WebGL2 -- has
+        # no compute stage at all. The GPU version would have meant a phone
+        # standing in a rainstorm with no rain in it, on the one platform
+        # where the weather matters most, and nothing would have reported an
+        # error. The CPU path runs everywhere and a few thousand quads is
+        # nothing next to the 629 draw calls the sector already costs.
+        var p := CPUParticles3D.new()
+        p.amount = int((900 if near else 1600) * level.rain_density())
         p.lifetime = 1.1 if near else 2.6
         p.preprocess = 1.2
-        p.explosiveness = 0.0
         p.local_coords = false
-        p.draw_order = GPUParticles3D.DRAW_ORDER_VIEW_DEPTH
-
-        var mat := ParticleProcessMaterial.new()
-        mat.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
-        mat.emission_box_extents = Vector3(22.0 if near else 46.0, 1.0, 22.0 if near else 46.0)
-        mat.direction = Vector3(wind, -1.0, 0.0)
-        mat.spread = 2.0
-        mat.initial_velocity_min = 16.0 if near else 9.0
-        mat.initial_velocity_max = 22.0 if near else 13.0
-        mat.gravity = Vector3(0.0, -6.0, 0.0)
-        mat.scale_min = 0.8
-        mat.scale_max = 1.5 if near else 1.0
-        p.process_material = mat
+        p.draw_order = CPUParticles3D.DRAW_ORDER_VIEW_DEPTH
+        p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+        p.emission_box_extents = Vector3(22.0 if near else 46.0, 1.0, 22.0 if near else 46.0)
+        p.direction = Vector3(wind, -1.0, 0.0)
+        p.spread = 2.0
+        p.initial_velocity_min = 16.0 if near else 9.0
+        p.initial_velocity_max = 22.0 if near else 13.0
+        p.gravity = Vector3(0.0, -6.0, 0.0)
+        p.scale_amount_min = 0.8
+        p.scale_amount_max = 1.5 if near else 1.0
 
         # A drop is a stretched quad, unshaded and additive: rain is seen
         # because it catches the lamps, not because it has a colour.
@@ -530,17 +535,14 @@ func _build_rain() -> void:
         dm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
         dm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
         dm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-        dm.albedo_color = Color(0.62, 0.74, 0.88, 0.5 if near else 0.22)
+        dm.albedo_color = Color(0.62, 0.74, 0.88, 0.45 if near else 0.20)
         dm.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
         dm.billboard_keep_scale = true
         dm.disable_receive_shadows = true
-        dm.vertex_color_use_as_albedo = false
         q.material = dm
-        p.draw_pass_1 = q
+        p.mesh = q
         p.position = Vector3(0.0, 9.0, 0.0)
-        # On the viewmodel's layer as well as the world's, so drops pass in
-        # front of the weapon instead of being culled behind it.
-        p.layers = 0xFFFFF
+        p.emitting = true
         rain_nodes.append(p)
         player.add_child(p)
 

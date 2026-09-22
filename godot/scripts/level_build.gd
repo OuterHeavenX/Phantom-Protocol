@@ -1469,6 +1469,49 @@ const DECK_Y := 0.0
 const WATER_DROP := 26.0
 const WATER_SPAN := 900.0
 
+## Materials built from the map's OWN palette rather than the street sector's.
+##
+## The first built bridge reused kerb, machinery and brick, which are the
+## daylight sector's sandy limestone and warm steel. Under sodium lamps they
+## glowed beige, and no amount of light tuning would bring the frame's
+## saturation or its red-to-blue ratio down, because the surfaces themselves
+## were warm. CROSSFALL authored its own: #141d26 deck, #233140 steel, #6d93ad
+## edges, #8fb8dd accent -- a cold blue-grey set, which is what the mockups
+## are made of.
+##
+## Everything is darkened further and roughness dropped, because every
+## horizontal surface in those mockups is soaked: wet concrete is roughly half
+## the albedo of dry and reflects far more sharply.
+var _bmat: Dictionary = {}
+
+func _bridge_mat(key: String) -> Material:
+    if _bmat.has(key):
+        return _bmat[key]
+    var m := StandardMaterial3D.new()
+    match key:
+        "concrete":
+            m.albedo_color = level.pal("wall", Color(0.137, 0.192, 0.251)) * 0.62
+            m.roughness = 0.46
+            m.metallic = 0.10
+        "steel":
+            m.albedo_color = level.pal("wall", Color(0.137, 0.192, 0.251)) * 0.44
+            m.roughness = 0.30
+            m.metallic = 0.62
+        "rust":
+            m.albedo_color = Color(0.052, 0.046, 0.044)
+            m.roughness = 0.68
+            m.metallic = 0.22
+        "panel":
+            m.albedo_color = level.pal("floorAlt", Color(0.094, 0.137, 0.180)) * 0.70
+            m.roughness = 0.38
+            m.metallic = 0.35
+        _:
+            m.albedo_color = Color(0.05, 0.06, 0.075)
+            m.roughness = 0.5
+    m.metallic_specular = 0.75
+    _bmat[key] = m
+    return m
+
 func _build_bridge() -> void:
     var w := level.metres(level.width)
     var h := level.metres(level.height)
@@ -1522,12 +1565,12 @@ func _bridge_deck(w: float, h: float) -> void:
     # The underside, so the deck reads as a structure with thickness when seen
     # from the parapet rather than as a plane floating on the water.
     _box(Vector3(w + 2.0, 2.2, h * 0.72), Vector3(w * 0.5, -1.6, h * 0.5),
-        _mat("machinery"), false)
+        _bridge_mat("steel"), false)
     # Box girders under the deck, which is what a suspension span actually
     # hangs from and what the mockups show in silhouette against the water.
     for i in range(3):
         var z := h * 0.5 + (i - 1) * h * 0.22
-        _box(Vector3(w, 1.6, 0.9), Vector3(w * 0.5, -2.6, z), _mat("machinery"), false)
+        _box(Vector3(w, 1.6, 0.9), Vector3(w * 0.5, -2.6, z), _bridge_mat("steel"), false)
     # Lane markings. Long dashes down the centre of a six-lane deck: in the
     # mockups these are the brightest thing on the road other than the
     # reflections, because wet paint throws light straight back.
@@ -1640,9 +1683,9 @@ func _bridge_solids() -> void:
         elif t == "perimeter":
             # The ends of the span. Kept solid, since the simulation stops the
             # operative there, but low and concrete rather than a building.
-            _box(Vector3(ow, 2.4, oh), pos + Vector3(0, 1.2, 0), _mat("kerb"), true)
+            _box(Vector3(ow, 2.4, oh), pos + Vector3(0, 1.2, 0), _bridge_mat("concrete"), true)
         else:
-            _box(Vector3(ow, 2.0, oh), pos + Vector3(0, 1.0, 0), _mat("machinery"), true)
+            _box(Vector3(ow, 2.0, oh), pos + Vector3(0, 1.0, 0), _bridge_mat("steel"), true)
 
 ## A concrete kerb with a steel rail above it, which is the section every
 ## mockup shows along both edges of the deck.
@@ -1652,9 +1695,9 @@ func _bridge_railing(pos: Vector3, ow: float, oh: float) -> void:
     var thick: float = oh if long_axis else ow
     # The kerb is the part the simulation collides with, so it keeps the
     # footprint it was given.
-    _box(Vector3(ow, 1.15, oh), pos + Vector3(0, 0.575, 0), _mat("kerb"), true)
+    _box(Vector3(ow, 1.15, oh), pos + Vector3(0, 0.575, 0), _bridge_mat("concrete"), true)
     var ax := Vector3(1, 0, 0) if long_axis else Vector3(0, 0, 1)
-    var steel := _mat("machinery")
+    var steel := _bridge_mat("steel")
     # Two horizontal rails and a post every 2.4 m. Posts are inside the kerb's
     # own footprint, so they add nothing the simulation does not already stop.
     for y in [1.55, 2.05]:
@@ -1672,8 +1715,8 @@ func _bridge_railing(pos: Vector3, ow: float, oh: float) -> void:
 ## Two towers, the main cables between them, the suspenders, and the strings
 ## of lamps along the cables that every mockup leads with.
 func _bridge_towers(w: float, h: float) -> void:
-    var steel := _mat("machinery")
-    var conc := _mat("kerb")
+    var steel := _bridge_mat("steel")
+    var conc := _bridge_mat("concrete")
     var z0 := level.metres(196.56)
     var z1 := level.metres(895.44)
     var tower_x := [w * 0.22, w * 0.78]
@@ -1712,7 +1755,7 @@ func _cable_y(x: float, x0: float, x1: float, top: float, sag: float) -> float:
     return top - sag * 4.0 * t * (1.0 - t)
 
 func _bridge_cable(x0: float, x1: float, top: float, z: float, w: float, main: bool) -> void:
-    var steel := _mat("machinery")
+    var steel := _bridge_mat("steel")
     var sag := (x1 - x0) * 0.22 if main else 0.0
     var segs := int(absf(x1 - x0) / 2.2)
     var prev := Vector3(x0, top if main else 1.6, z)
@@ -1761,7 +1804,7 @@ func _bridge_cable(x0: float, x1: float, top: float, z: float, w: float, main: b
 
 ## Lamp posts on the deck, at the positions the simulation authored.
 func _bridge_lamps() -> void:
-    var steel := _mat("machinery")
+    var steel := _bridge_mat("steel")
     var head := StandardMaterial3D.new()
     head.albedo_color = Color(0.9, 0.78, 0.55)
     head.emission_enabled = true
@@ -1814,9 +1857,9 @@ func _bridge_lamps() -> void:
         var lamp := OmniLight3D.new()
         lamp.position = at + Vector3(0, 7.5, inward * 2.5)
         lamp.light_color = col
-        lamp.light_energy = 13.0
-        lamp.omni_range = level.metres(float(entry[2])) * 2.6
-        lamp.omni_attenuation = 0.85
+        lamp.light_energy = 9.5
+        lamp.omni_range = level.metres(float(entry[2])) * 2.0
+        lamp.omni_attenuation = 1.15
         lamp.shadow_enabled = false
         add_child(lamp)
 
@@ -1826,9 +1869,9 @@ func _bridge_lamps() -> void:
 ## still exactly what the 2D game stops them on. The type decides the shape: a
 ## container is a box truck or a bus, a barrier is a car or a jersey block.
 func _bridge_wrecks() -> void:
-    var body := _mat("machinery")
-    var rust := _mat("brick")
-    var glass := _mat("glass")
+    var body := _bridge_mat("steel")
+    var rust := _bridge_mat("rust")
+    var glass := _bridge_mat("panel")
     var tyre := StandardMaterial3D.new()
     tyre.albedo_color = Color(0.020, 0.020, 0.022)
     tyre.roughness = 0.92
