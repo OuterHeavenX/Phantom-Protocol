@@ -2273,7 +2273,11 @@ func _bridge_helicopter(w: float, h: float) -> void:
     spot.position = Vector3(0.6, -1.2, 1.6)
     spot.rotation_degrees = Vector3(-62.0, 0.0, 0.0)
     spot.light_color = Color(0.86, 0.92, 1.0)
-    spot.light_energy = 14.0
+    # 14 put a blown white pool on the deck covering nearly a quarter of the
+    # bottom-left of the frame. In the mockups the beam is a shaft you can see
+    # THROUGH the rain with a soft ellipse at its foot -- it lights the deck,
+    # it does not bleach it.
+    spot.light_energy = 4.5
     spot.spot_range = 150.0
     spot.spot_angle = 11.0
     spot.spot_angle_attenuation = 0.6
@@ -2283,10 +2287,10 @@ func _bridge_helicopter(w: float, h: float) -> void:
     # And the beam itself, because a spot in rain is visible as a solid shaft
     # and Godot's Compatibility renderer has no volumetric fog to make one.
     var beam_mat := StandardMaterial3D.new()
-    beam_mat.albedo_color = Color(0.72, 0.82, 1.0, 0.12)
+    beam_mat.albedo_color = Color(0.72, 0.82, 1.0, 0.05)
     beam_mat.emission_enabled = true
     beam_mat.emission = Color(0.72, 0.82, 1.0)
-    beam_mat.emission_energy_multiplier = 0.5
+    beam_mat.emission_energy_multiplier = 0.12
     beam_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     beam_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
     beam_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD

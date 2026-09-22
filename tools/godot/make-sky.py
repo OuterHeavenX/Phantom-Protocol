@@ -96,8 +96,8 @@ def main(out_dir, night=False):
         # floor, where the reference is a luminous overcast over a dark wet
         # road. A storm sky at night over a city is not dark; it is a low
         # ceiling picking up every light beneath it.
-        zenith = np.array([0.0290, 0.0370, 0.0530])
-        horizon = np.array([0.0930, 0.1080, 0.1420])
+        zenith = np.array([0.0380, 0.0480, 0.0680])
+        horizon = np.array([0.1240, 0.1420, 0.1820])
         ground = np.array([0.0150, 0.0180, 0.0230])
     else:
         zenith = np.array([0.155, 0.275, 0.520])

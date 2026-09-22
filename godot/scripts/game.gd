@@ -925,7 +925,7 @@ func _build_extraction_marker() -> void:
     glow.albedo_color = Color(0.463, 0.906, 0.831, 0.30)
     glow.emission_enabled = true
     glow.emission = Color(0.463, 0.906, 0.831)
-    glow.emission_energy_multiplier = 2.4
+    glow.emission_energy_multiplier = 0.8 if level.is_night() else 2.4
     glow.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
     glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     pillar.material_override = glow
