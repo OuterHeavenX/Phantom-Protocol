@@ -8,6 +8,10 @@ extends Control
 ## than built from a scene so it stays in one readable file.
 
 var sim: Sim
+## Set by the game once the level and the contract are known. Defaults keep a
+## HUD drawn before either exists from showing an empty header.
+var theatre := "UNKNOWN THEATRE"
+var operation := ""
 
 const ACCENT := Color(0.463, 0.906, 0.831)
 const WARN := Color(1.0, 0.44, 0.36)
@@ -76,7 +80,11 @@ func _draw() -> void:
         HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(INK, 0.8))
 
     # Hostile count, top left, with the theatre name.
-    draw_string(font, Vector2(pad, pad + 16), "BLACKSITE ZERO", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color(INK, 0.9))
-    draw_string(font, Vector2(pad, pad + 38), "OP 1 // COLD OPEN", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(INK, 0.55))
+    #
+    # The name comes from the map registry rather than being typed here. It
+    # was the literal "BLACKSITE ZERO", which is correct for exactly one of
+    # the ten maps the game ships and was still being drawn over the bridge.
+    draw_string(font, Vector2(pad, pad + 16), theatre, HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color(INK, 0.9))
+    draw_string(font, Vector2(pad, pad + 38), operation, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(INK, 0.55))
     draw_string(font, Vector2(pad, pad + 62), "HOSTILES %d" % sim.enemies.size(),
         HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(WARN, 0.85))

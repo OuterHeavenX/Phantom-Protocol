@@ -755,6 +755,10 @@ func _start_contract() -> void:
 
     hud = HudC.new()
     hud.sim = sim
+    var mdef: Dictionary = GameData.map_named(level.map_id)
+    hud.theatre = String(mdef.get("name", level.map_id.to_upper()))
+    hud.operation = "OP %d // %s" % [int(GameData.op1.get("index", 1)),
+        String(GameData.op1.get("name", ""))]
     var layer := CanvasLayer.new()
     layer.add_child(hud)
     add_child(layer)

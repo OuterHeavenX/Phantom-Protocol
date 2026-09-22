@@ -1523,6 +1523,7 @@ func _build_bridge() -> void:
     _bridge_wrecks()
     _bridge_fires()
     _bridge_skyline(w, h)
+    _bridge_helicopter(w, h)
     _merge_static()
 
 func _bridge_water(w: float, h: float) -> void:
@@ -2090,3 +2091,187 @@ func _bridge_skyline(w: float, h: float) -> void:
                 s.position = Vector3(x, wy, zz - side * bw * 0.42)
                 s.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
                 add_child(s)
+
+## A gunship holding over the water, with its searchlight on the span.
+##
+## Every mockup has one: a dark silhouette against the cloud with a hard cone
+## of light under it, sweeping the deck or the water. It does more than fill
+## the sky -- the cone is the only light in those frames that comes from above
+## and outside the bridge, and it is what stops the upper half of the image
+## being an empty black lid.
+##
+## It flies a slow circuit rather than hovering. A static helicopter reads as
+## a prop hung in the air; the movement is what sells it, and at this distance
+## a simple orbit is indistinguishable from a patrol pattern.
+class Helicopter:
+    extends Node3D
+
+    var speed := 0.06
+    var radius := 0.0
+    var centre := Vector3.ZERO
+    var height := 0.0
+    var phase := 0.0
+    var rotor: Node3D = null
+    var tail_rotor: Node3D = null
+    var beam: Node3D = null
+
+    func _process(delta: float) -> void:
+        phase += delta * speed
+        var at := centre + Vector3(cos(phase) * radius, height, sin(phase) * radius * 0.45)
+        global_position = at
+        # Nose along the direction of travel, banked into the turn.
+        var fwd := Vector3(-sin(phase), 0.0, cos(phase) * 0.45).normalized()
+        rotation = Vector3(0.0, atan2(fwd.x, fwd.z), -0.16)
+        if rotor:
+            rotor.rotation.y += delta * 34.0
+        if tail_rotor:
+            tail_rotor.rotation.x += delta * 52.0
+
+func _bridge_helicopter(w: float, h: float) -> void:
+    var heli := Helicopter.new()
+    heli.centre = Vector3(w * 0.42, 0.0, h * 0.5 - 95.0)
+    heli.radius = 62.0
+    heli.height = 52.0
+    heli.phase = 0.7
+    add_child(heli)
+
+    var dark := StandardMaterial3D.new()
+    # Almost black. In the mockups the airframe is a silhouette -- the only
+    # thing that reads on it is the searchlight and the running lights.
+    dark.albedo_color = Color(0.022, 0.026, 0.032)
+    dark.roughness = 0.62
+    dark.metallic = 0.35
+
+    var body := MeshInstance3D.new()
+    var bm := BoxMesh.new()
+    bm.size = Vector3(2.4, 2.0, 5.4)
+    body.mesh = bm
+    body.material_override = dark
+    heli.add_child(body)
+
+    var nose := MeshInstance3D.new()
+    var nm := BoxMesh.new()
+    nm.size = Vector3(1.7, 1.3, 2.0)
+    nose.mesh = nm
+    nose.material_override = dark
+    nose.position = Vector3(0.0, -0.25, 3.2)
+    heli.add_child(nose)
+
+    var boom := MeshInstance3D.new()
+    var tm := BoxMesh.new()
+    tm.size = Vector3(0.55, 0.6, 6.0)
+    boom.mesh = tm
+    boom.material_override = dark
+    boom.position = Vector3(0.0, 0.35, -5.0)
+    heli.add_child(boom)
+
+    var fin := MeshInstance3D.new()
+    var fm := BoxMesh.new()
+    fm.size = Vector3(0.22, 2.2, 1.2)
+    fin.mesh = fm
+    fin.material_override = dark
+    fin.position = Vector3(0.0, 1.3, -7.6)
+    heli.add_child(fin)
+
+    for sx in [-1.0, 1.0]:
+        var skid := MeshInstance3D.new()
+        var sm := BoxMesh.new()
+        sm.size = Vector3(0.16, 0.16, 4.2)
+        skid.mesh = sm
+        skid.material_override = dark
+        skid.position = Vector3(sx * 1.1, -1.4, 0.2)
+        heli.add_child(skid)
+
+    # Rotor discs rather than blades. At this range individual blades alias
+    # into a flicker; a thin disc with a low alpha is what a spinning rotor
+    # actually looks like from a kilometre off.
+    var disc_mat := StandardMaterial3D.new()
+    disc_mat.albedo_color = Color(0.06, 0.07, 0.085, 0.30)
+    disc_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    disc_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    disc_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+    var rotor := Node3D.new()
+    rotor.position = Vector3(0.0, 1.5, 0.0)
+    heli.add_child(rotor)
+    heli.rotor = rotor
+    for i in range(2):
+        var blade := MeshInstance3D.new()
+        var qm := BoxMesh.new()
+        qm.size = Vector3(11.0, 0.06, 0.55)
+        blade.mesh = qm
+        blade.material_override = disc_mat
+        blade.rotation.y = float(i) * PI * 0.5
+        rotor.add_child(blade)
+
+    var trot := Node3D.new()
+    trot.position = Vector3(0.36, 1.3, -7.6)
+    heli.add_child(trot)
+    heli.tail_rotor = trot
+    for i in range(2):
+        var blade := MeshInstance3D.new()
+        var qm := BoxMesh.new()
+        qm.size = Vector3(0.06, 2.4, 0.3)
+        blade.mesh = qm
+        blade.material_override = disc_mat
+        blade.rotation.x = float(i) * PI * 0.5
+        trot.add_child(blade)
+
+    # Running lights: one red to port, one white on the fin. These are tiny
+    # and they are most of what says "aircraft" rather than "dark shape".
+    for spec in [[Vector3(-1.3, 0.1, 0.8), Color(1.0, 0.10, 0.08)],
+                 [Vector3(1.3, 0.1, 0.8), Color(0.10, 1.0, 0.25)],
+                 [Vector3(0.0, 2.3, -7.6), Color(1.0, 0.96, 0.9)]]:
+        var m := StandardMaterial3D.new()
+        m.albedo_color = spec[1]
+        m.emission_enabled = true
+        m.emission = spec[1]
+        m.emission_energy_multiplier = 9.0
+        m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+        var b := MeshInstance3D.new()
+        var s := SphereMesh.new()
+        s.radius = 0.16
+        s.height = 0.32
+        s.radial_segments = 6
+        s.rings = 4
+        b.mesh = s
+        b.material_override = m
+        b.position = spec[0]
+        heli.add_child(b)
+
+    # The searchlight. A real spot, so it lands on the deck and the water and
+    # moves with the aircraft.
+    var spot := SpotLight3D.new()
+    spot.position = Vector3(0.6, -1.2, 1.6)
+    spot.rotation_degrees = Vector3(-62.0, 0.0, 0.0)
+    spot.light_color = Color(0.86, 0.92, 1.0)
+    spot.light_energy = 14.0
+    spot.spot_range = 150.0
+    spot.spot_angle = 11.0
+    spot.spot_angle_attenuation = 0.6
+    spot.shadow_enabled = false
+    heli.add_child(spot)
+
+    # And the beam itself, because a spot in rain is visible as a solid shaft
+    # and Godot's Compatibility renderer has no volumetric fog to make one.
+    var beam_mat := StandardMaterial3D.new()
+    beam_mat.albedo_color = Color(0.72, 0.82, 1.0, 0.12)
+    beam_mat.emission_enabled = true
+    beam_mat.emission = Color(0.72, 0.82, 1.0)
+    beam_mat.emission_energy_multiplier = 0.5
+    beam_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    beam_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    beam_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+    beam_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+    beam_mat.disable_receive_shadows = true
+    var cone := MeshInstance3D.new()
+    var cm := CylinderMesh.new()
+    cm.top_radius = 0.5
+    cm.bottom_radius = 13.0
+    cm.height = 72.0
+    cm.radial_segments = 12
+    cone.mesh = cm
+    cone.material_override = beam_mat
+    cone.position = Vector3(0.6, -1.2, 1.6) + Vector3(0.0, -32.0, 17.0)
+    cone.rotation_degrees = Vector3(28.0, 0.0, 0.0)
+    cone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    heli.add_child(cone)
