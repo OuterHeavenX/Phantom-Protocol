@@ -53,6 +53,20 @@ func setup(muzzle_node: Node3D, voice: String) -> void:
     _build_flash()
     _build_tracer()
     _build_burst()
+    # Reported unconditionally, because "no sound" has come back twice now and
+    # each time the guess about which half was at fault cost a round. This line
+    # separates them: if the samples are here and the mixer is up, the silence
+    # is the browser's session and not the game's.
+    #
+    # Deliberately without the word that names this subsystem anywhere in it.
+    # capture.sh filters every log line containing it, to get rid of the ALSA
+    # complaints on a machine with no sound card, and that filter once hid a
+    # diagnostic whose output was a res:// path -- which led to a wrong
+    # conclusion about samples not loading.
+    print("GUNFEEL voice=%s samples=%d channels=%d mix=%d master_db=%.1f muzzle=%s" % [
+        _voice, _samples.size(), _players.size(),
+        int(AudioServer.get_mix_rate()), AudioServer.get_bus_volume_db(0),
+        muzzle != null])
 
 func _load_samples() -> void:
     for i in range(1, ROUNDS_PER_VOICE + 1):

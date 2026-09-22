@@ -56,3 +56,79 @@
 	};
 })();
 </script>
+<script>
+// Make the browser actually let the audio out.
+//
+// Two things stop a Godot web build being heard, and neither of them shows up
+// as an error. Both are ours to fix from the page, because the engine's own
+// export has no gesture listener for either: the exported shell registers
+// mousedown, touchstart and keydown handlers on the canvas for input, and
+// nothing anywhere that resumes an AudioContext.
+//
+// First, every browser starts an AudioContext suspended until the page has
+// seen a real user gesture. Nothing plays until something calls resume()
+// synchronously inside a gesture handler, and an engine that only creates its
+// context at startup never gets that far.
+//
+// Second, and this is the iPhone-specific one: Safari on iOS routes Web Audio
+// through the "ambient" audio session by default, which the hardware ring
+// /silent switch mutes. A phone with the switch flicked over is silent no
+// matter how correct the rest of this is -- and that is not something a
+// player would think to mention, because every other app they own is still
+// making noise. Declaring a playback session opts out of the switch. Safari
+// 16.4 and later; the try/catch covers everything older and everything else.
+//
+// The context is reached by patching the constructor rather than by digging
+// around in the engine's internals, and the listeners stay registered for the
+// life of the page: iOS suspends the context again whenever the tab goes to
+// the background, so the unlock has to work on the way back too, not only the
+// first time.
+(function () {
+	function playback() {
+		try {
+			if (navigator.audioSession) navigator.audioSession.type = "playback";
+		} catch (e) { /* not Safari, or too old */ }
+	}
+	playback();
+
+	var Native = window.AudioContext || window.webkitAudioContext;
+	if (!Native) return;
+	var contexts = [];
+
+	function Patched(options) {
+		var ctx = new Native(options);
+		contexts.push(ctx);
+		return ctx;
+	}
+	Patched.prototype = Native.prototype;
+	window.AudioContext = Patched;
+	window.webkitAudioContext = Patched;
+
+	function unlock() {
+		playback();
+		for (var i = 0; i < contexts.length; i++) {
+			var ctx = contexts[i];
+			if (ctx.state === "running") continue;
+			try { ctx.resume(); } catch (e) { /* nothing to be done */ }
+			// One sample of silence, started inside the gesture. This is the
+			// old iOS unlock and it still matters: resume() alone can be
+			// deferred, while a source that has actually been started forces
+			// the session open.
+			try {
+				var src = ctx.createBufferSource();
+				src.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+				src.connect(ctx.destination);
+				src.start(0);
+			} catch (e) { /* ditto */ }
+		}
+	}
+
+	var events = ["touchstart", "touchend", "pointerdown", "mousedown", "keydown"];
+	for (var i = 0; i < events.length; i++) {
+		window.addEventListener(events[i], unlock, { capture: true, passive: true });
+	}
+	document.addEventListener("visibilitychange", function () {
+		if (!document.hidden) unlock();
+	});
+})();
+</script>
