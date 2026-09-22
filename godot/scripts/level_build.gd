@@ -1539,7 +1539,7 @@ func _bridge_mat(key: String) -> Material:
             # the only thing a metallic surface has to reflect at night is a
             # dark sky. The mockups' near deck sits at 0.112 -- dark, but
             # never empty, because wet asphalt picks up the whole sky dome.
-            m = MaterialsC.pbr("asphalt", 0.22, floor_c * 1.30, 0.16)
+            m = MaterialsC.pbr("asphalt", 0.22, floor_c * 1.30, 0.0)
             m.roughness = 0.26
         _:
             m = MaterialsC.pbr("concrete", 0.30, wall * 0.6, 0.1)
@@ -2083,7 +2083,11 @@ func _bridge_fires() -> void:
         _wet_streak(at, Color(1.0, 0.46, 0.17), 74.0, 5.5, 0.085)
         # Smoke: a dark column leaning with the map's own wind.
         var smoke := StandardMaterial3D.new()
-        smoke.albedo_color = Color(0.045, 0.040, 0.038, 0.62)
+        # Lit from below by the fire under it, as the mockups' columns are:
+        # warm and relatively bright at the base, cooling and thinning with
+        # height. Flat near-black smoke over the upper centre of the frame is
+        # a large part of why those cells measured 56 to 71 percent crushed.
+        smoke.albedo_color = Color(0.150, 0.105, 0.078, 0.50)
         smoke.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
         smoke.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
         smoke.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
@@ -2095,6 +2099,11 @@ func _bridge_fires() -> void:
             var s := MeshInstance3D.new()
             s.mesh = q
             s.material_override = smoke
+            var cool: float = 1.0 - t * 0.72
+            var sm: StandardMaterial3D = smoke.duplicate()
+            sm.albedo_color = Color(0.150 * cool + 0.030, 0.105 * cool + 0.030,
+                0.078 * cool + 0.034, 0.50 - t * 0.18)
+            s.material_override = sm
             s.position = at + Vector3(wind * t * 16.0, 4.0 + t * 26.0, sin(t * 3.0) * 2.0)
             s.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
             add_child(s)
