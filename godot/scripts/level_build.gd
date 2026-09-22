@@ -2078,7 +2078,19 @@ func _bridge_lamps() -> void:
         # pixels found one blob filling 21 percent of the bottom-left cell at
         # (0.998, 1.0, 1.0) -- the nearest lamp's own pool, made worse in the
         # same round by the road's albedo going up 2.4 times underneath it.
-        lamp.light_energy = 4.2
+        # 4.2 blew the road white directly under the nearest post.
+        #
+        # This is what the clipped share has actually been measuring, and it
+        # is why that number sat at exactly 0.739 percent through a streak
+        # material rewrite, a puddle change, a complete replacement of every
+        # surface material on the bridge, and a fourfold cut to the
+        # searchlight: a saturated light pool is saturated regardless of the
+        # albedo underneath it, so none of those could move it. It was
+        # mis-attributed to the searchlight twice and to the bloom once.
+        #
+        # The crushed share is at 22.9 against a ceiling of 32.5, so there is
+        # room to take this down.
+        lamp.light_energy = 2.0
         lamp.omni_range = level.metres(float(entry[2])) * 2.0
         lamp.omni_attenuation = 1.15
         lamp.shadow_enabled = false
@@ -2497,7 +2509,18 @@ func _bridge_helicopter(w: float, h: float) -> void:
     # bottom-left of the frame. In the mockups the beam is a shaft you can see
     # THROUGH the rain with a soft ellipse at its foot -- it lights the deck,
     # it does not bleach it.
-    spot.light_energy = 1.1
+    # 1.1 still bleached an ellipse on the deck. A 21 degree cone concentrates
+    # whatever it is given into a few square metres, and the aircraft orbits,
+    # so re-aiming it outboard does not keep it off the roadway -- it only
+    # changes where on the roadway it lands. This one blob has been the
+    # clipped share since the bloom was brought under control, holding it at
+    # 0.739 percent through a streak rewrite, a puddle change and a complete
+    # replacement of every surface material on the bridge.
+    #
+    # In the mockups the searchlight reads as a SHAFT seen through the rain
+    # with a soft foot, so the shaft is the deliverable and deck illumination
+    # is not. The light is cut to a quarter and the visible cone carries it.
+    spot.light_energy = 0.28
     spot.spot_range = 150.0
     spot.spot_angle_attenuation = 0.6
     spot.shadow_enabled = false
