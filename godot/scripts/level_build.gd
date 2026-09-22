@@ -68,6 +68,7 @@ func build(lvl: Level, mats: Dictionary) -> void:
     _build_spans()
     _build_decals()
     _build_lights()
+    _merge_static()
 
 func _mat(name: String) -> Material:
     return materials.get(name, materials.get("wall", null))
@@ -1253,3 +1254,176 @@ func _decal_grime() -> void:
             _decal("scorch", ground, Vector3(4.6, 1.2, 4.6), Vector3(0, float(_pick(o, idx, 8)) * 45.0, 0), 0.8)
             _decal("stain", ground + axis * 2.4, Vector3(3.2, 1.2, 3.2),
                 Vector3(0, float(_pick(o, idx * 3, 8)) * 45.0, 0), 0.7)
+
+# ---- Merging ---------------------------------------------------------------
+
+## Combine the static geometry into a few large meshes.
+##
+## Every solid, kerb, sill, pipe and crate in this file is its own
+## MeshInstance3D, and every prop is a scene of a dozen more. That came to
+## 10,207 nodes and 2,422 draw calls for a single static view. Godot does not
+## batch MeshInstance3D nodes, so that is 2,422 draw calls on any device -- and
+## on the browser build, which runs the GL Compatibility renderer over WebGL2
+## with no render thread and a validation cost on every call, it is most of the
+## frame. The player's report was the frame freezing, hostiles stopping, and
+## rounds and their reports coming out only occasionally.
+##
+## So once everything is placed, the surfaces are baked into combined meshes.
+## Each node's transform is folded into its vertices, which is exact: these are
+## rigid transforms of static geometry, nothing here is skinned or animated and
+## nothing moves after this runs. Hostiles are spawned by the game later and
+## are not children of this node, so they are untouched.
+##
+## Three things have to survive the merge.
+##
+## Culling: one mesh for the whole sector would be one draw call and would also
+## submit every wall in the level from every viewpoint. So groups are cut into
+## chunks on the ground plane, and each merged mesh sits at its chunk's centre
+## with a tight AABB, so the frustum still discards what is behind the camera
+## and the shadow splits still discard what is beyond their range.
+##
+## Texturing: this file's own materials are world-space triplanar, so a
+## vertex's texture coordinate is decided by where it is in the world rather
+## than by any UV. Baking to world space and offsetting the merged node so the
+## vertices land back where they were is therefore pixel-identical -- which is
+## why the chunk centre is subtracted out of the vertices and added back as the
+## node's position, rather than the mesh simply being built in world space. The
+## props' own materials are UV-mapped instead, and append_from carries their
+## UVs across unchanged.
+##
+## Grouping: everything that distinguishes two surfaces has to be in the key,
+## because anything sharing a key becomes indistinguishable. That is the
+## material, the shadow setting, the fade distance -- and the vertex format,
+## since SurfaceTool builds one format per surface and appending a mesh with
+## different attributes to it would corrupt the result.
+const MERGE_CHUNK := 26.0
+
+## One surface of one mesh instance, with where it goes.
+class MergeItem:
+    var node: MeshInstance3D
+    var mesh: Mesh
+    var surface: int
+    var xform: Transform3D
+
+func _merge_static() -> void:
+    var groups: Dictionary = {}          ## key -> Array[MergeItem]
+    var settings: Dictionary = {}        ## key -> the node state to carry over
+    var candidates: Array[MeshInstance3D] = []
+    var inv := global_transform.affine_inverse()
+
+    for node in _descendants(self):
+        if not (node is MeshInstance3D):
+            continue
+        var mi: MeshInstance3D = node
+        if mi.mesh == null or mi.mesh.get_surface_count() == 0:
+            continue
+        # A skinned surface is posed by its skeleton every frame, so its
+        # vertices are not where the mesh says they are and baking one is
+        # meaningless. None exist here today; this keeps that true by
+        # construction rather than by assumption.
+        #
+        # The test is for a Skeleton3D specifically, not for the path being
+        # set. MeshInstance3D.skeleton defaults to "..", which resolves to the
+        # node's own parent and is never null, so testing the path alone
+        # excluded every mesh in the sector -- the merge ran, reported four
+        # thousand surfaces combined, and left the two thousand four hundred
+        # draw calls it was written to remove exactly where they were.
+        if mi.get_node_or_null(mi.skeleton) is Skeleton3D:
+            continue
+        var local := inv * mi.global_transform
+        var taken := 0
+        for si in range(mi.mesh.get_surface_count()):
+            var mat := _surface_material(mi, si)
+            if mat == null:
+                continue
+            # Transparent surfaces are sorted back to front per object, so
+            # merging them would freeze their draw order into whatever the
+            # combined mesh happens to hold. There are few -- the floor
+            # markings and the window glass -- so they stay as they are.
+            var std := mat as BaseMaterial3D
+            if std != null and std.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED:
+                continue
+            var origin := local.origin
+            var key := "%d_%d_%d_%d_%d_%.2f_%.2f_%d" % [
+                mat.get_instance_id(),
+                int(floor(origin.x / MERGE_CHUNK)),
+                int(floor(origin.z / MERGE_CHUNK)),
+                int(mi.mesh.surface_get_format(si)),
+                int(mi.cast_shadow),
+                mi.visibility_range_end,
+                mi.visibility_range_end_margin,
+                int(mi.visibility_range_fade_mode)]
+            var item := MergeItem.new()
+            item.node = mi
+            item.mesh = mi.mesh
+            item.surface = si
+            item.xform = local
+            if not groups.has(key):
+                groups[key] = []
+                settings[key] = {
+                    "material": mat,
+                    "cast_shadow": mi.cast_shadow,
+                    "range_end": mi.visibility_range_end,
+                    "range_margin": mi.visibility_range_end_margin,
+                    "fade_mode": mi.visibility_range_fade_mode,
+                }
+            groups[key].append(item)
+            taken += 1
+        if taken > 0:
+            candidates.append(mi)
+
+    var made := 0
+    var merged_surfaces := 0
+    var absorbed: Dictionary = {}        ## MeshInstance3D -> surfaces merged away
+    for key in groups:
+        var items: Array = groups[key]
+        # A surface on its own merges into itself. Skip the rebuild and leave
+        # the node that owns it to keep drawing it.
+        if items.size() < 2:
+            continue
+        var cfg: Dictionary = settings[key]
+        var centre := Vector3.ZERO
+        for it in items:
+            centre += (it as MergeItem).xform.origin
+        centre /= float(items.size())
+        var shift := Transform3D(Basis.IDENTITY, -centre)
+        var st := SurfaceTool.new()
+        st.begin(Mesh.PRIMITIVE_TRIANGLES)
+        for it in items:
+            var item: MergeItem = it
+            st.append_from(item.mesh, item.surface, shift * item.xform)
+            absorbed[item.node] = int(absorbed.get(item.node, 0)) + 1
+        var merged := MeshInstance3D.new()
+        merged.mesh = st.commit()
+        merged.position = centre
+        merged.material_override = cfg["material"]
+        merged.cast_shadow = cfg["cast_shadow"]
+        merged.visibility_range_end = cfg["range_end"]
+        merged.visibility_range_end_margin = cfg["range_margin"]
+        merged.visibility_range_fade_mode = cfg["fade_mode"]
+        add_child(merged)
+        made += 1
+        merged_surfaces += items.size()
+
+    # A node goes only once every surface it drew is drawn by a merged mesh.
+    # One that kept a transparent surface, or whose group was too small to
+    # merge, stays and keeps drawing what it still owns -- otherwise the
+    # geometry would simply disappear, or be drawn twice.
+    var freed := 0
+    for mi in candidates:
+        if int(absorbed.get(mi, 0)) != mi.mesh.get_surface_count():
+            continue
+        mi.get_parent().remove_child(mi)
+        mi.free()
+        freed += 1
+    print("MERGE %d surfaces -> %d meshes, %d nodes freed" % [merged_surfaces, made, freed])
+
+## Which material actually draws a surface: the node's override, then its
+## per-surface override, then whatever the mesh itself carries.
+func _surface_material(mi: MeshInstance3D, surface: int) -> Material:
+    if mi.material_override != null:
+        return mi.material_override
+    var over := mi.get_surface_override_material(surface)
+    if over != null:
+        return over
+    return mi.mesh.surface_get_material(surface)
