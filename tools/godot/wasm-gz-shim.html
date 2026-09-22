@@ -59,16 +59,32 @@
 <script>
 // Make the browser actually let the audio out.
 //
-// Two things stop a Godot web build being heard, and neither of them shows up
-// as an error. Both are ours to fix from the page, because the engine's own
-// export has no gesture listener for either: the exported shell registers
-// mousedown, touchstart and keydown handlers on the canvas for input, and
-// nothing anywhere that resumes an AudioContext.
+// Two things stop a Godot web build being heard, and neither shows up as an
+// error.
 //
-// First, every browser starts an AudioContext suspended until the page has
-// seen a real user gesture. Nothing plays until something calls resume()
-// synchronously inside a gesture handler, and an engine that only creates its
-// context at startup never gets that far.
+// First, the opening stretch is silent, and this part is NOT fixed here.
+//
+// Every browser starts an AudioContext suspended until the page has seen a
+// real user gesture. The engine does resume its own -- an earlier version of
+// this comment, and the commit that added it, both claimed it never does,
+// which was wrong -- but not until its AudioWorklet module has loaded, and
+// addModule resolves on the main thread, which the sector build and the first
+// shader compiles hold for a long time.
+//
+// Measured in Chromium on a software rasteriser, twice, once without this
+// block and once with it:
+//
+//   without   suspended at  1 s   worklet at 33 s   running at 39 s
+//   with      suspended at  2 s   worklet at 43 s   running at 49 s
+//
+// The resume calls below do run -- the silent one-sample sources they start
+// show up in the trace at 25 s and 31 s -- and they do not flip the state.
+// Both runs go running about six seconds after the worklet connects and not
+// before, so the transition is gated on the driver being up and nothing the
+// page does in front of that matters. The ten-second spread between the runs
+// is how long the boot happened to hold the main thread, not an effect of
+// this code. So: no claim here that this shortens the silent opening. It does
+// not, on the evidence.
 //
 // Second, and this is the iPhone-specific one: Safari on iOS routes Web Audio
 // through the "ambient" audio session by default, which the hardware ring
@@ -77,12 +93,25 @@
 // player would think to mention, because every other app they own is still
 // making noise. Declaring a playback session opts out of the switch. Safari
 // 16.4 and later; the try/catch covers everything older and everything else.
+// The engine does nothing about this at all.
+//
+// What this block is therefore actually for, stated narrowly because two
+// rounds have now been lost to overclaiming here:
+//
+//   - the playback session, which the engine never sets and which is the only
+//     thing that gets past an iPhone's silent switch;
+//   - re-unlocking after the tab has been in the background, which iOS
+//     suspends and which the engine only recovers from if the canvas happens
+//     to be touched again;
+//   - resuming from window-level gestures rather than canvas-level ones, so a
+//     tap that lands on the on-screen controls still counts.
+//
+// The first is the one with a player report behind it. The other two are
+// cheap and are not known to have been the fault.
 //
 // The context is reached by patching the constructor rather than by digging
 // around in the engine's internals, and the listeners stay registered for the
-// life of the page: iOS suspends the context again whenever the tab goes to
-// the background, so the unlock has to work on the way back too, not only the
-// first time.
+// life of the page rather than firing once.
 (function () {
 	function playback() {
 		try {
