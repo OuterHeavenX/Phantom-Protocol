@@ -46,6 +46,7 @@ var _move_origin := Vector2.ZERO
 var _move_vec := Vector2.ZERO
 var _look_touch := -1
 var _look_last := Vector2.ZERO
+var _fire_last := Vector2.ZERO
 var _button_touch := {}          ## touch index -> action name
 var _held := {}                  ## action name -> true
 var _surface: Control = null
@@ -95,18 +96,24 @@ func _input(event: InputEvent) -> void:
         _drag(event.index, event.position, event.relative)
         get_viewport().set_input_as_handled()
 
-## Temporary instrumentation, removed once the mapping is confirmed.
-var debug := false
-
+## The trigger doubles as a look control while it is held.
+##
+## Holding FIRE used to consume the right thumb entirely, so aiming needed a
+## third finger nobody has: the player could shoot or turn, never both. Every
+## shooter on a touchscreen solves this the same way, by letting the thumb
+## that pressed the trigger keep aiming as it slides. So the fire touch stays
+## latched to the action and also feeds the look delta.
 func _press(index: int, pos: Vector2) -> void:
-    if debug:
-        print("PRESS i=%d pos=%s view=%s" % [index, pos, get_viewport().get_visible_rect().size])
     var centres := _button_centres()
     for action in centres:
         if pos.distance_to(centres[action]) <= _radius_for(action) * 1.2:
             _button_touch[index] = action
             _held[action] = true
             Input.action_press(action)
+            # Remember where it went down, so sliding off it turns the camera
+            # instead of doing nothing.
+            if action == "fire":
+                _fire_last = pos
             _surface.queue_redraw()
             return
     var s := get_viewport().get_visible_rect().size
@@ -122,7 +129,13 @@ func _press(index: int, pos: Vector2) -> void:
         _look_touch = index
         _look_last = pos
 
-func _drag(index: int, pos: Vector2, relative: Vector2) -> void:
+func _drag(index: int, pos: Vector2, _relative: Vector2) -> void:
+    # A finger holding the trigger aims with the same motion.
+    if _button_touch.get(index, "") == "fire":
+        if player != null and player.has_method("apply_look"):
+            player.apply_look((pos - _fire_last) * LOOK_SENS)
+        _fire_last = pos
+        return
     if index == _move_touch:
         var r := _unit() * STICK_RADIUS
         var off := (pos - _move_origin) / r
@@ -145,8 +158,6 @@ func _drag(index: int, pos: Vector2, relative: Vector2) -> void:
         # instead and the event's own relative is ignored.
         var delta := pos - _look_last
         _look_last = pos
-        if debug:
-            print("LOOK i=%d delta=%s event_rel=%s" % [index, delta, relative])
         player.apply_look(delta * LOOK_SENS)
 
 func _release(index: int) -> void:
