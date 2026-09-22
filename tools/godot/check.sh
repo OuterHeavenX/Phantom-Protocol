@@ -54,11 +54,14 @@ if echo "$OUT" | grep -qE "SCRIPT ERROR|Parse Error|Compile Error"; then
   exit 1
 fi
 # Finally the assertions that do not need a contract to run: campaign
-# progression, which decides which sector loads and what follows what.
+# progression, which decides which sector loads and what follows what, and
+# the save round-trip that makes it survive a reload.
 TESTS=$(timeout 120 godot --headless --path "$ROOT" --script res://tests/progression_test.gd 2>&1 || true)
-if ! echo "$TESTS" | grep -q "PROGRESSION OK"; then
-  echo "$TESTS" | grep -E "Assertion|SCRIPT ERROR|  at: " | head -10
-  echo "FAIL: campaign progression assertions"
-  exit 1
-fi
-echo "ok: all scripts compile, campaign progression asserted"
+for marker in "PROGRESSION OK" "PERSISTENCE OK"; do
+  if ! echo "$TESTS" | grep -q "$marker"; then
+    echo "$TESTS" | grep -E "Assertion|SCRIPT ERROR|  at: " | head -10
+    echo "FAIL: $marker assertions"
+    exit 1
+  fi
+done
+echo "ok: all scripts compile, progression and persistence asserted"

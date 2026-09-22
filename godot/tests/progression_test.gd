@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Campaign progression, asserted rather than eyeballed.
+## Campaign progression and save persistence, asserted rather than eyeballed.
 ##
 ## Run by tools/godot/check.sh. Three things here were wrong at some point and
 ## each of them is the kind of fault that looks like it works:
@@ -14,8 +14,15 @@ extends SceneTree
 ##  * Selecting a contract by an index that does not exist has to leave the
 ##    current one alone rather than clamping to something arbitrary.
 func _init() -> void:
+    # Against a scratch save, and with writing off for the part that only
+    # exercises the campaign. The first version of this ran `advance_contract`
+    # against the real file and left a save behind saying contract two, which
+    # the next run then read back and failed on.
+    SaveGame.path = "user://test_progress.json"
+    SaveGame.clear()
     var gd = load("res://scripts/game_data.gd").new()
     gd._ready()
+    gd.persist = false
     # Truncated at the first sector this build has not exported, so it is the
     # campaign's first two operations rather than all twelve.
     assert(gd.campaign.size() == 2, "campaign should offer the 2 playable operations")
@@ -36,4 +43,65 @@ func _init() -> void:
     assert(not gd.advance_contract(), "cannot advance past the last PLAYABLE contract")
     assert(gd.next_op().is_empty(), "no next contract at the end")
     print("PROGRESSION OK: all assertions passed")
+    _test_persistence()
+    SaveGame.clear()
+    print("PERSISTENCE OK: all assertions passed")
     quit()
+
+## The save round-trip, which is what makes progress survive a reload.
+##
+## Exercised through GameData rather than through SaveGame alone, because the
+## thing that matters is that a second GameData built from nothing comes back
+## on the contract the first one left off at -- which is exactly what a reload
+## does.
+func _test_persistence() -> void:
+    SaveGame.clear()
+    var first = load("res://scripts/game_data.gd").new()
+    first._ready()
+    assert(first.contract_index == 0, "a fresh save starts on the first contract")
+    assert(int(first.stats.get("missions", -1)) == 0, "a fresh save has no missions")
+
+    first.record_contract(true, 42, 9, 301.5)
+    assert(first.advance_contract(), "a win advances")
+    assert(first.contract_index == 1, "and lands on the second contract")
+
+    # A second instance reads what the first wrote, which is the reload.
+    var second = load("res://scripts/game_data.gd").new()
+    second._ready()
+    assert(second.contract_index == 1, "progress survives being read back")
+    assert(int(second.stats.get("missions", 0)) == 1, "the contract was counted")
+    assert(int(second.stats.get("wins", 0)) == 1, "the win was counted")
+    assert(int(second.stats.get("kills", 0)) == 42, "kills accumulate")
+    assert(int(second.stats.get("best_level", 0)) == 9, "the best level is kept")
+
+    # A loss counts as a mission but does not advance.
+    second.record_contract(false, 3, 2, 40.0)
+    var third = load("res://scripts/game_data.gd").new()
+    third._ready()
+    assert(int(third.stats.get("missions", 0)) == 2, "a loss is still a mission")
+    assert(int(third.stats.get("losses", 0)) == 1, "the loss was counted")
+    assert(int(third.stats.get("kills", 0)) == 45, "kills accumulate across contracts")
+    assert(third.contract_index == 1, "a loss does not advance the campaign")
+
+    # Nonsense on disk must not stop the game starting.
+    var f := FileAccess.open(SaveGame.path, FileAccess.WRITE)
+    f.store_string("{ this is not json")
+    f.close()
+    var broken = load("res://scripts/game_data.gd").new()
+    broken._ready()
+    assert(broken.contract_index == 0, "an unreadable save starts a fresh campaign")
+
+    # A save from a build that ran further than this one must not index off
+    # the end of the campaign.
+    SaveGame.write({"contract_index": 99, "stats": {}})
+    var ahead = load("res://scripts/game_data.gd").new()
+    ahead._ready()
+    assert(ahead.contract_index == ahead.campaign.size() - 1,
+        "a save past the end resumes at the last contract this build has")
+
+    # And wiping really does start over.
+    ahead.wipe_progress()
+    var wiped = load("res://scripts/game_data.gd").new()
+    wiped._ready()
+    assert(wiped.contract_index == 0, "a wipe starts the campaign again")
+    assert(int(wiped.stats.get("kills", -1)) == 0, "a wipe clears the counters")

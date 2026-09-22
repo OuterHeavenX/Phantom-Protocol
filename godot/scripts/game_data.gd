@@ -38,9 +38,20 @@ var sector_ids: Array = []
 ## cheaper way to swap the map, the objective and the difficulty than to build
 ## it again. An autoload survives that; a member of the scene does not.
 ##
-## It is session state, not a save. Nothing here writes to disk yet, so
-## closing the tab starts again at the first contract.
+## Loaded from the save at startup and written back when it changes, so it
+## survives closing the tab as well as reloading the scene.
 var contract_index: int = 0
+
+## Running totals, under the names the 2D game's map unlocks are written
+## against. See save_game.gd.
+var stats: Dictionary = {}
+
+## False for the capture harness and the headless replay, which are not
+## players and must not write over someone's progress.
+var persist := true
+
+## Whether this platform will actually keep a save between sessions.
+var save_persistent := true
 
 ## The operation the player is on.
 func current_op() -> Dictionary:
@@ -59,6 +70,7 @@ func advance_contract() -> bool:
     if contract_index + 1 >= campaign.size():
         return false
     contract_index += 1
+    save_progress()
     return true
 
 ## Select a contract by its campaign index (op1 is 1), for the command line
@@ -70,6 +82,10 @@ func select_op_index(one_based: int) -> bool:
             contract_index = i
             return true
     return false
+
+## Where the save lives, for the message that tells a player where to find it.
+func save_path() -> String:
+    return ProjectSettings.globalize_path(SaveGame.path)
 
 var _by_id: Dictionary = {}
 
@@ -115,6 +131,54 @@ func _ready() -> void:
             sector_ids.append(map_id)
     if campaign.is_empty():
         push_error("No campaign operation has an exported level.")
+    _load_progress()
+
+## Bring the saved progress in, once the campaign is known.
+##
+## The clamp is not defensive noise. A save can name a contract this build
+## cannot run -- progress made against a build that shipped more sectors, or a
+## hand-edited file -- and an index past the end of `campaign` would otherwise
+## index out of bounds on the first frame.
+func _load_progress() -> void:
+    var data := SaveGame.read()
+    stats = data.get("stats", {})
+    var want := int(data.get("contract_index", 0))
+    contract_index = clampi(want, 0, maxi(0, campaign.size() - 1))
+    if want != contract_index:
+        push_warning("Save is on contract %d and this build runs %d; resuming at the last one it has." % [
+            want + 1, campaign.size()])
+    save_persistent = SaveGame.is_persistent()
+    if not save_persistent:
+        push_warning("This platform has no persistent user filesystem; progress will not outlive the session.")
+
+## Write the current progress. A no-op for the harnesses.
+func save_progress() -> void:
+    if not persist:
+        return
+    SaveGame.write({"contract_index": contract_index, "stats": stats})
+
+## Record how a contract ended, and advance on a win.
+##
+## One call rather than a stat update here and an advance there, because the
+## two have to agree: a win that counts toward the unlock conditions but does
+## not move the contract on, or the reverse, is the kind of thing that only
+## shows up several sessions later.
+func record_contract(won: bool, kills: int, level: int, survived: float) -> void:
+    stats["missions"] = int(stats.get("missions", 0)) + 1
+    if won:
+        stats["wins"] = int(stats.get("wins", 0)) + 1
+    else:
+        stats["losses"] = int(stats.get("losses", 0)) + 1
+    stats["kills"] = int(stats.get("kills", 0)) + kills
+    stats["best_level"] = maxi(int(stats.get("best_level", 1)), level)
+    stats["best_survival"] = maxf(float(stats.get("best_survival", 0.0)), survived)
+    save_progress()
+
+## Reset to a fresh campaign and wipe the save. Driven by `-- wipe`.
+func wipe_progress() -> void:
+    contract_index = 0
+    stats = SaveGame.defaults()["stats"]
+    SaveGame.clear()
     for list in [weapons, enemies, elites, maps, operatives]:
         for entry in list:
             _by_id[entry.get("id", "")] = entry

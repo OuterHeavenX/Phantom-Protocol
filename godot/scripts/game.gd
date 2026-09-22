@@ -71,6 +71,8 @@ var duration_override: float = 0.0
 ## Drive the operative from the stand-in rather than from input.
 var autoplay := false
 var _autoplay_report := 0.0
+## A self-check to run instead of a contract. See `_run_selftest`.
+var selftest := ""
 
 var sim: Sim
 var hud: Hud
@@ -102,6 +104,11 @@ const CHAR_FOR := {
 
 func _ready() -> void:
     _parse_args()
+    # Neither the capture harness nor the headless replay is a player, and
+    # both run a contract to completion. Without this a dream-loop round or a
+    # gate run would advance whoever is sitting at this machine by a contract.
+    if capture_path != "" or simtest_seconds > 0.0:
+        GameData.persist = false
     if capture_path != "":
         # A watchdog, because a capture that hangs is indistinguishable from a
         # capture that is merely slow on a software rasteriser, and the first
@@ -114,6 +121,9 @@ func _ready() -> void:
             get_tree().quit(3))
         add_child(guard)
         guard.start()
+    if selftest != "":
+        _run_selftest()
+        return
     level = LevelC.new()
     if not level.load_from("res://data/level_%s.json" % level_id):
         push_error("Could not load the level export.")
@@ -241,6 +251,14 @@ func _parse_args() -> void:
                 level_id = args[i + 1] if i + 1 < args.size() else "blacksite"
                 _level_forced = true
                 i += 1
+            "selftest":
+                selftest = args[i + 1] if i + 1 < args.size() else "save"
+                i += 1
+            "nosave":
+                # For runs that should not touch the player's progress.
+                GameData.persist = false
+            "wipe":
+                GameData.wipe_progress()
             "autoplay":
                 # Drive rendered play with the same stand-in the headless gate
                 # uses, so the whole of a contract -- including what happens
@@ -338,6 +356,19 @@ func _level_from_query() -> void:
                     print("OP from query: %d" % int(kv[1]))
                 else:
                     push_warning("No operation with index " + kv[1])
+            # The same two testing affordances the command line has, so the
+            # end of a contract and the handover into the next one can be
+            # watched in a browser without sitting through five minutes.
+            # `wipe` is deliberately NOT among them: a link that silently
+            # destroys someone's progress is not a thing to put in a URL.
+            "duration":
+                duration_override = float(kv[1])
+                print("DURATION from query: %s" % kv[1])
+            "autoplay":
+                autoplay = kv[1] != "0" and kv[1] != "false"
+                print("AUTOPLAY from query: %s" % str(autoplay))
+            "selftest":
+                selftest = kv[1]
 
 ## Every render layer except the viewmodel's. World lights use this as their
 ## cull mask so the weapon is lit only by the rig parented to the camera.
@@ -1056,6 +1087,36 @@ func _idpass_paint(n: Node, index: int, names: Array) -> void:
     for c in n.get_children():
         _idpass_paint(c, index, names)
 
+## Checks that need a real platform under them, run instead of a contract.
+##
+## `save` answers the one question the desktop cannot: whether a write to
+## user:// survives a reload in a browser, where it is Emscripten's IDBFS
+## synced to IndexedDB rather than a file. It keeps its own counter file, so it
+## can be run against a live build without touching anyone's progress, and it
+## is the run-twice kind of check -- the second run reports what the first one
+## left behind.
+##
+## Driven by `--  selftest save` or `?selftest=save`.
+func _run_selftest() -> void:
+    match selftest:
+        "save":
+            var probe := "user://selftest_probe.json"
+            var was: String = SaveGame.path
+            SaveGame.path = probe
+            var before := SaveGame.read()
+            var runs := int(before.get("contract_index", 0))
+            var ok := SaveGame.write({"contract_index": runs + 1, "stats": {}})
+            SaveGame.path = was
+            print("SELFTEST save runs_before=%d wrote=%s persistent=%s dir=%s" % [
+                runs, ok, SaveGame.is_persistent(),
+                ProjectSettings.globalize_path("user://")])
+        _:
+            push_error("Unknown selftest: " + selftest)
+    _clear_loading_screen()
+    # Stop rather than sitting in an empty scene. On the web the main loop
+    # ends and the page stays up, which is all the console needs.
+    get_tree().quit()
+
 ## Report every visual instance under one pixel of the capture frame.
 ##
 ## Positions the camera exactly as `_run_capture` does, builds the view ray
@@ -1277,6 +1338,10 @@ func _build_debrief() -> void:
     var contract: Dictionary = GameData.current_op()
     var won := sim.outcome == "extracted"
     var next: Dictionary = GameData.next_op() if won else {}
+    # Recorded here rather than when the player dismisses the screen, so a
+    # contract that was actually finished counts even if the tab is closed on
+    # the debrief.
+    GameData.record_contract(won, sim.kills, sim.player_level, sim.elapsed)
     _debrief = CanvasLayer.new()
     _debrief.layer = 9
     var bg := ColorRect.new()
@@ -1298,6 +1363,16 @@ func _build_debrief() -> void:
             lines.append("%s: %s" % [String(entry.get("speaker", "")),
                 String(entry.get("text", ""))])
         lines.append("")
+    # What the save now holds, so a player can see that the run was recorded
+    # rather than having to close the game to find out.
+    var st: Dictionary = GameData.stats
+    lines.append("OPERATIONS %d  //  COMPLETED %d  //  CONFIRMED %d" % [
+        int(st.get("missions", 0)), int(st.get("wins", 0)), int(st.get("kills", 0))])
+    if not GameData.persist:
+        lines.append("PROGRESS NOT BEING SAVED THIS RUN")
+    elif not GameData.save_persistent:
+        lines.append("THIS PLATFORM CANNOT KEEP A SAVE; PROGRESS ENDS WITH THIS SESSION")
+    lines.append("")
     if won and not next.is_empty():
         lines.append("NEXT  OP %d // %s" % [int(next.get("index", 2)),
             String(next.get("name", ""))])
@@ -1343,9 +1418,12 @@ func _debrief_input() -> void:
             return
     if _debrief_won:
         # At the end of the campaign, start it over rather than sitting on a
-        # dead screen.
+        # dead screen -- and write that, or a player who finishes everything
+        # and closes the tab comes back to the last contract rather than to
+        # the beginning.
         if not GameData.advance_contract():
             GameData.contract_index = 0
+            GameData.save_progress()
     get_tree().reload_current_scene()
 
 ## Only what has to be per-frame: the viewmodel's sway, which is a visual
