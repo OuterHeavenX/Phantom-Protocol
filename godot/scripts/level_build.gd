@@ -1486,6 +1486,12 @@ const WATER_SPAN := 900.0
 ## the albedo of dry and reflects far more sharply.
 var _bmat: Dictionary = {}
 
+## A colour reduced to its hue, at unit mean, so a reflectance can be applied
+## to it without inheriting the palette's own brightness.
+func _hue_of(c: Color) -> Color:
+    var m: float = maxf(0.001, (c.r + c.g + c.b) / 3.0)
+    return Color(c.r / m, c.g / m, c.b / m)
+
 func _bridge_mat(key: String) -> Material:
     if _bmat.has(key):
         return _bmat[key]
@@ -1504,45 +1510,49 @@ func _bridge_mat(key: String) -> Material:
     # street sector already generates. Wet is carried in the roughness and the
     # tint rather than in a separate material: soaked concrete is about half
     # the albedo of dry and far glossier.
-    var wall := level.pal("wall", Color(0.137, 0.192, 0.251))
-    var floor_c := level.pal("floor", Color(0.078, 0.114, 0.149))
+    # The palette gives the HUE; the albedo values are physical.
+    #
+    # This is the mistake that kept the crushed share at 41 percent through
+    # five separate fixes. #141d26 and #233140 are the 2D game's canvas FILL
+    # colours -- they are what a pixel ends up as on screen in a top-down
+    # game, already lit. Used as albedos in a 3D renderer they are multiplied
+    # by an albedo texture and then by the light reaching them, so a deck
+    # authored at 0.078 came out under 0.06 everywhere a lamp did not reach.
+    # Highlighting the crushed pixels showed it plainly: the road, the towers
+    # and the parapets were the crushed region, which is to say every built
+    # surface in the frame.
+    #
+    # So each palette entry is normalised to its hue and multiplied by a
+    # reflectance the material actually has. Wet asphalt is about 0.18 dry-
+    # equivalent, concrete 0.40, painted steel 0.32. Those are the numbers
+    # that put a surface in the 0.11 to 0.16 the mockups hold their deck at.
+    var wall_hue := _hue_of(level.pal("wall", Color(0.137, 0.192, 0.251)))
+    var floor_hue := _hue_of(level.pal("floor", Color(0.078, 0.114, 0.149)))
     var m: StandardMaterial3D
     match key:
         "concrete":
-            m = MaterialsC.pbr("concrete", 0.30, wall * 0.72, 0.12)
+            m = MaterialsC.pbr("concrete", 0.30, wall_hue * 0.40, 0.12)
             m.roughness = 0.52
         "tower":
-            # Brighter than the deck furniture. The pylons stand above the
-            # lamps with nothing lighting them directly, so at the kerb's
-            # albedo they came out as flat black cut-outs filling the top
-            # centre of the frame -- a cell the mockups have at 0 percent
-            # crushed, because a concrete pylon picks up the whole sky.
-            m = MaterialsC.pbr("concrete", 0.22, wall * 1.55, 0.08)
+            # The pylons stand above the lamps with nothing lighting them
+            # directly, so they lean on ambient alone and need the reflectance
+            # to carry them.
+            m = MaterialsC.pbr("concrete", 0.22, wall_hue * 0.46, 0.08)
             m.roughness = 0.58
         "steel":
-            m = MaterialsC.pbr("steel", 0.55, wall * 0.52, 0.65)
+            m = MaterialsC.pbr("steel", 0.55, wall_hue * 0.32, 0.55)
             m.roughness = 0.38
         "rust":
-            m = MaterialsC.pbr("paintwork", 0.45, Color(0.24, 0.21, 0.19), 0.28)
+            m = MaterialsC.pbr("paintwork", 0.45, Color(0.30, 0.26, 0.23), 0.25)
             m.roughness = 0.62
         "panel":
-            m = MaterialsC.pbr("blockwork", 0.40, floor_c * 1.1, 0.35)
+            m = MaterialsC.pbr("blockwork", 0.40, floor_hue * 0.34, 0.30)
             m.roughness = 0.42
         "road":
-            # The deck. Asphalt at a large scale so the grain reads underfoot
-            # without tiling visibly down the span, kept dark and glossy.
-            # Tinted UP rather than down, and less metallic than it was.
-            #
-            # At floor * 0.55 with metallic 0.30 the road in front of the
-            # player measured 81 percent pure black: the albedo was almost
-            # nothing, the metallic term took a third of what remained, and
-            # the only thing a metallic surface has to reflect at night is a
-            # dark sky. The mockups' near deck sits at 0.112 -- dark, but
-            # never empty, because wet asphalt picks up the whole sky dome.
-            m = MaterialsC.pbr("asphalt", 0.22, floor_c * 1.30, 0.0)
+            m = MaterialsC.pbr("asphalt", 0.22, floor_hue * 0.20, 0.0)
             m.roughness = 0.26
         _:
-            m = MaterialsC.pbr("concrete", 0.30, wall * 0.6, 0.1)
+            m = MaterialsC.pbr("concrete", 0.30, wall_hue * 0.36, 0.1)
     m.metallic_specular = 0.80
     # World triplanar, as the sector uses, so nothing needs UVs and the grain
     # stays continuous across the joins between deck, kerb and girder.
@@ -1570,9 +1580,24 @@ func _bridge_water(w: float, h: float) -> void:
     # Near-black, and smooth enough to carry the lamps and the fire as long
     # vertical streaks. In the mockups the water is almost entirely reflection
     # -- there is no diffuse colour in it at all at this hour.
-    m.albedo_color = Color(0.012, 0.018, 0.028)
-    m.metallic = 0.55
-    m.roughness = 0.16
+    # Not as black as it looks from a photograph.
+    #
+    # This plane was authored at albedo 0.012 with metallic 0.55, on the
+    # reasoning that river water at night is almost pure reflection. That is
+    # true of the water's COLOUR and false of its brightness: a metallic
+    # surface reflects what is above it, and what is above this one is an
+    # overcast sky, so the reflection is the sky's own luminance rather than
+    # black. Rendered, it came out under 0.06 across the whole outer third of
+    # the frame -- 97.6 percent of one cell and 76 percent of another -- while
+    # the mockups hold their water between 0.08 and 0.15, carrying the city's
+    # glow and the running lights of boats.
+    #
+    # It is a large area and it was never revisited after being created, which
+    # is most of why the crushed share would not fall below 41 percent no
+    # matter what was done to the deck.
+    m.albedo_color = Color(0.052, 0.066, 0.092)
+    m.metallic = 0.25
+    m.roughness = 0.24
     m.metallic_specular = 0.85
     var plane := PlaneMesh.new()
     plane.size = Vector2(WATER_SPAN, WATER_SPAN)
