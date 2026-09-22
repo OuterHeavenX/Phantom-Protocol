@@ -248,6 +248,42 @@ func _parse_args() -> void:
                     probe_pixel = Vector2(float(bits[0]), float(bits[1]))
                 i += 1
         i += 1
+    _level_from_query()
+
+## Pick the level from the page's query string on the web build.
+##
+## `level_id` could only be set by a command-line argument, which a browser
+## has no way to pass, so the browser build could reach exactly one sector --
+## the opening one -- and CROSSFALL could not be played or looked at by
+## anyone who was not running the capture harness on a desktop. A query
+## parameter is how you hand an argument to a page:
+##
+##     https://<host>/?level=crossfall
+##
+## Restricted to the ids that actually ship, so a typo or a hand-edited URL
+## falls back to the opening sector rather than failing to load a level and
+## leaving a black screen with an error in the console.
+const LEVEL_IDS := ["blacksite", "crossfall"]
+
+func _level_from_query() -> void:
+    if not OS.has_feature("web"):
+        return
+    var search := ""
+    if ClassDB.class_exists("JavaScriptBridge"):
+        var raw = JavaScriptBridge.eval("window.location.search || ''", true)
+        if raw != null:
+            search = String(raw)
+    if search == "":
+        return
+    for part in search.trim_prefix("?").split("&"):
+        var kv := part.split("=")
+        if kv.size() == 2 and kv[0] == "level":
+            var want := kv[1].to_lower().strip_edges()
+            if LEVEL_IDS.has(want):
+                level_id = want
+                print("LEVEL from query: %s" % level_id)
+            else:
+                push_warning("Unknown level '%s'; keeping %s" % [want, level_id])
 
 ## Every render layer except the viewmodel's. World lights use this as their
 ## cull mask so the weapon is lit only by the rig parented to the camera.
