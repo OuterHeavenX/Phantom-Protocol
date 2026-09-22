@@ -703,12 +703,20 @@ func _build_rain() -> void:
         # streaks rather than from a few heavy ones. More of them, a third the
         # width, half again the length, and dim enough that a drop is seen
         # because it catches a lamp rather than because it is white.
-        q.size = Vector2(0.011 if near else 0.007, 1.35 if near else 0.80)
+        q.size = Vector2(0.011 if near else 0.007, 1.15 if near else 0.70)
         var dm := StandardMaterial3D.new()
         dm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
         dm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
         dm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-        dm.albedo_color = Color(0.62, 0.74, 0.88, 0.34 if near else 0.17)
+        # The near layer reads over everything at 0.34: a 1.35 m streak a
+        # few metres from the eye is a long bright bar on screen, and the
+        # frame was being watched through them rather than through rain.
+        # 0.34 was a curtain of bright bars and 0.22 gave away most of the
+        # frame's fine contrast with it -- window contrast fell from 0.067 to
+        # 0.052 and the 95th percentile from 0.414 to 0.353 on that one term.
+        # Rain is a large part of what the mockups' detail statistics are
+        # measuring. This sits between the two.
+        dm.albedo_color = Color(0.62, 0.74, 0.88, 0.29 if near else 0.17)
         dm.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
         dm.billboard_keep_scale = true
         dm.disable_receive_shadows = true

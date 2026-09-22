@@ -1774,8 +1774,14 @@ func _bridge_deck(w: float, h: float) -> void:
     # mockups these are the brightest thing on the road other than the
     # reflections, because wet paint throws light straight back.
     var paint := StandardMaterial3D.new()
-    paint.albedo_color = Color(0.40, 0.39, 0.36)
-    paint.roughness = 0.42
+    # Wet road paint is the brightest thing on the deck after the
+    # reflections, and 0.40 was not reading as such. The lower half of the
+    # frame is where the remaining window-contrast deficit sits -- the top two
+    # rows of a 4 by 4 map now measure at or above the mockups while the
+    # bottom two are short by 0.22 to 0.56 -- and bright lane dashes on a
+    # near-black road are most of what fills it in the references.
+    paint.albedo_color = Color(0.86, 0.85, 0.80)
+    paint.roughness = 0.34
     # A probe over the deck, so the metallic road has something to reflect.
     # Without one a metallic surface reflects the environment sky only, which
     # at night is nearly black, and the road goes flat matte no matter what
@@ -1813,8 +1819,11 @@ func _bridge_deck(w: float, h: float) -> void:
     # it as a smooth gradient. 2.8 times as many at 40 percent the length puts
     # roughly the same light on the deck as many more separate edges, which is
     # what the mockups' road actually is: dozens of small bright reflections
-    # on a near-black surface rather than a few long ones.
-    var puddle_n := int(w * 14.0)
+    # on a near-black surface rather than a few long ones. Raised again from
+    # 14 to 24 per metre: this is the one term that has moved window contrast
+    # reliably, and the frame has headroom at 0.040 percent clipped against a
+    # ceiling of 0.240.
+    var puddle_n := int(w * 24.0)
     for i in range(puddle_n):
         var hx := _hash64(i * 6367 + 11)
         var hz := _hash64(i * 9283 + 29)
@@ -2387,6 +2396,50 @@ func _bridge_skyline(w: float, h: float) -> void:
     win.emission = Color(1.0, 0.86, 0.58)
     win.emission_energy_multiplier = 0.92
     win.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    # A band across the far end as well as the two flanks.
+    #
+    # The flanking banks sit at z = h/2 +/- 260, which is 90 degrees off the
+    # axis of a bridge the player looks straight down: from any viewpoint on
+    # the span they are behind the camera's shoulders and never appear. The
+    # mockups put the city AHEAD, under the tower arch, and it is the only
+    # thing in the far half of those frames that is not black -- this build's
+    # far end is a void past the fires.
+    # Further out, smaller, and lit as points rather than as bands.
+    #
+    # The first pass put 52 blocks 70 to 280 m ahead with one emissive strip
+    # per floor running 88 percent of the building's width. At that distance a
+    # 1.5 m strip is a thick slab on screen, and the city rendered as black
+    # rectangles with fat yellow bars across them. A skyline is read from many
+    # small points of light, so the bank moves back to 260 to 680 m -- where a
+    # building subtends a fraction of what it did -- and each floor carries
+    # three to five short segments instead of one bar.
+    for i in range(64):
+        var seed := int(i * 6151 + 555557)
+        var r := float(_hash64(seed) % 1000) / 1000.0
+        var r2 := float(_hash64(seed + 17) % 1000) / 1000.0
+        var r3 := float(_hash64(seed + 91) % 1000) / 1000.0
+        var bw := 16.0 + r * 40.0
+        var bh := 30.0 + r2 * 140.0
+        var x: float = -260.0 - r3 * 420.0
+        var zz: float = h * 0.5 + (float(i) / 63.0 - 0.5) * 1150.0 + (r - 0.5) * 70.0
+        var b := _box(Vector3(bw, bh, bw * 0.9), Vector3(x, bh * 0.5 - WATER_DROP, zz),
+            block, false)
+        b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        var floors := int(bh / 7.5)
+        for f in range(floors):
+            var lit := 3 + int(_hash64(seed + f * 131) % 3)
+            for k in range(lit):
+                if (_hash64(seed + f * 31 + k * 977) % 100) < 46:
+                    continue
+                var q2 := BoxMesh.new()
+                q2.size = Vector3(0.3, 0.9, bw * 0.15)
+                var s2 := MeshInstance3D.new()
+                s2.mesh = q2
+                s2.material_override = win
+                var kz: float = zz + (float(k) / float(lit - 1) - 0.5) * bw * 0.72
+                s2.position = Vector3(x + bw * 0.52, 5.0 + f * 7.5 - WATER_DROP, kz)
+                s2.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+                add_child(s2)
     for side in [-1.0, 1.0]:
         var z: float = h * 0.5 + side * 260.0
         for i in range(46):
