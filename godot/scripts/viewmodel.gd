@@ -109,7 +109,12 @@ func _ready() -> void:
     flash = OmniLight3D.new()
     flash.light_color = Color(1.0, 0.86, 0.62)
     flash.light_energy = 0.0
-    flash.omni_range = 7.0
+    # A 7 m range at energy 9, sitting 40 cm from the eye, is not a muzzle
+    # flash: it floods the whole lower frame and the ground in front of the
+    # operative, and on a weapon cycling every 0.2 s it is lit more than half
+    # the time, so it reads as a lamp bolted to the barrel. Short and dim
+    # enough to kick light onto what is close and nothing else.
+    flash.omni_range = 3.2
     flash.shadow_enabled = false
     muzzle.add_child(flash)
 
@@ -140,4 +145,4 @@ func update_motion(delta: float, look_delta: Vector2, speed01: float, aiming: bo
 
 func fire_kick(strength: float = 1.0) -> void:
     _kick = minf(_kick + 0.22 * strength, 0.5)
-    flash.light_energy = 9.0 * strength
+    flash.light_energy = 2.2 * strength

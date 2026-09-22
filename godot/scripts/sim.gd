@@ -399,16 +399,39 @@ func _stat(key: String, base_default: float = 0.0) -> float:
 ## with every earlier one.
 var fire_held := true
 
+## Where the weapon is pointed, in plan space, and whether to use it.
+##
+## The 2D game acquires a contact and sends the round at it. In first person
+## that is an aimbot: the crosshair is decoration and the operative shoots
+## whatever the simulation picked, which is not a game anyone is playing. With
+## `manual_aim` set the round leaves along `aim_dir` and hits whatever happens
+## to be there, or nothing.
+##
+## It stays off by default because the headless replay has no camera to aim
+## with, so that run keeps acquiring targets and stays comparable with every
+## earlier one.
+var manual_aim := false
+var aim_dir := Vector2(0.0, -1.0)
+
 func _step_weapon(dt: float) -> void:
     weapon_cooldown = maxf(0.0, weapon_cooldown - dt)
-    if weapon_cooldown > 0.0 or enemies.is_empty() or not fire_held:
+    # No hostiles is not a reason to refuse. The trigger is the player's and
+    # the weapon answers to it, whether or not the simulation has anything
+    # worth shooting at.
+    if weapon_cooldown > 0.0 or not fire_held:
         return
-    var target = _acquire_target()
-    if target == null:
+    var to: Vector2
+    if manual_aim:
+        to = aim_dir.normalized() * _stat("range", 500.0)
+    else:
+        var target = _acquire_target()
+        if target == null:
+            return
+        to = Vector2(target["pos"]) - player_pos
+    if to.length() < 0.001:
         return
     var cooldown: float = maxf(0.08, _stat("cooldown", 0.6))
     weapon_cooldown = cooldown
-    var to: Vector2 = target["pos"] - player_pos
     var base := to.angle()
     var count := int(maxf(1.0, _stat("count", 1)))
     shots_fired += 1
@@ -423,7 +446,7 @@ func _step_weapon(dt: float) -> void:
             "hit": [],
             "life": _stat("range", 500.0) / maxf(1.0, _stat("speed", 600.0)),
         })
-    weapon_fired.emit(to.normalized(), Vector2(target["pos"]))
+    weapon_fired.emit(to.normalized(), player_pos + to)
 
 ## Target selection by the weapon's own `targeting` rule.
 func _acquire_target():

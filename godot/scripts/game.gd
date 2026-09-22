@@ -36,6 +36,18 @@ var sim: Sim
 var hud: Hud
 var touch_controls: CanvasLayer = null
 var gunfeel: Node3D = null
+
+## True while the capture is fast-forwarding the contract.
+##
+## The advance steps the simulation a few thousand times inside a single frame,
+## so nothing is ever drawn and no _process runs to expire anything. Shot
+## effects fired during it therefore latch: the flash, the streak and the
+## muzzle light are left switched on, at whatever position the operative
+## happened to be at, and the screenshot afterwards catches them there. It
+## showed up as a bright pool of light on the paving beside the weapon that
+## took several rounds to chase, because the element producing it was not even
+## where the camera was looking.
+var _fast_forward := false
 var viewmodel: Node3D
 var _enemy_nodes: Dictionary = {}
 var _char_cache: Dictionary = {}
@@ -457,6 +469,14 @@ func _start_contract() -> void:
     sim = SimC.new()
     sim.name = "Sim"
     add_child(sim)
+    # The operative aims. In first person, acquiring a target and sending the
+    # round at it regardless of where the player is pointing is an aimbot.
+    #
+    # Except in the headless replay, which has no camera and therefore nothing
+    # to aim with. That run keeps acquiring targets so it stays comparable with
+    # every earlier one, and it is measuring the simulation rather than the
+    # aiming anyway.
+    sim.manual_aim = simtest_seconds <= 0.0
     sim.setup(level, 1234, op, GameData.difficulty(int(GameData.op1.get("difficulty", 0))),
         float(GameData.op1.get("duration", 5)), weapon_def, map.get("enemyBias", {}))
     sim.enemy_spawned.connect(_on_enemy_spawned)
@@ -481,6 +501,12 @@ func _process(delta: float) -> void:
     if sim == null or capture_path != "":
         return
     sim.player_pos = level.to_plan(player.global_position)
+    # Plan space shares its axes with world space, so a world heading is a
+    # plan heading once the vertical is dropped.
+    var fwd := -player.global_transform.basis.z
+    var flat := Vector2(fwd.x, fwd.z)
+    if flat.length() > 0.001:
+        sim.aim_dir = flat.normalized()
     sim.advance(delta)
     _sync_enemies()
     if viewmodel:
@@ -511,7 +537,7 @@ func _on_enemy_spawned(e: Dictionary) -> void:
 
 func _on_enemy_died(e: Dictionary) -> void:
     var node = e.get("node", null)
-    if node != null and is_instance_valid(node) and gunfeel:
+    if node != null and is_instance_valid(node) and gunfeel and not _fast_forward:
         # Something has to mark the kill. Without it a hostile simply stops
         # existing between one frame and the next, which reads as the thing
         # vanishing on its own rather than as having been shot.
@@ -535,6 +561,11 @@ func _sync_enemies() -> void:
             node.rotation.y = atan2(to_player.x, to_player.y) + PI
 
 func _on_weapon_fired(_dir: Vector2, target_pos: Vector2) -> void:
+    # Both of these latch during a fast-forward, the kick because it switches
+    # the muzzle light on and nothing runs to decay it, and that light is
+    # parented to the camera so it travels to the capture viewpoint still lit.
+    if _fast_forward:
+        return
     if viewmodel:
         viewmodel.fire_kick(1.0)
     if gunfeel and viewmodel and viewmodel.muzzle:
@@ -621,8 +652,14 @@ func _run_simtest() -> void:
 ## hostile nodes as it goes so they are where the simulation says they are.
 func _advance_for_capture(seconds: float) -> void:
     var step := Sim.FIXED_STEP
+    _fast_forward = true
     var vp := _viewpoint(capture_view)
     sim.player_pos = vp[0]
+    # Point the weapon where the capture camera is looking. Without this the
+    # operative aims along plan -Y whatever the viewpoint, so a capture shows
+    # rounds leaving in a direction nobody is facing.
+    var yaw := deg_to_rad(float(vp[1]))
+    sim.aim_dir = Vector2(sin(yaw), -cos(yaw))
     for i in range(int(seconds / step)):
         if sim.finished:
             break
@@ -632,4 +669,5 @@ func _advance_for_capture(seconds: float) -> void:
         # playthrough; hold them up rather than photographing a corpse.
         sim.player_hp = sim.player_max_hp
         sim.player_pos = vp[0]
+    _fast_forward = false
     _sync_enemies()

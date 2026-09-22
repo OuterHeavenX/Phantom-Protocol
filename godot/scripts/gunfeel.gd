@@ -81,12 +81,15 @@ func _load_samples() -> void:
 ## surfaces near the barrel a little and reads as nothing in daylight.
 func _build_flash() -> void:
     var mesh := QuadMesh.new()
-    mesh.size = Vector2(0.17, 0.17)
+    # 6 cm, not 17. The muzzle sits about 40 cm from the eye, so a 17 cm
+    # additive billboard there subtends a huge angle and came out as a white
+    # blob covering the bottom corner of the frame rather than as a flash.
+    mesh.size = Vector2(0.06, 0.06)
     var m := StandardMaterial3D.new()
     m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
     m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-    m.albedo_color = Color(1.0, 0.86, 0.58, 0.9)
+    m.albedo_color = Color(1.0, 0.86, 0.58, 0.7)
     m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
     m.disable_receive_shadows = true
     _flash = MeshInstance3D.new()
@@ -105,7 +108,7 @@ func _build_tracer() -> void:
     m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
     m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-    m.albedo_color = Color(1.0, 0.78, 0.45, 0.75)
+    m.albedo_color = Color(1.0, 0.78, 0.45, 0.5)
     m.disable_receive_shadows = true
     _tracer = MeshInstance3D.new()
     _tracer.mesh = mesh
@@ -138,10 +141,23 @@ func fire(from: Vector3, to: Vector3) -> void:
     if _tracer:
         var span := to - from
         var dist := span.length()
-        if dist > 0.4:
-            _tracer.global_position = from + span * 0.5
+        # Start the streak a metre out rather than at the barrel.
+        #
+        # The muzzle sits about 40 cm from the eye, so a tracer beginning there
+        # runs straight through the near plane: an additive box a few
+        # centimetres thick fills a large part of the lower frame at that
+        # distance and, once the glow pass has it, blooms into a white mass.
+        # It measured 55,000 near-white pixels in the bottom corner against
+        # 537 before any of this existed. A metre out it reads as a round
+        # leaving the weapon, which is what it is.
+        const NEAR_SKIP := 1.0
+        if dist > NEAR_SKIP + 0.5:
+            var dir := span / dist
+            var start := from + dir * NEAR_SKIP
+            var length := dist - NEAR_SKIP
+            _tracer.global_position = start + dir * (length * 0.5)
             _tracer.look_at(to, Vector3.UP)
-            _tracer.scale = Vector3(1.0, 1.0, dist)
+            _tracer.scale = Vector3(1.0, 1.0, length)
             _tracer.visible = true
             _tracer_timer = TRACER_LIFE
 
