@@ -359,7 +359,6 @@ func _build_touch_controls() -> void:
         return
     var tc := TouchControlsC.new()
     tc.player = player
-    tc.debug = "touchdebug" in OS.get_cmdline_user_args()
     player.touch_driven = true
     add_child(tc)
     touch_controls = tc
