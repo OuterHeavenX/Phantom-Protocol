@@ -770,6 +770,9 @@ func _spawn_player() -> void:
     # viewmodel cannot contribute any of it.
     if level.is_night():
         vm.rig_scale = 0.55
+        # And with a key side and a shadow side rather than an even wash.
+        vm.fill_ratio = 0.30
+        vm.key_boost = 1.55
     cam.add_child(vm)
     viewmodel = vm
 

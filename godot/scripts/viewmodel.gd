@@ -92,6 +92,20 @@ var _weapon := ""
 ## prop held in front of a dark photograph.
 var rig_scale := 1.0
 
+## Extra key, spent only where the fill has been taken away.
+var key_boost := 1.0
+
+## How much of the key the opposite-side fill carries.
+##
+## The rig is two omnis 1.2 to 1.4 m apart on either side of a weapon held 40
+## cm from the eye, so at equal energies they wrap it from both directions and
+## the result is flat by construction -- which is what the night frames show:
+## an evenly lit mid-grey object with no dark side. Every reference has a
+## clear key side and a clear shadow side with only a thin rim opposite, and
+## that value range across the largest near object in the picture is a real
+## part of what the band's window deviation is measuring.
+var fill_ratio := 1.0
+
 var _rest_pos := REST_POS
 var _rest_rot := REST_ROT
 
@@ -121,7 +135,7 @@ func _build_rig() -> void:
     # and both this and the albedos were short -- the earlier retreat to 0.55
     # was a correct response to a blown GLOVE at albedo 0.03, not evidence
     # that the weapon was bright enough. The glove's albedo carries that now.
-    key.light_energy = 0.85 * rig_scale
+    key.light_energy = 0.85 * rig_scale * key_boost
     key.omni_range = 1.4
     key.shadow_enabled = false
     key.light_cull_mask = VM_LAYER
@@ -132,7 +146,7 @@ func _build_rig() -> void:
     var rim := OmniLight3D.new()
     rim.position = Vector3(0.26, 0.24, -0.10)
     rim.light_color = Color(0.78, 0.86, 1.0)
-    rim.light_energy = 0.70 * rig_scale
+    rim.light_energy = 0.70 * rig_scale * fill_ratio
     rim.omni_range = 1.2
     rim.shadow_enabled = false
     rim.light_cull_mask = VM_LAYER
@@ -196,6 +210,107 @@ func use_weapon(id: String) -> void:
         if child is GeometryInstance3D:
             child.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
             child.layers = VM_LAYER
+    _texture_surfaces()
+
+## Surface detail for every part of the weapon and the hands.
+##
+## build-viewmodel.py's `mat()` sets a base colour, a metallic and a roughness
+## and nothing else, so each part of the model is one uniform value broken up
+## only by its bevels. At the framing the references use, the weapon and the
+## gloved hands are the largest and nearest objects in the frame, and that is
+## the worst place in a picture to put a surface with nothing in it.
+##
+## It shows in the band too. `patch` is the median standard deviation inside a
+## 48-pixel window; mapped over a 4 by 4 grid the whole remaining deficit sits
+## in the bottom row, where the mockups measure 0.069 to 0.129 against 0.032
+## here, and that row is mostly weapon in both. Raising the rig's light energy
+## moved the number DOWN, which settles what the fault is: a better-lit
+## featureless surface is a larger featureless surface.
+##
+## Applied here rather than in Blender because triplanar needs no UV unwrap
+## and keeps the grain continuous across parts that were blocked out
+## separately. The maps are multiplied onto whatever base colour the GLB
+## already carries, so the value hierarchy the model was authored with --
+## polymer darkest, metal mid, machined edges brightest -- survives.
+## Tiles per metre, and much finer than a world surface: a receiver is 5 cm
+## across, so 54 tiles per metre puts under three cycles over it and the
+## texture's slowest features -- which are meant to be wear blotches a few
+## centimetres wide on a wall -- become granite mottling on a gun.
+##
+## `vm_glove2` and `vm_cuff` are the parts actually in frame; the first pass
+## listed `vm_glove` and `vm_sleeve` only and left both hands smooth grey.
+const SURFACE_SETS := {
+    "vm_poly": ["vmpolymer", 150.0], "vm_polymer": ["vmpolymer", 150.0],
+    "vm_body": ["vmmetal", 165.0], "vm_body_dark": ["vmmetal", 165.0],
+    "vm_steel": ["vmmetal", 190.0], "vm_steel2": ["vmmetal", 190.0],
+    "vm_dark": ["vmmetal", 170.0], "vm_can": ["vmmetal", 150.0],
+    "vm_accent": ["vmmetal", 180.0], "vm_accent2": ["vmmetal", 180.0],
+    "vm_plate": ["vmmetal", 160.0],
+    "vm_glove": ["vmglove", 175.0], "vm_glove2": ["vmglove", 175.0],
+    "vm_strap": ["vmsleeve", 150.0], "vm_cuff": ["vmsleeve", 135.0],
+    "vm_sleeve": ["vmsleeve", 135.0],
+}
+
+func _texture_surfaces() -> void:
+    for child in _all_descendants(model):
+        if not (child is MeshInstance3D):
+            continue
+        var mi := child as MeshInstance3D
+        if mi.mesh == null:
+            continue
+        for si in range(mi.mesh.get_surface_count()):
+            var src := mi.get_active_material(si)
+            if not (src is BaseMaterial3D):
+                continue
+            var base := src as BaseMaterial3D
+            var key := base.resource_name
+            if key == "":
+                key = String(mi.name)
+            if OS.get_cmdline_user_args().has("vmdump"):
+                print("VMMAT node=%s surf=%d resource_name='%s' class=%s" % [
+                    mi.name, si, base.resource_name, base.get_class()])
+            if not SURFACE_SETS.has(key):
+                continue
+            var entry: Array = SURFACE_SETS[key]
+            var m: StandardMaterial3D = base.duplicate()
+            var alb := _tex(entry[0], "albedo")
+            if alb == null:
+                continue
+            # The set's albedo is centred near 0.3 to 0.44, so using it raw
+            # would wash out a receiver authored at 0.10. Dividing the tint by
+            # the set's mean keeps each part's authored value and lets the map
+            # supply only the variation around it.
+            var mean: float = float(SET_MEAN.get(entry[0], 0.35))
+            var c := base.albedo_color
+            m.albedo_color = Color(minf(1.0, c.r / mean), minf(1.0, c.g / mean),
+                minf(1.0, c.b / mean), c.a)
+            m.albedo_texture = alb
+            var nrm := _tex(entry[0], "normal")
+            if nrm != null:
+                m.normal_enabled = true
+                m.normal_texture = nrm
+                m.normal_scale = 0.9
+            var orm := _tex(entry[0], "orm")
+            if orm != null:
+                m.roughness_texture = orm
+                m.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GREEN
+                m.roughness = 1.0
+            m.uv1_triplanar = true
+            m.uv1_world_triplanar = false
+            m.uv1_scale = Vector3(entry[1], entry[1], entry[1])
+            m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+            mi.set_surface_override_material(si, m)
+
+## Mean albedo of each generated set, from make-viewmodel-textures.py.
+const SET_MEAN := {
+    "vmpolymer": 0.435, "vmmetal": 0.330, "vmglove": 0.236, "vmsleeve": 0.281,
+}
+
+static func _tex(set_name: String, slot: String) -> Texture2D:
+    var path := "res://art/textures/%s_%s.png" % [set_name, slot]
+    if not ResourceLoader.exists(path):
+        return null
+    return load(path)
 
 func _all_descendants(n: Node) -> Array:
     var out: Array = []
