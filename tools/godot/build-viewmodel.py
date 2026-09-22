@@ -62,6 +62,13 @@ def box(name, size, loc, material, rot=(0, 0, 0), bevel=0.0015, segments=2):
     bpy.ops.object.shade_flat()
     return o
 
+## A cylinder's depth runs along its LOCAL Z, which in this file's authoring
+## space is already Godot's forward. So a barrel, a suppressor or a stock tube
+## takes no rotation at all; it is a cross-body pin or a selector -- something
+## lying along X -- that needs rot=(0, radians(90), 0). Rotating a barrel by
+## 90 degrees about X, which is the instinctive thing to type, stands it on end:
+## the first SMG build had its barrel, flash hider and stock tube floating
+## vertically above the receiver like a dropped tent pole.
 def cyl(name, r, depth, loc, material, rot=(0, 0, 0), verts=24, bevel=0.0012):
     bpy.ops.mesh.primitive_cylinder_add(radius=r, depth=depth, location=loc, rotation=rot, vertices=verts)
     o = bpy.context.object
@@ -339,6 +346,311 @@ def export(path):
     )
     print("wrote", path, "%.0f KB" % (os.path.getsize(path) / 1024))
 
+
+
+# ---------------------------------------------------------------------------
+# The Vector: a compact SMG, which is what the references are of.
+# ---------------------------------------------------------------------------
+#
+# The pistol above is the Needle, vesper's starting sidearm. It is not what the
+# player is holding during testing and it is not what the reference screenshots
+# show: all five are a carbine or an SMG, held with the support hand wrapped
+# over a railed handguard, and that silhouette is most of what makes a frame
+# read as a modern shooter rather than as a tech demo.
+#
+# What separates a reference viewmodel from a grey blockout is almost entirely
+# COUNT of hard-surface detail, not the accuracy of the main shapes. A real
+# rail has forty individual teeth; an ejection port is a recess with a lip; a
+# receiver carries screws, pins, a selector, a magazine release, a sling loop
+# and stamped text. None of it is individually clever and all of it is what the
+# eye reads as "manufactured". So this is built as a lot of small parts and
+# then joined per material, which keeps the draw call count where the blockout
+# had it.
+
+def _rail(name, material, z0, z1, y, x=0.0, width=0.021, pitch=0.0082):
+    """A length of Picatinny rail: a flat base with slots cut by the teeth.
+
+    Modelled as the teeth rather than as the slots, because a tooth is a box
+    and a slot is a boolean. At viewmodel distance the difference is not
+    visible and the boolean is where this would start failing.
+    """
+    parts = []
+    base = box("%s_base" % name, (width, 0.0042, abs(z1 - z0)),
+               (x, y, (z0 + z1) * 0.5), material, bevel=0.0007)
+    parts.append(base)
+    n = max(2, int(abs(z1 - z0) / pitch))
+    for i in range(n):
+        z = min(z0, z1) + pitch * (i + 0.5)
+        parts.append(box("%s_t%d" % (name, i), (width, 0.0046, pitch * 0.55),
+                         (x, y + 0.0044, z), material, bevel=0.0006))
+    return parts
+
+
+def _screw(name, at, material, r=0.0024, depth=0.0026, axis="x"):
+    rot = (0, math.radians(90), 0) if axis == "x" else (math.radians(90), 0, 0)
+    return cyl(name, r, depth, at, material, rot=rot, verts=12, bevel=0.0004)
+
+
+def build_smg():
+    """Vector SMG. Barrel along -Z, up is +Y, grip near the origin."""
+    # The reference weapons are a desaturated blue-grey, not black: a black
+    # weapon against this build's dark paving loses its silhouette entirely,
+    # which is the mistake the pistol made. Reference 1 measures around 0.20
+    # to 0.28 on the receiver flats with much brighter machined edges.
+    body = mat("vm_body", (0.083, 0.090, 0.104), metallic=0.72, rough=0.42)
+    body_dark = mat("vm_body_dark", (0.044, 0.048, 0.057), metallic=0.65, rough=0.52)
+    poly = mat("vm_poly", (0.038, 0.039, 0.042), metallic=0.0, rough=0.68)
+    steel = mat("vm_steel2", (0.115, 0.120, 0.128), metallic=0.90, rough=0.24)
+    bore = mat("vm_bore2", (0.006, 0.006, 0.007), metallic=0.2, rough=0.9)
+    # The charging handle and the selector are the one warm accent in the
+    # reference -- a tan/bronze lever that reads instantly against the blue
+    # -grey. Without it the whole weapon is one hue and looks untextured.
+    accent = mat("vm_accent2", (0.126, 0.083, 0.038), metallic=0.55, rough=0.38)
+
+    # ---- Receiver ---------------------------------------------------------
+    box("rx_main", (0.054, 0.047, 0.255), (0.0, 0.012, -0.030), body, bevel=0.0022)
+    # A raised spine along the top, so the rail does not sit on a flat plate.
+    box("rx_spine", (0.030, 0.012, 0.250), (0.0, 0.038, -0.030), body, bevel=0.0018)
+    # Ejection port: a recessed panel with a proud lip around it. Two boxes
+    # rather than a boolean -- the lip is what catches light and reads as a
+    # cut, the recess alone reads as a decal.
+    box("rx_port_lip", (0.0032, 0.030, 0.076), (0.0274, 0.020, -0.052), body, bevel=0.0009)
+    box("rx_port", (0.0030, 0.024, 0.068), (0.0286, 0.020, -0.052), bore, bevel=0.0006)
+    # Left-side flat, where the stamped text goes once this is textured.
+    box("rx_plate", (0.0030, 0.034, 0.150), (-0.0276, 0.014, -0.040), body_dark, bevel=0.0009)
+
+    # ---- Handguard --------------------------------------------------------
+    box("hg_main", (0.046, 0.042, 0.150), (0.0, 0.010, -0.232), poly, bevel=0.0020)
+    # Vent slots down both sides, which is most of what says "handguard"
+    # rather than "tube" at this distance.
+    for i in range(6):
+        z = -0.170 - i * 0.021
+        for sx in (-1, 1):
+            box("hg_vent%d_%d" % (i, sx), (0.0034, 0.016, 0.012),
+                (sx * 0.0238, 0.010, z), bore, bevel=0.0005)
+    # Side rails, short, as the references carry.
+    _rail("hg_railL", body, -0.290, -0.200, 0.010, x=-0.0250, width=0.0044, pitch=0.0090)
+    _rail("hg_railR", body, -0.290, -0.200, 0.010, x=0.0250, width=0.0044, pitch=0.0090)
+
+    # ---- Top rail, the full length ----------------------------------------
+    _rail("rail", body, -0.300, 0.075, 0.046)
+
+    # ---- Barrel and muzzle ------------------------------------------------
+    cyl("bbl", 0.0092, 0.095, (0.0, 0.010, -0.340), steel)
+    cyl("bbl_nut", 0.0130, 0.016, (0.0, 0.010, -0.303), body, verts=16)
+    # Flash hider with real slots, not a smooth tube.
+    cyl("fh", 0.0135, 0.038, (0.0, 0.010, -0.392), body_dark, verts=16)
+    for i in range(5):
+        a = math.radians(-58 + i * 29)
+        box("fh_slot%d" % i, (0.0040, 0.0150, 0.020),
+            (math.sin(a) * 0.0115, 0.010 + math.cos(a) * 0.0115, -0.396), bore,
+            rot=(0, 0, -a), bevel=0.0004)
+    cyl("muzzle_bore", 0.0068, 0.012, (0.0, 0.010, -0.408), bore, verts=16, bevel=0)
+
+    # ---- Iron sights ------------------------------------------------------
+    # Front post in a protective hood, rear aperture on a folding leaf. The
+    # references all carry these even when an optic is fitted, and they are
+    # the highest-contrast small shapes in the frame.
+    box("fs_base", (0.020, 0.010, 0.020), (0.0, 0.052, -0.276), body_dark, bevel=0.0008)
+    for sx in (-1, 1):
+        box("fs_ear%d" % sx, (0.0034, 0.024, 0.016), (sx * 0.0082, 0.066, -0.276), body_dark, bevel=0.0006)
+    box("fs_post", (0.0026, 0.019, 0.0026), (0.0, 0.0635, -0.276), steel, bevel=0.0004)
+    box("rs_base", (0.022, 0.011, 0.024), (0.0, 0.052, 0.020), body_dark, bevel=0.0008)
+    box("rs_ring", (0.018, 0.018, 0.0040), (0.0, 0.068, 0.020), body_dark, bevel=0.0007)
+    cyl("rs_hole", 0.0052, 0.006, (0.0, 0.068, 0.020), bore, verts=14, bevel=0)
+
+    # ---- Charging handle --------------------------------------------------
+    box("ch_arm", (0.010, 0.0090, 0.052), (-0.0300, 0.030, 0.016), accent, bevel=0.0008)
+    box("ch_knob", (0.0180, 0.0125, 0.016), (-0.0360, 0.030, 0.034), accent, bevel=0.0010)
+
+    # ---- Controls ---------------------------------------------------------
+    cyl("sel", 0.0068, 0.008, (-0.0290, -0.004, 0.044), body_dark, rot=(0, math.radians(90), 0), verts=14)
+    box("sel_lever", (0.0075, 0.0052, 0.020), (-0.0320, -0.004, 0.052), accent, bevel=0.0006)
+    cyl("mag_rel", 0.0052, 0.007, (0.0280, -0.002, -0.006), body_dark, rot=(0, math.radians(90), 0), verts=12)
+    box("sling", (0.0060, 0.014, 0.0060), (-0.0280, 0.030, 0.070), body_dark, bevel=0.0008)
+
+    # ---- Magazine ---------------------------------------------------------
+    # Raked forward, which is what stops a magazine reading as a brick.
+    box("mag", (0.026, 0.135, 0.040), (0.0, -0.082, -0.012), poly, rot=(math.radians(-7), 0, 0), bevel=0.0018)
+    box("mag_well", (0.034, 0.028, 0.050), (0.0, -0.016, -0.014), body, bevel=0.0016)
+    for i in range(4):
+        box("mag_rib%d" % i, (0.0272, 0.0040, 0.030),
+            (0.0, -0.046 - i * 0.026, -0.008 + i * 0.003), bore,
+            rot=(math.radians(-7), 0, 0), bevel=0.0005)
+
+    # ---- Grip -------------------------------------------------------------
+    box("grip", (0.032, 0.098, 0.044), (0.0, -0.062, 0.062), poly, rot=(math.radians(13), 0, 0), bevel=0.0028)
+    # Finger grooves, so the grip is not a slab.
+    for i in range(3):
+        cyl("grip_groove%d" % i, 0.0062, 0.033, (0.0, -0.040 - i * 0.024, 0.0415 - i * 0.005),
+            bore, rot=(0, math.radians(90), 0), verts=12, bevel=0)
+    box("trigger_guard", (0.0075, 0.030, 0.044), (0.0, -0.026, 0.028), body, bevel=0.0022)
+    box("trigger", (0.0055, 0.020, 0.0075), (0.0, -0.026, 0.030), steel, bevel=0.0007)
+
+    # ---- Stock ------------------------------------------------------------
+    cyl("stock_tube", 0.0150, 0.090, (0.0, 0.016, 0.145), body, verts=16)
+    box("stock_body", (0.038, 0.050, 0.070), (0.0, 0.012, 0.165), poly, bevel=0.0022)
+    box("stock_pad", (0.040, 0.062, 0.012), (0.0, 0.006, 0.202), body_dark, bevel=0.0026)
+    box("stock_cheek", (0.030, 0.012, 0.055), (0.0, 0.040, 0.150), poly, bevel=0.0016)
+
+    # ---- Fasteners --------------------------------------------------------
+    for i, (x, y, z) in enumerate([
+            (0.0272, 0.030, 0.052), (0.0272, -0.002, -0.088), (-0.0272, 0.030, 0.052),
+            (-0.0272, -0.002, -0.088), (0.0236, 0.010, -0.286), (-0.0236, 0.010, -0.286),
+            (0.0272, 0.032, -0.104), (-0.0272, 0.032, -0.104)]):
+        _screw("screw%d" % i, (x, y, z), steel)
+
+
+def build_smg_gloves():
+    """Gloved hands on the SMG: support hand over the handguard, firing hand
+    on the grip.
+
+    Two things separate these from the pistol's hands above, and both come
+    straight off the references.
+
+    Fingers are separate metaball FIELDS, one per finger, not separate
+    elements of one field. Elements of a single field blend into each other,
+    which is what turned the last pair of hands into a mitten -- four fingers
+    a centimetre apart merge into one mass long before they touch. A field per
+    finger cannot blend, so the gaps survive at any resolution.
+
+    And the glove carries hard-surface armour. Every reference glove has
+    moulded knuckle plates and a cuff with a distinct edge, and those plates
+    are the only crisp specular in an otherwise soft object -- without them a
+    hand at this distance is a smooth blob no matter how good its silhouette
+    is.
+    """
+    glove = mat("vm_glove2", (0.026, 0.025, 0.024), metallic=0.0, rough=0.80)
+    plate = mat("vm_plate", (0.033, 0.033, 0.035), metallic=0.10, rough=0.46)
+    cuff = mat("vm_cuff", (0.040, 0.043, 0.036), metallic=0.0, rough=0.92)
+
+    def field(name, material, build_fn, resolution=0.0022):
+        mb = bpy.data.metaballs.new(name)
+        mb.resolution = resolution
+        mb.render_resolution = resolution
+        obj = bpy.data.objects.new(name, mb)
+        bpy.context.collection.objects.link(obj)
+        build_fn(mb)
+        bpy.context.view_layer.objects.active = obj
+        bpy.ops.object.select_all(action="DESELECT")
+        obj.select_set(True)
+        bpy.ops.object.convert(target="MESH")
+        conv = bpy.context.object
+        conv.name = name
+        conv.data.materials.append(material)
+        bpy.ops.object.shade_smooth()
+        return conv
+
+    def finger(name, pts, r0, r1):
+        """One finger, in its own field so it cannot merge with its neighbours."""
+        def build(mb):
+            for i in range(len(pts) - 1):
+                t0 = i / float(len(pts) - 1)
+                t1 = (i + 1) / float(len(pts) - 1)
+                _limb(mb, pts[i], pts[i + 1],
+                      r0 + (r1 - r0) * t0, r0 + (r1 - r0) * t1)
+        return field(name, glove, build, resolution=0.0016)
+
+    # ---- Support hand, wrapped over the handguard -------------------------
+    #
+    # The handguard spans x -0.023..0.023, y -0.011..0.031, z -0.307..-0.157.
+    # The fingers come up the left side, over the top and down the right, which
+    # is a real support grip and is what all five references show. The knuckles
+    # therefore sit on TOP of the weapon, in frame, where their plates read.
+    for i in range(4):
+        z = -0.196 - i * 0.0205
+        finger("sup_f%d" % i, [
+            (-0.034, -0.004, z), (-0.031, 0.020, z + 0.001),
+            (-0.014, 0.041, z + 0.002), (0.012, 0.041, z + 0.002),
+            (0.027, 0.023, z + 0.001)],
+            0.0090 - i * 0.0004, 0.0074 - i * 0.0004)
+    # Thumb, along the near side and pointing forward.
+    finger("sup_thumb", [
+        (-0.040, -0.026, -0.170), (-0.040, -0.014, -0.196),
+        (-0.036, -0.004, -0.224), (-0.031, 0.004, -0.248)], 0.0105, 0.0082)
+
+    def sup_palm(mb):
+        # The heel of the hand, below and left of the handguard.
+        _limb(mb, (-0.040, -0.014, -0.186), (-0.042, -0.026, -0.246), 0.0175, 0.0165)
+        _limb(mb, (-0.034, 0.004, -0.188), (-0.036, -0.006, -0.244), 0.0150, 0.0140)
+        # The back of the hand, riding the top-left corner of the handguard.
+        _limb(mb, (-0.030, 0.022, -0.190), (-0.032, 0.014, -0.250), 0.0135, 0.0125)
+    field("sup_palm", glove, sup_palm)
+
+    def sup_arm(mb):
+        # Down and to the left, out of frame toward the shoulder.
+        _limb(mb, (-0.044, -0.030, -0.240), (-0.078, -0.098, -0.180), 0.0215, 0.0250)
+        _limb(mb, (-0.078, -0.098, -0.180), (-0.120, -0.180, -0.090), 0.0250, 0.0290)
+    field("sup_arm", cuff, sup_arm)
+
+    # Knuckle plates on the support hand, sitting over the top of the guard.
+    for i in range(4):
+        z = -0.196 - i * 0.0205
+        box("sup_kn%d" % i, (0.020, 0.0070, 0.0165), (-0.006, 0.0475, z + 0.002),
+            plate, rot=(0, 0, math.radians(-14)), bevel=0.0012, segments=3)
+    # Cuff band where the glove meets the sleeve.
+    cyl("sup_cuff", 0.0245, 0.020, (-0.052, -0.046, -0.228), plate,
+        rot=(math.radians(62), math.radians(-28), 0), verts=18, bevel=0.0016)
+
+    # ---- Firing hand, on the grip -----------------------------------------
+    #
+    # The grip is centred (0, -0.062, 0.062), 0.032 x 0.098 x 0.044, raked 13.
+    for i in range(3):
+        y = -0.040 - i * 0.022
+        finger("fire_f%d" % i, [
+            (0.026, y, 0.052), (0.022, y - 0.004, 0.032),
+            (0.006, y - 0.008, 0.026), (-0.012, y - 0.006, 0.030)],
+            0.0086 - i * 0.0004, 0.0072 - i * 0.0004)
+    # Trigger finger, forward onto the trigger rather than around the grip.
+    finger("fire_trig", [
+        (0.024, -0.026, 0.050), (0.020, -0.028, 0.034),
+        (0.010, -0.028, 0.024)], 0.0086, 0.0074)
+
+    def fire_palm(mb):
+        _limb(mb, (0.018, -0.030, 0.078), (0.020, -0.086, 0.092), 0.0195, 0.0180)
+        _limb(mb, (0.004, -0.032, 0.076), (0.006, -0.082, 0.090), 0.0165, 0.0155)
+    field("fire_palm", glove, fire_palm)
+
+    def fire_arm(mb):
+        _limb(mb, (0.020, -0.090, 0.098), (0.044, -0.158, 0.172), 0.0215, 0.0255)
+        _limb(mb, (0.044, -0.158, 0.172), (0.070, -0.232, 0.250), 0.0255, 0.0295)
+    field("fire_arm", cuff, fire_arm)
+
+    for i in range(3):
+        y = -0.040 - i * 0.022
+        box("fire_kn%d" % i, (0.0070, 0.017, 0.016), (0.0305, y, 0.050),
+            plate, rot=(0, math.radians(8), 0), bevel=0.0011, segments=3)
+    cyl("fire_cuff", 0.0240, 0.019, (0.028, -0.104, 0.112), plate,
+        rot=(math.radians(-42), math.radians(18), 0), verts=18, bevel=0.0016)
+
+
+def join_by_material():
+    """Collapse the parts into one mesh per material.
+
+    The weapon is about two hundred separate objects by the time the rail
+    teeth, vents, ribs and screws are placed, and Godot draws every
+    MeshInstance3D on its own. Two hundred draw calls for an object in the
+    corner of the screen is not affordable next to a sector that was just cut
+    to 629, and nothing here ever moves independently, so they collapse to one
+    mesh per material with no visible change.
+    """
+    groups = {}
+    for o in list(bpy.context.scene.objects):
+        if o.type != "MESH" or not o.data.materials:
+            continue
+        groups.setdefault(o.data.materials[0].name, []).append(o)
+    for name, objs in groups.items():
+        if len(objs) < 2:
+            continue
+        bpy.ops.object.select_all(action="DESELECT")
+        for o in objs:
+            o.select_set(True)
+        bpy.context.view_layer.objects.active = objs[0]
+        bpy.ops.object.join()
+        bpy.context.object.name = "part_%s" % name
+    return len(groups)
+
+
 if __name__ == "__main__":
     # Blender hands the script everything after `--`, including the separator
     # itself, so taking argv[1] blindly wrote the model into a directory
@@ -346,7 +658,16 @@ if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if not a.startswith("-")]
     out = args[0] if args else "godot/art/models"
     os.makedirs(out, exist_ok=True)
+
     reset()
     build_pistol()
     build_hands()
+    join_by_material()
     export(os.path.join(out, "viewmodel_needle.glb"))
+
+    reset()
+    build_smg()
+    build_smg_gloves()
+    parts = join_by_material()
+    print("smg: %d material groups" % parts)
+    export(os.path.join(out, "viewmodel_vector.glb"))

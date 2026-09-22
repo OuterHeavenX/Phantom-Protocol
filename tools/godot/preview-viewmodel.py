@@ -12,9 +12,9 @@ capture.
 import math, os, sys
 import bpy
 
-def main(out, yaw=0.0):
+def main(out, yaw=0.0, model="godot/art/models/viewmodel_needle.glb", res=900, cam_z=0.34, pitch=0.0):
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    bpy.ops.import_scene.gltf(filepath="godot/art/models/viewmodel_needle.glb")
+    bpy.ops.import_scene.gltf(filepath=model)
     # The model is authored in Godot space (Y up, -Z forward) and the importer
     # hands it back Y-up, so a default Blender camera -- which also looks down
     # -Z with +Y up -- frames it without any correction.
@@ -29,8 +29,8 @@ def main(out, yaw=0.0):
     cam_data.lens = 38
     cam = bpy.data.objects.new("cam", cam_data)
     bpy.context.collection.objects.link(cam)
-    cam.location = (0.02, -0.02, 0.34)
-    cam.rotation_euler = (0, 0, 0)
+    cam.location = (0.02, -0.02, cam_z)
+    cam.rotation_euler = (math.radians(pitch), 0, 0)
     bpy.context.scene.camera = cam
 
     key = bpy.data.lights.new("key", "AREA"); key.energy = 45; key.size = 1.2
@@ -47,12 +47,18 @@ def main(out, yaw=0.0):
 
     sc = bpy.context.scene
     sc.render.engine = "CYCLES"; sc.cycles.device = "CPU"; sc.cycles.samples = 48
-    sc.render.resolution_x = 900; sc.render.resolution_y = 900
+    sc.render.resolution_x = res; sc.render.resolution_y = res
     sc.render.image_settings.file_format = "PNG"
     sc.render.filepath = os.path.abspath(out)
     bpy.ops.render.render(write_still=True)
     print("wrote", out)
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "vm.png",
-         float(sys.argv[2]) if len(sys.argv) > 2 else 0.0)
+    # Blender passes everything after `--`, separator included.
+    a = [x for x in sys.argv[1:] if not x.startswith("-")]
+    main(a[0] if a else "vm.png",
+         float(a[1]) if len(a) > 1 else 0.0,
+         a[2] if len(a) > 2 else "godot/art/models/viewmodel_needle.glb",
+         int(a[3]) if len(a) > 3 else 900,
+         float(a[4]) if len(a) > 4 else 0.34,
+         float(a[5]) if len(a) > 5 else 0.0)

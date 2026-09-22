@@ -8,7 +8,33 @@ extends Node3D
 ## viewmodel that keeps swimming while you stand still is the clearest tell
 ## that a first-person view is faked.
 
+## One model per weapon, because the references are all of a carbine or an SMG
+## and the operative spends the test build holding the Vector. A suppressed
+## pistol standing in for an SMG is the single most obvious thing wrong with a
+## frame of this game next to a reference screenshot.
 const MODEL := "res://art/models/viewmodel_needle.glb"
+const MODELS := {
+    "vector": "res://art/models/viewmodel_vector.glb",
+}
+
+## Where the barrel ends, in the viewmodel's own space with VM_SCALE already
+## applied. The flash, the tracer origin and the report all hang off this, so a
+## longer weapon needs its own or the muzzle flash goes off inside the
+## handguard.
+const MUZZLE := Vector3(0.0, 0.0115, -0.19)
+const MUZZLES := {
+    "vector": Vector3(0.0, 0.008, -0.325),
+}
+
+## The SMG is 60 cm from butt pad to flash hider against the pistol's 22, so it
+## cannot sit where the pistol sat: at the pistol's rest pose the stock lands
+## behind the camera and the weapon reads as a barrel floating in the corner.
+const REST_POS_FOR := {
+    "vector": Vector3(0.150, -0.142, -0.325),
+}
+const REST_ROT_FOR := {
+    "vector": Vector3(-1.5, 5.0, 0.5),
+}
 
 ## Rest pose, in camera space. Low and to the right, barrel angled a few
 ## degrees inboard so the suppressor reads across the frame rather than
@@ -46,31 +72,14 @@ var _bob := 0.0
 var _kick := 0.0
 var _aim := 0.0
 
-func _ready() -> void:
-    var packed := load(MODEL)
-    if packed == null:
-        push_error("Viewmodel missing: " + MODEL)
-        return
-    model = packed.instantiate()
-    model.scale = Vector3.ONE * VM_SCALE
-    add_child(model)
-    position = REST_POS
-    rotation_degrees = REST_ROT
-    # The viewmodel must never cast into the world or receive the world's
-    # shadows: at 30 cm from the near plane it would self-shadow into mush.
-    #
-    # It also lives on its own render layer, and the world's lights are told
-    # to skip that layer. A weapon held 30 cm from the eye receives the sun at
-    # a grazing angle no world surface does, so when the key light was raised
-    # for the sector the glove's highlights blew to white while its albedo was
-    # still 0.03 -- the hand read as a row of pale sausages. Lighting the
-    # viewmodel only from its own rig is how shooters keep a weapon looking
-    # the same whether the player is in a sunlit street or a dark stairwell.
-    for child in _all_descendants(model):
-        if child is GeometryInstance3D:
-            child.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-            child.layers = VM_LAYER
+var _weapon := ""
 
+func _ready() -> void:
+    _build_rig()
+    use_weapon("")
+
+## Muzzle marker and the two-light rig that lights the weapon on its own layer.
+func _build_rig() -> void:
     # With the world's lights culled off the viewmodel layer, this rig is the
     # only thing lighting the weapon, so it carries the whole exposure rather
     # than topping up the sun. Warm key from the left, matching the sector's
@@ -103,7 +112,7 @@ func _ready() -> void:
     add_child(rim)
 
     muzzle = Node3D.new()
-    muzzle.position = Vector3(0.0, 0.0115, -0.19)
+    muzzle.position = MUZZLE
     add_child(muzzle)
 
     flash = OmniLight3D.new()
@@ -117,6 +126,47 @@ func _ready() -> void:
     flash.omni_range = 3.2
     flash.shadow_enabled = false
     muzzle.add_child(flash)
+
+## Swap in the model for a weapon id, or the sidearm when it has none.
+##
+## The weapon is not known when this node is built -- the operative's loadout
+## is resolved a step later, when the contract starts -- so the model is loaded
+## here and can be replaced once it is.
+func use_weapon(id: String) -> void:
+    if id == _weapon and model != null:
+        return
+    _weapon = id
+    if model != null:
+        model.queue_free()
+        model = null
+    var path: String = MODELS.get(id, MODEL)
+    if not ResourceLoader.exists(path):
+        path = MODEL
+    var packed = load(path)
+    if packed == null:
+        push_error("Viewmodel missing: " + path)
+        return
+    model = packed.instantiate()
+    model.scale = Vector3.ONE * VM_SCALE
+    add_child(model)
+    position = REST_POS_FOR.get(id, REST_POS)
+    rotation_degrees = REST_ROT_FOR.get(id, REST_ROT)
+    if muzzle != null:
+        muzzle.position = MUZZLES.get(id, MUZZLE)
+    # The viewmodel must never cast into the world or receive the world's
+    # shadows: at 30 cm from the near plane it would self-shadow into mush.
+    #
+    # It also lives on its own render layer, and the world's lights are told
+    # to skip that layer. A weapon held 30 cm from the eye receives the sun at
+    # a grazing angle no world surface does, so when the key light was raised
+    # for the sector the glove's highlights blew to white while its albedo was
+    # still 0.03 -- the hand read as a row of pale sausages. Lighting the
+    # viewmodel only from its own rig is how shooters keep a weapon looking
+    # the same whether the player is in a sunlit street or a dark stairwell.
+    for child in _all_descendants(model):
+        if child is GeometryInstance3D:
+            child.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+            child.layers = VM_LAYER
 
 func _all_descendants(n: Node) -> Array:
     var out: Array = []

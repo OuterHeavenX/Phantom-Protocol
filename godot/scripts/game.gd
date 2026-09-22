@@ -576,6 +576,10 @@ func _start_contract() -> void:
     sim.enemy_spawned.connect(_on_enemy_spawned)
     sim.enemy_died.connect(_on_enemy_died)
     sim.weapon_fired.connect(_on_weapon_fired)
+    # The loadout is only resolved here, a step after the viewmodel node was
+    # built, so this is where the weapon's own model goes in.
+    if viewmodel:
+        viewmodel.use_weapon(String(weapon_def.get("id", "")))
     gunfeel = GunFeelC.new()
     add_child(gunfeel)
     gunfeel.setup(viewmodel.muzzle if viewmodel else null,
