@@ -31,13 +31,31 @@ rng = np.random.default_rng(90210)
 
 def lattice(freq):
     g = rng.random((freq + 1, freq + 1))
-    g[-1] = g[0]          # wrap in longitude, so the panorama seams cleanly
+    # Wrap in longitude, so the panorama seams cleanly.
+    #
+    # This was g[-1] = g[0], which wraps the wrong axis: g is indexed
+    # [latitude, longitude], so that set the last ROW equal to the first --
+    # tying the south pole to the north, which is meaningless, and leaving the
+    # longitude edges free to disagree. They did. The rendered frame carried a
+    # dead straight vertical line down the middle of the sky with blue on one
+    # side and near-white on the other, and it was the most obviously broken
+    # thing in the shot. Measured on the texture: a mean step of 9.0 across
+    # the seam column against a median of 0.10 everywhere else.
+    g[:, -1] = g[:, 0]
     y = np.linspace(0, freq, H)
-    x = np.linspace(0, freq, W)
-    yi = np.floor(y).astype(int); xi = np.floor(x).astype(int)
-    yf = (y - yi)[:, None]; xf = (x - xi)[None, :]
+    # Sampled on the same grid as `lon` below, one texel short of the full
+    # turn, so the wrapped node at index freq is approached and never landed
+    # on exactly.
+    x = np.linspace(0, freq, W, endpoint=False)
+    y0 = np.clip(np.floor(y).astype(int), 0, freq - 1)
+    x0 = np.clip(np.floor(x).astype(int), 0, freq - 1)
+    # The fraction is measured from the CLIPPED node, not from floor(). With
+    # floor() the two disagree at exactly x == freq: the index clamps back to
+    # freq-1 while the fraction reads 0, so the last column interpolated to
+    # the second-to-last lattice node instead of to the wrapped one, and every
+    # octave put a step there. That was the vertical line down the sky.
+    yf = (y - y0)[:, None]; xf = (x - x0)[None, :]
     yf = yf * yf * (3 - 2 * yf); xf = xf * xf * (3 - 2 * xf)
-    y0 = np.clip(yi, 0, freq - 1); x0 = np.clip(xi, 0, freq - 1)
     a = g[y0][:, x0]; b = g[y0][:, x0 + 1]
     c = g[y0 + 1][:, x0]; d = g[y0 + 1][:, x0 + 1]
     return (a * (1 - xf) + b * xf) * (1 - yf) + (c * (1 - xf) + d * xf) * yf
@@ -50,7 +68,11 @@ def fbm(octaves=6, base=3, gain=0.55):
     return out / tot
 
 def main(out_dir):
-    lon = np.linspace(-np.pi, np.pi, W)[None, :]
+    # endpoint=False: with it, the last column repeats the first column's
+    # longitude, so the texture carries a duplicated column at the seam and
+    # the texel grid is not uniform. The wrap above is what makes the join
+    # continuous; this is what makes it land on the right texel.
+    lon = np.linspace(-np.pi, np.pi, W, endpoint=False)[None, :]
     lat = np.linspace(np.pi / 2, -np.pi / 2, H)[:, None]
     # Broadcast to the full panorama up front. Left as an (H, 1) column the
     # gradient builds an (H, 1, 3) image and the sun term, which is genuinely
@@ -97,9 +119,32 @@ def main(out_dir):
     below = np.clip(-up * 6.0, 0, 1)
     sky = sky * (1 - below[..., None]) + ground * below[..., None]
 
-    # Held below unity so the sky never clips. Measured against the
-    # references, their sky sits near 0.78 rather than at paper white.
-    img = (np.clip(sky * 0.80, 0, 1) ** (1 / 2.2) * 255).astype(np.uint8)
+    # Held well below unity so the sky never clips.
+    #
+    # 0.80 was set while the panorama had a seam through it, so the strip of
+    # sky in frame was half blue and half glow and the brightness of the glow
+    # half was never really looked at. With the seam gone the whole strip is
+    # the bright side, and it measured a 95th percentile of 0.802 against
+    # references at 0.62, 0.72 and 0.76 -- the sky was the brightest thing in
+    # the shot and read as paper rather than as air.
+    #
+    # This is also the ambient term, since the environment takes its fill
+    # straight from the sky's radiance, so bringing it down deepens the
+    # shadows at the same time -- which is the direction they needed anyway:
+    # the crushed-pixel share has been sitting near zero against references
+    # between 0.18 and 3.9.
+    #
+    # Measured at three values rather than argued about. 0.68 put all eleven
+    # statistics in band but left the 95th percentile at 0.789 against a
+    # ceiling of 0.790, which is no margin at all. 0.58 has the margin and is
+    # closer to the references on everything that moved with it:
+    #
+    #            0.80    0.68    0.58     references
+    #   mean     0.418   0.405   0.393    0.369 .. 0.408
+    #   p95      0.802   0.789   0.779    0.619 .. 0.760
+    #   ratio    18.6    20.5    22.5     7.95 .. 27.0
+    #   crushed  0.015   0.056   0.156    0.183 .. 3.904
+    img = (np.clip(sky * 0.58, 0, 1) ** (1 / 2.2) * 255).astype(np.uint8)
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, "sky_panorama.png")
     Image.fromarray(img).save(path)
