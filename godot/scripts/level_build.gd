@@ -1740,7 +1740,17 @@ func _bridge_deck(w: float, h: float) -> void:
     # lying in the road, scattered deterministically from the footprint hash,
     # taking their colour from whichever source is nearest -- sodium from the
     # lamps, orange from the fires ahead.
-    var puddle_n := int(w * 2.4)
+    # More of them, smaller and dimmer.
+    #
+    # The first pass proved the mechanism -- micro reached band for the first
+    # time in twenty-six rounds and patch moved further than under any of the
+    # three grain-based attempts -- and then overshot on brightness: the 95th
+    # percentile went from 0.455 to 0.631 and the clipped share from 0.843 to
+    # 1.177 percent. patch wants MORE contrast inside a window, not less, so
+    # the answer is not simply to dim them: it is to keep the count of bright
+    # points up while cutting how much of the frame each one covers. Half the
+    # energy, two thirds the size, half again as many.
+    var puddle_n := int(w * 3.6)
     for i in range(puddle_n):
         var hx := _hash64(i * 6367 + 11)
         var hz := _hash64(i * 9283 + 29)
@@ -1751,10 +1761,10 @@ func _bridge_deck(w: float, h: float) -> void:
         # Ahead of the player the fires dominate; behind, the lamps do.
         var col := Color(1.0, 0.78, 0.50).lerp(Color(1.0, 0.50, 0.22),
             clampf(1.0 - px / (w * 0.6), 0.0, 1.0) * warm)
-        var length: float = 1.6 + float(hs % 37) * 0.22
-        var width: float = 0.30 + float(hx % 23) * 0.035
+        var length: float = 1.1 + float(hs % 37) * 0.145
+        var width: float = 0.20 + float(hx % 23) * 0.024
         _wet_streak(Vector3(px, 0.0, pz), col, length, width,
-            0.035 + float(hz % 17) * 0.004)
+            0.018 + float(hz % 17) * 0.0021)
 
     var lanes := 4
     var n := int(w / 5.5)
