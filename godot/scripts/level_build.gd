@@ -1502,7 +1502,20 @@ func _bridge_water(w: float, h: float) -> void:
 
 ## The roadway itself: one slab between the parapets, with lane markings.
 func _bridge_deck(w: float, h: float) -> void:
-    var road := _mat("ground_2")
+    # Wet asphalt, which is the single largest thing in every mockup and where
+    # most of the light in those frames actually comes from: the road is close
+    # to a mirror, and every lamp, fire and tail light is doubled in it as a
+    # long streak running toward the camera.
+    #
+    # Godot has no screen-space reflection, and the browser build runs the
+    # Compatibility renderer where even less is available, so this is built
+    # from the two things that do work everywhere -- a low-roughness metallic
+    # surface with a probe to reflect, and the streaks themselves as geometry.
+    var road := StandardMaterial3D.new()
+    road.albedo_color = Color(0.018, 0.020, 0.024)
+    road.metallic = 0.42
+    road.roughness = 0.13
+    road.metallic_specular = 0.9
     var deck := _box(Vector3(w + 2.0, 0.55, h * 0.70),
         Vector3(w * 0.5, -0.275, h * 0.5), road, true, 0.5)
     deck.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -1521,6 +1534,19 @@ func _bridge_deck(w: float, h: float) -> void:
     var paint := StandardMaterial3D.new()
     paint.albedo_color = Color(0.40, 0.39, 0.36)
     paint.roughness = 0.42
+    # A probe over the deck, so the metallic road has something to reflect.
+    # Without one a metallic surface reflects the environment sky only, which
+    # at night is nearly black, and the road goes flat matte no matter what
+    # its roughness says.
+    var probe := ReflectionProbe.new()
+    probe.size = Vector3(w * 0.5, 40.0, h)
+    probe.position = Vector3(w * 0.5, 9.0, h * 0.5)
+    probe.update_mode = ReflectionProbe.UPDATE_ONCE
+    probe.intensity = 1.5
+    probe.max_distance = 260.0
+    probe.ambient_mode = ReflectionProbe.AMBIENT_ENVIRONMENT
+    add_child(probe)
+
     var lanes := 4
     var n := int(w / 5.5)
     for lane in range(lanes):
@@ -1535,6 +1561,38 @@ func _bridge_deck(w: float, h: float) -> void:
 
 ## Parapets become steel railings rather than walls, and everything else the
 ## simulation calls a wall stays a solid so collision is unchanged.
+## The reflection streaks under every light on the deck.
+##
+## A wet road does not reflect a lamp as a dot, it reflects it as a long tapering
+## streak running toward the viewer, because the surface is rippled along the
+## direction of travel. That streak is a huge share of the lit area in all
+## three mockups -- more of the frame than the lamps themselves -- and no
+## amount of roughness tuning produces it, because the effect comes from the
+## surface's anisotropy rather than from its gloss.
+##
+## So they are drawn: an additive card lying on the deck under each source,
+## long in X (down the span, which is where the camera looks from) and narrow
+## in Z. They sit 3 cm above the road and cast nothing.
+func _wet_streak(at: Vector3, colour: Color, length: float, width: float, energy: float) -> void:
+    var m := StandardMaterial3D.new()
+    m.albedo_color = Color(colour.r, colour.g, colour.b, 1.0)
+    m.emission_enabled = true
+    m.emission = colour
+    m.emission_energy_multiplier = energy
+    m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+    m.cull_mode = BaseMaterial3D.CULL_DISABLED
+    m.disable_receive_shadows = true
+    var q := PlaneMesh.new()
+    q.size = Vector2(length, width)
+    var mi := MeshInstance3D.new()
+    mi.mesh = q
+    mi.material_override = m
+    mi.position = Vector3(at.x, 0.03, at.z)
+    mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    add_child(mi)
+
 func _bridge_solids() -> void:
     for o in level.walls:
         var t := String(o.get("type", "wall"))
@@ -1674,9 +1732,34 @@ func _bridge_lamps() -> void:
     head.emission = Color(1.0, 0.80, 0.52)
     head.emission_energy_multiplier = 16.0
     head.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    # The simulation authored five pairs over 115 m of deck, which is one lamp
+    # every 23 m per side -- correct for a real bridge but far short of what
+    # the mockups carry, where the receding row of lamps is the thing that
+    # gives the span its depth. So each authored light is kept exactly where
+    # the simulation put it, and two more are interpolated between it and the
+    # next. Lamp posts stand on the parapet line, outside the roadway, so they
+    # block nothing the simulation thinks is open.
+    var posts: Array = []
     for l in level.lights:
-        var at := level.to_world(Vector2(float(l["x"]), float(l["y"])), 0.0)
-        var col := Color(String(l.get("color", "#ffd095")))
+        posts.append([Vector2(float(l["x"]), float(l["y"])), String(l.get("color", "#ffd095")),
+            float(l.get("radius", 205))])
+    var extra: Array = []
+    for i in range(posts.size()):
+        for j in range(posts.size()):
+            if i == j:
+                continue
+            var a: Vector2 = posts[i][0]
+            var b: Vector2 = posts[j][0]
+            if absf(a.y - b.y) > 1.0 or b.x <= a.x:
+                continue
+            if b.x - a.x > 800.0:
+                continue
+            for k in [1, 2]:
+                extra.append([a.lerp(b, float(k) / 3.0), posts[i][1], posts[i][2]])
+    posts.append_array(extra)
+    for entry in posts:
+        var at := level.to_world(entry[0], 0.0)
+        var col := Color(String(entry[1]))
         var mast := _box(Vector3(0.22, 8.0, 0.22), at + Vector3(0, 4.0, 0), steel, false)
         mast.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
         # The arm reaches in over the roadway, which is what throws the long
@@ -1696,7 +1779,7 @@ func _bridge_lamps() -> void:
         lamp.position = at + Vector3(0, 7.5, inward * 2.5)
         lamp.light_color = col
         lamp.light_energy = 9.0
-        lamp.omni_range = level.metres(float(l.get("radius", 205))) * 1.5
+        lamp.omni_range = level.metres(float(entry[2])) * 1.6
         lamp.omni_attenuation = 1.4
         lamp.shadow_enabled = false
         add_child(lamp)
@@ -1717,7 +1800,7 @@ func _bridge_wrecks() -> void:
     tail.albedo_color = Color(0.35, 0.03, 0.03)
     tail.emission_enabled = true
     tail.emission = Color(1.0, 0.07, 0.05)
-    tail.emission_energy_multiplier = 9.0
+    tail.emission_energy_multiplier = 4.0
     tail.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 
     var idx := 0
@@ -1759,18 +1842,19 @@ func _wreck_car(at: Vector3, length: float, width: float, yaw: float,
             wheel.rotation = Vector3(0.0, yaw, PI * 0.5)
             _detail(wheel)
     # Tail lights, which are most of the red in the mockups' middle distance.
-    if idx % 2 == 0:
+    # Tail lights are a point of red in the distance, not a light source.
+    #
+    # Giving every other wreck a real omni at 2.2 over 5.5 m flooded the whole
+    # deck: the frame measured a saturation of 0.554 against the mockups' 0.21
+    # to 0.40 and a red-to-blue ratio of 1.84 against their 0.83 to 1.40. In
+    # the mockups the tail lights are small hot points that light the wet road
+    # directly under the bumper and nothing else. So the lamp is gone and only
+    # the emissive card remains, on a quarter of the wrecks rather than half.
+    if idx % 4 == 0:
         var off2 := Vector3(-cos(yaw) * length * 0.5, h * 0.62, -sin(yaw) * length * 0.5)
         var t := _box(Vector3(0.10, 0.12, width * 0.26), at + off2, tail, false)
         t.rotation.y = yaw
         t.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-        var lamp := OmniLight3D.new()
-        lamp.position = at + off2
-        lamp.light_color = Color(1.0, 0.10, 0.06)
-        lamp.light_energy = 2.2
-        lamp.omni_range = 5.5
-        lamp.shadow_enabled = false
-        add_child(lamp)
 
 func _wreck_truck(at: Vector3, length: float, width: float, yaw: float,
         body: Material, rust: Material, glass: Material, tyre: Material,
@@ -1864,6 +1948,10 @@ func _bridge_fires() -> void:
             lamp.omni_range = spec[1]
             lamp.shadow_enabled = false
             add_child(lamp)
+        # The fire doubled in the road, which in the mockups runs most of the
+        # way back down the deck toward the player.
+        _wet_streak(at, Color(1.0, 0.44, 0.14), 70.0, 5.0, 0.75)
+        _wet_streak(at, Color(1.0, 0.56, 0.26), 120.0, 2.0, 0.5)
         # Smoke: a dark column leaning with the map's own wind.
         var smoke := StandardMaterial3D.new()
         smoke.albedo_color = Color(0.045, 0.040, 0.038, 0.62)
