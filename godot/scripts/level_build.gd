@@ -1810,7 +1810,7 @@ func _bridge_cable(x0: float, x1: float, top: float, z: float, w: float, main: b
     lamp.albedo_color = Color(1.0, 0.86, 0.62)
     lamp.emission_enabled = true
     lamp.emission = Color(1.0, 0.84, 0.58)
-    lamp.emission_energy_multiplier = 7.0
+    lamp.emission_energy_multiplier = 3.0
     lamp.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     var drops := int(absf(x1 - x0) / 4.4)
     for i in range(1, drops):
@@ -1841,7 +1841,7 @@ func _bridge_lamps() -> void:
     head.albedo_color = Color(0.9, 0.78, 0.55)
     head.emission_enabled = true
     head.emission = Color(1.0, 0.80, 0.52)
-    head.emission_energy_multiplier = 6.0
+    head.emission_energy_multiplier = 2.5
     head.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     # The simulation authored five pairs over 115 m of deck, which is one lamp
     # every 23 m per side -- correct for a real bridge but far short of what
@@ -1889,7 +1889,16 @@ func _bridge_lamps() -> void:
         var lamp := OmniLight3D.new()
         lamp.position = at + Vector3(0, 7.5, inward * 2.5)
         lamp.light_color = col
-        lamp.light_energy = 9.5
+        # 9.5 put a pool of pure white under every post.
+        #
+        # This was the invariant behind three rounds of chasing the wrong
+        # emitter: the clipped fraction sat at 1.156 percent while the
+        # searchlight came down from 14 to 4.5 to 2.6 and the streaks halved
+        # twice, because none of those were producing it. Mapping the clipped
+        # pixels found one blob filling 21 percent of the bottom-left cell at
+        # (0.998, 1.0, 1.0) -- the nearest lamp's own pool, made worse in the
+        # same round by the road's albedo going up 2.4 times underneath it.
+        lamp.light_energy = 4.2
         lamp.omni_range = level.metres(float(entry[2])) * 2.0
         lamp.omni_attenuation = 1.15
         lamp.shadow_enabled = false
@@ -2028,7 +2037,7 @@ func _bridge_fires() -> void:
     flame.albedo_color = Color(1.0, 0.42, 0.10)
     flame.emission_enabled = true
     flame.emission = Color(1.0, 0.44, 0.12)
-    flame.emission_energy_multiplier = 8.0
+    flame.emission_energy_multiplier = 4.5
     flame.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     flame.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
 
@@ -2093,7 +2102,7 @@ func _bridge_skyline(w: float, h: float) -> void:
     win.albedo_color = Color(0.55, 0.50, 0.36)
     win.emission_enabled = true
     win.emission = Color(1.0, 0.86, 0.58)
-    win.emission_energy_multiplier = 3.0
+    win.emission_energy_multiplier = 1.8
     win.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     for side in [-1.0, 1.0]:
         var z: float = h * 0.5 + side * 260.0
@@ -2262,7 +2271,7 @@ func _bridge_helicopter(w: float, h: float) -> void:
         m.albedo_color = spec[1]
         m.emission_enabled = true
         m.emission = spec[1]
-        m.emission_energy_multiplier = 9.0
+        m.emission_energy_multiplier = 4.0
         m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
         var b := MeshInstance3D.new()
         var s := SphereMesh.new()
@@ -2278,16 +2287,29 @@ func _bridge_helicopter(w: float, h: float) -> void:
     # The searchlight. A real spot, so it lands on the deck and the water and
     # moves with the aircraft.
     var spot := SpotLight3D.new()
+    # Aimed outboard, over the water, not down onto the roadway.
+    #
+    # Three rounds were spent cutting this light's energy -- 14, then 4.5,
+    # then 2.6 -- while the clipped fraction sat unmoved at 1.06 to 1.16
+    # percent. Cutting energy was never going to work: at an 11 degree cone
+    # the output is concentrated into a few square metres, so the pool stays
+    # saturated at any energy that leaves it visible at all. And because the
+    # aircraft orbits, that pool lands somewhere different in every capture,
+    # which is why it kept reappearing after each fix.
+    #
+    # In the mockups the beam is over the WATER beside the span, seen as a
+    # shaft through the rain, and what it lights is a patch of river. So it
+    # points outboard and down, spread over four times the area.
     spot.position = Vector3(0.6, -1.2, 1.6)
-    spot.rotation_degrees = Vector3(-62.0, 0.0, 0.0)
+    spot.rotation_degrees = Vector3(-52.0, 34.0, 0.0)
+    spot.spot_angle = 21.0
     spot.light_color = Color(0.86, 0.92, 1.0)
     # 14 put a blown white pool on the deck covering nearly a quarter of the
     # bottom-left of the frame. In the mockups the beam is a shaft you can see
     # THROUGH the rain with a soft ellipse at its foot -- it lights the deck,
     # it does not bleach it.
-    spot.light_energy = 2.6
+    spot.light_energy = 1.1
     spot.spot_range = 150.0
-    spot.spot_angle = 11.0
     spot.spot_angle_attenuation = 0.6
     spot.shadow_enabled = false
     heli.add_child(spot)
@@ -2312,7 +2334,7 @@ func _bridge_helicopter(w: float, h: float) -> void:
     cm.radial_segments = 12
     cone.mesh = cm
     cone.material_override = beam_mat
-    cone.position = Vector3(0.6, -1.2, 1.6) + Vector3(0.0, -32.0, 17.0)
-    cone.rotation_degrees = Vector3(28.0, 0.0, 0.0)
+    cone.position = Vector3(0.6, -1.2, 1.6) + Vector3(20.0, -30.0, 14.0)
+    cone.rotation_degrees = Vector3(38.0, -34.0, 0.0)
     cone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     heli.add_child(cone)
