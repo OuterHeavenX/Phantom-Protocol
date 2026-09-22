@@ -36,6 +36,54 @@ var rooms: Array = []
 var spawn_point: Vector2 = Vector2.ZERO
 var extraction_point: Vector2 = Vector2.ZERO
 
+## Which map this export came from, and the three dictionaries the 2D game
+## authored alongside its geometry. The port dressed the first sector from
+## nothing but walls and cover because Blacksite is a daylit street and the
+## defaults happened to suit it. CROSSFALL is not: it carries rain at full
+## density, lightning, and a near-black blue palette, and none of that can be
+## guessed from a rectangle list.
+var map_id := "blacksite"
+var weather = null
+var palette = null
+var layout = null
+
+## True when the map's own weather says so. The 2D game has no day/night flag
+## -- it has a palette and a weather block -- and a deck authored at #141d26
+## under full rain is night by construction.
+func is_night() -> bool:
+    if weather == null:
+        return false
+    return String(weather.get("type", "")) in ["rain", "storm", "ash", "snow"]
+
+func rain_density() -> float:
+    if weather == null:
+        return 0.0
+    if String(weather.get("type", "")) != "rain":
+        return 0.0
+    return float(weather.get("density", 0.0))
+
+func wind() -> float:
+    return float(weather.get("wind", 0.0)) if weather != null else 0.0
+
+func has_flashes() -> bool:
+    return bool(weather.get("flashes", false)) if weather != null else false
+
+## A colour out of the map's palette, parsed from the CSS the 2D game stores.
+func pal(key: String, fallback: Color) -> Color:
+    if palette == null or not palette.has(key):
+        return fallback
+    var v := String(palette[key])
+    if v.begins_with("#"):
+        return Color(v)
+    if v.begins_with("rgba(") or v.begins_with("rgb("):
+        var inner := v.substr(v.find("(") + 1, v.rfind(")") - v.find("(") - 1)
+        var parts := inner.split(",")
+        if parts.size() >= 3:
+            return Color(float(parts[0]) / 255.0, float(parts[1]) / 255.0,
+                float(parts[2]) / 255.0,
+                float(parts[3]) if parts.size() > 3 else 1.0)
+    return fallback
+
 func load_from(path: String) -> bool:
     var text := FileAccess.get_file_as_string(path)
     if text.is_empty():
@@ -54,6 +102,10 @@ func load_from(path: String) -> bool:
     lights = d.get("lights", [])
     hazards = d.get("hazards", [])
     rooms = d.get("rooms", [])
+    map_id = String(d.get("map", "blacksite"))
+    weather = d.get("weather", null)
+    palette = d.get("palette", null)
+    layout = d.get("layout", null)
     var sp = d.get("spawn", null)
     spawn_point = Vector2(float(sp["x"]), float(sp["y"])) if sp else Vector2(width * 0.5, height * 0.5)
     var ep = d.get("extraction", null)

@@ -40,6 +40,10 @@ var simtest_seconds: float = 0.0
 ## guessing at that from a screenshot is how rounds get wasted. The numbers it
 ## prints are draw calls and milliseconds, which is what the fix has to move.
 var perf_frames := 0
+## Which sector to build. The game ships two: the daylit opening street and
+## CROSSFALL SPAN, a suspension crossing in rain at night. Driven by
+## -- level <id> so a capture can be taken of either without a code change.
+var level_id := "blacksite"
 
 var sim: Sim
 var hud: Hud
@@ -83,7 +87,7 @@ func _ready() -> void:
         add_child(guard)
         guard.start()
     level = LevelC.new()
-    if not level.load_from("res://data/level_blacksite.json"):
+    if not level.load_from("res://data/level_%s.json" % level_id):
         push_error("Could not load the level export.")
         return
     # Yield before taking the thread, or the browser never gets its audio up.
@@ -194,6 +198,9 @@ func _parse_args() -> void:
             "perf":
                 perf_frames = int(args[i + 1]) if i + 1 < args.size() else 60
                 i += 1
+            "level":
+                level_id = args[i + 1] if i + 1 < args.size() else "blacksite"
+                i += 1
         i += 1
 
 ## Every render layer except the viewmodel's. World lights use this as their
@@ -261,7 +268,8 @@ func _build_environment() -> void:
     # every shadowed surface in the sector with the same wash from every
     # direction. The panorama carries cumulus, a horizon haze band and a sun
     # glow placed at the key light's own bearing.
-    var pano := load("res://art/textures/sky_panorama.png")
+    var pano := load("res://art/textures/sky_panorama_night.png") if level.is_night() \
+        else load("res://art/textures/sky_panorama.png")
     var sky_mat: Material
     if pano != null:
         var pm := PanoramaSkyMaterial.new()
@@ -394,9 +402,85 @@ func _build_environment() -> void:
     bounce.light_cull_mask = WORLD_LAYERS
     add_child(bounce)
 
+    if level.is_night():
+        _night_overrides(env, bounce)
+
     env_node = WorldEnvironment.new()
     env_node.environment = env
     add_child(env_node)
+
+## Turn the daylight rig into CROSSFALL's night.
+##
+## Written as an override on top of the day setup rather than as a second
+## environment builder, because almost everything -- the tonemapper, the glow
+## curve, the fog model, the sky as an ambient source -- is shared, and two
+## copies of that would drift apart within a round.
+##
+## The numbers come off the three mockups rather than out of the air. They
+## measure a mean luminance of 0.151 to 0.185 against the daylight sector's
+## 0.40, a 5th percentile of 0.003 to 0.008, and a crushed-pixel share of 18
+## to 30 percent: a quarter of that frame is genuinely black, with everything
+## that is lit at all being lit by a lamp, a fire or a window rather than by
+## the sky. That is the opposite of the opening sector, where the sky is the
+## light source and nothing is allowed to go empty.
+func _night_overrides(env: Environment, bounce: DirectionalLight3D) -> void:
+    # The moon, not the sun. Cool, weak, and high, so it separates the deck
+    # from the water and does nothing else. Keeping shadows on it is what
+    # stops the towers and the wrecks reading as flat cutouts.
+    sun.rotation_degrees = Vector3(-58.0, 152.0, 0.0)
+    sun.light_color = Color(0.60, 0.70, 0.95)
+    sun.light_energy = 0.16
+    sun.light_angular_distance = 1.4
+    sun.directional_shadow_max_distance = 90.0
+
+    # The fill goes almost entirely. In the mockups the only thing filling a
+    # shadow is a sodium lamp or a fire, and the fill light was the single
+    # lever keeping the day scene's shadows off the floor.
+    bounce.light_energy = 0.06
+    bounce.light_color = Color(0.42, 0.52, 0.72)
+
+    # Sky ambient stops being the light source. At sky contribution 1.0 the
+    # night panorama would still wash the deck to an even blue; a fixed dark
+    # colour with a low energy leaves the lamps to do the work.
+    env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+    env.ambient_light_sky_contribution = 0.0
+    env.ambient_light_color = level.pal("fog", Color(0.055, 0.075, 0.105))
+    env.ambient_light_energy = 0.22
+
+    # Storm haze. Heavy, close and blue: the mockups lose the far tower to it
+    # and the city across the water is a glow rather than a skyline. This is
+    # also what keeps the deck's far end from being a hard horizon line.
+    env.fog_enabled = true
+    env.fog_mode = Environment.FOG_MODE_DEPTH
+    env.fog_light_color = level.pal("fog", Color(0.075, 0.095, 0.130))
+    env.fog_light_energy = 0.55
+    env.fog_density = 0.024
+    env.fog_depth_begin = 6.0
+    env.fog_depth_end = 150.0
+    env.fog_sky_affect = 0.85
+
+    # Glow carries the look. Every light source in the mockups has a halo in
+    # the rain and the fires bloom hard; at the day scene's 0.18 intensity and
+    # 1.6 threshold none of that happens, because almost nothing in a night
+    # frame is over the threshold in the first place.
+    env.glow_enabled = true
+    env.glow_intensity = 0.9
+    env.glow_bloom = 0.22
+    env.glow_hdr_threshold = 0.65
+    env.glow_hdr_scale = 2.2
+    env.glow_strength = 1.15
+
+    # Exposure. The band wants a mean near 0.15 against the day scene's 0.40,
+    # and most of that has to come from there being no sky light rather than
+    # from pulling the tonemapper down, or the lamps and fires go with it.
+    env.tonemap_exposure = 0.78 if GameData.has_rendering_device() else 0.66
+    env.tonemap_white = 4.0
+
+    # The occlusion passes are worth more here than in daylight, since there
+    # is no fill to recover a corner the pass over-darkens.
+    if GameData.has_rendering_device():
+        env.ssao_intensity = 2.4
+        env.ssil_intensity = 0.25
 
 func _spawn_player() -> void:
     player = PlayerC.new()
@@ -472,7 +556,18 @@ func _viewpoint(name: String) -> Array:
     # and west to east through the centre chamber -- give a clear 1600 units
     # of sightline through two archways each. The first attempt at a "wide"
     # shot put the camera in a corner 30 cm from a pillar.
+    # CROSSFALL runs along X: 3675 units of deck by 1092 of width, spawn at
+    # (1837, 546) and extraction 735 units west of it. Every mockup is the
+    # same shot -- standing on the deck looking along its length toward the
+    # far tower, with the burning wrecks between -- so these look down -X,
+    # which is toward the extraction end.
     match name:
+        "span":
+            return [Vector2(2600.0, 546.0), 90.0, -2.0]
+        "deck":
+            return [Vector2(2150.0, 430.0), 90.0, -4.0]
+        "tower":
+            return [Vector2(1500.0, 546.0), 90.0, 4.0]
         "corridor":
             # INTAKE / 08 north through CONTROL / 05 into REACTOR / 02.
             return [Vector2(1050.0, 1900.0), 0.0, -1.5]

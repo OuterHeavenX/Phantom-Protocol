@@ -13,6 +13,7 @@ set -e
 OUT=${1:-/tmp/shot.png}
 VIEW=${2:-corridor}
 RES=${3:-1600x900}
+LEVEL=${4:-blacksite}
 W=${RES%x*}
 H=${RES#*x}
 ROOT=$(cd "$(dirname "$0")/../../godot" && pwd)
@@ -26,7 +27,7 @@ xvfb-run -a --server-args="-screen 0 ${W}x${H}x24" \
   env VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.json \
       VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json \
   godot --path "$ROOT" --rendering-driver vulkan --resolution "${W}x${H}" \
-  -- capture "$OUT" view "$VIEW" 2>&1 \
+  -- capture "$OUT" view "$VIEW" level "$LEVEL" 2>&1 \
   | grep -viE "alsa|pulse|audio|ERROR: Condition .status" || true
 test -s "$OUT" || { echo "CAPTURE FAILED: no image at $OUT" >&2; exit 1; }
 echo "ok $OUT ($(stat -c%s "$OUT") bytes)"

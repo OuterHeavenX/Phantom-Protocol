@@ -67,7 +67,7 @@ def fbm(octaves=6, base=3, gain=0.55):
         tot += amp; amp *= gain; f *= 2
     return out / tot
 
-def main(out_dir):
+def main(out_dir, night=False):
     # endpoint=False: with it, the last column repeats the first column's
     # longitude, so the texture carries a duplicated column at the seam and
     # the texel grid is not uniform. The wrap above is what makes the join
@@ -79,12 +79,25 @@ def main(out_dir):
     # two-dimensional, has nowhere to accumulate into.
     up = np.sin(lat) * np.ones_like(lon)   # 1 at zenith, 0 at horizon, -1 below
 
-    zenith = np.array([0.155, 0.275, 0.520])
-    # The band visible between rooflines is the first few degrees above the
-    # horizon, and at a near-neutral 0.62 it came through as white paper once
-    # the tonemapper had it. Deeper and bluer, so the gap reads as sky.
-    horizon = np.array([0.400, 0.480, 0.605])
-    ground = np.array([0.180, 0.170, 0.158])
+    if night:
+        # CROSSFALL's sky. A storm at night over open water: no sun, no blue,
+        # a lid of cloud lit faintly from below by the city, and a horizon
+        # that is brighter than the zenith rather than darker -- which is the
+        # opposite of daylight and is most of what makes a night sky read as
+        # overcast rather than as clear. Values are low enough that the sky
+        # contributes almost nothing as a light source, which is deliberate:
+        # on this map the lamps and the fires are the light.
+        zenith = np.array([0.0065, 0.0092, 0.0155])
+        horizon = np.array([0.0260, 0.0335, 0.0495])
+        ground = np.array([0.0040, 0.0050, 0.0068])
+    else:
+        zenith = np.array([0.155, 0.275, 0.520])
+        # The band visible between rooflines is the first few degrees above
+        # the horizon, and at a near-neutral 0.62 it came through as white
+        # paper once the tonemapper had it. Deeper and bluer, so the gap
+        # reads as sky.
+        horizon = np.array([0.400, 0.480, 0.605])
+        ground = np.array([0.180, 0.170, 0.158])
 
     t = np.clip(up, 0, 1) ** 0.55
     sky = horizon + (zenith - horizon) * t[..., None]
@@ -99,21 +112,30 @@ def main(out_dir):
     vx = np.cos(lat) * np.sin(lon); vy = np.sin(lat) * np.ones_like(lon)
     vz = np.cos(lat) * np.cos(lon)
     cosang = vx * sun_v[0] + vy * sun_v[1] + vz * sun_v[2]
-    sky += np.array([0.95, 0.80, 0.55]) * (np.clip(cosang, 0, 1) ** 70)[..., None]
+    if not night:
+        sky += np.array([0.95, 0.80, 0.55]) * (np.clip(cosang, 0, 1) ** 70)[..., None]
     # The broad glow was at 0.30, which with the haze band under it took the
     # strip of sky visible between the rooflines to pure white. It is the
     # backdrop, not a light source: the directional sun carries the exposure.
-    sky += np.array([0.14, 0.112, 0.070]) * (np.clip(cosang, 0, 1) ** 8)[..., None]
+    if not night:
+        sky += np.array([0.14, 0.112, 0.070]) * (np.clip(cosang, 0, 1) ** 8)[..., None]
 
     # Cumulus. The coverage threshold rises towards the horizon so the layer
     # reads as a ceiling seen in perspective rather than as a wallpaper.
     field = fbm(6, 3)
-    cover = 0.52 + 0.30 * np.clip(1.0 - up, 0, 2) * 0.5
+    cover = (0.30 if night else 0.52) + 0.30 * np.clip(1.0 - up, 0, 2) * 0.5
     cloud = np.clip((field - cover) * 4.2, 0, 1)
     cloud *= np.clip(up * 3.4, 0, 1)      # nothing below the horizon
     # Lit tops, shaded undersides: the cloud's own field doubles as a height.
     lit = np.clip((field - cover - 0.06) * 6.0, 0, 1)
-    cloud_col = np.array([0.52, 0.54, 0.585]) + np.array([0.44, 0.42, 0.395]) * lit[..., None]
+    if night:
+        # Cloud lit from BELOW by sodium light off the city, so the base is
+        # warm and the tops stay dead. Inverting which side is lit is what
+        # separates a night storm from a grey daytime overcast.
+        cloud_col = (np.array([0.0300, 0.0225, 0.0150])
+                     + np.array([-0.0175, -0.0130, -0.0060]) * lit[..., None])
+    else:
+        cloud_col = np.array([0.52, 0.54, 0.585]) + np.array([0.44, 0.42, 0.395]) * lit[..., None]
     sky = sky * (1 - cloud[..., None]) + cloud_col * cloud[..., None]
 
     below = np.clip(-up * 6.0, 0, 1)
@@ -144,11 +166,13 @@ def main(out_dir):
     #   p95      0.802   0.789   0.779    0.619 .. 0.760
     #   ratio    18.6    20.5    22.5     7.95 .. 27.0
     #   crushed  0.015   0.056   0.156    0.183 .. 3.904
-    img = (np.clip(sky * 0.58, 0, 1) ** (1 / 2.2) * 255).astype(np.uint8)
+    img = (np.clip(sky * (1.0 if night else 0.58), 0, 1) ** (1 / 2.2) * 255).astype(np.uint8)
     os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, "sky_panorama.png")
+    path = os.path.join(out_dir, "sky_panorama_night.png" if night else "sky_panorama.png")
     Image.fromarray(img).save(path)
     print("wrote", path, "%.0f KB" % (os.path.getsize(path) / 1024))
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "godot/art/textures")
+    out = sys.argv[1] if len(sys.argv) > 1 else "godot/art/textures"
+    main(out)
+    main(out, night=True)
