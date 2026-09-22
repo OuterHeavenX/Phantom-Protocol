@@ -1750,7 +1750,7 @@ func _bridge_deck(w: float, h: float) -> void:
     # the answer is not simply to dim them: it is to keep the count of bright
     # points up while cutting how much of the frame each one covers. Half the
     # energy, two thirds the size, half again as many.
-    var puddle_n := int(w * 3.6)
+    var puddle_n := int(w * 5.0)
     for i in range(puddle_n):
         var hx := _hash64(i * 6367 + 11)
         var hz := _hash64(i * 9283 + 29)
@@ -1764,7 +1764,7 @@ func _bridge_deck(w: float, h: float) -> void:
         var length: float = 1.1 + float(hs % 37) * 0.145
         var width: float = 0.20 + float(hx % 23) * 0.024
         _wet_streak(Vector3(px, 0.0, pz), col, length, width,
-            0.018 + float(hz % 17) * 0.0021)
+            0.021 + float(hz % 17) * 0.0026)
 
     var lanes := 4
     var n := int(w / 5.5)
@@ -1827,11 +1827,22 @@ static func streak_texture() -> ImageTexture:
 
 func _wet_streak(at: Vector3, colour: Color, length: float, width: float, energy: float) -> void:
     var m := StandardMaterial3D.new()
-    m.albedo_color = Color(colour.r, colour.g, colour.b, 1.0)
+    # The albedo is scaled by the energy too, not just the emission.
+    #
+    # On an ADDITIVE material the albedo term is added at full strength
+    # wherever the falloff texture's alpha approaches 1, so a streak core was
+    # adding the whole colour -- close to 1.0 -- no matter what `energy` said.
+    # The parameter was only ever controlling the emission half, and the
+    # albedo half blew out unchecked: that is why raising the puddle count
+    # pushed the clipped share up from 0.752 to 0.907 while their nominal
+    # energy was 0.02, and why cutting every emissive on the bridge below
+    # unity in the same round did not show.
+    m.albedo_color = Color(colour.r * energy, colour.g * energy,
+        colour.b * energy, 1.0)
     m.albedo_texture = streak_texture()
     m.emission_enabled = true
     m.emission = colour
-    m.emission_energy_multiplier = energy
+    m.emission_energy_multiplier = energy * 0.5
     m.emission_texture = streak_texture()
     m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -1956,7 +1967,7 @@ func _bridge_cable(x0: float, x1: float, top: float, z: float, w: float, main: b
     lamp.albedo_color = Color(1.0, 0.86, 0.62)
     lamp.emission_enabled = true
     lamp.emission = Color(1.0, 0.84, 0.58)
-    lamp.emission_energy_multiplier = 2.0
+    lamp.emission_energy_multiplier = 0.98
     lamp.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     var drops := int(absf(x1 - x0) / 4.4)
     for i in range(1, drops):
@@ -1987,7 +1998,7 @@ func _bridge_lamps() -> void:
     head.albedo_color = Color(0.9, 0.78, 0.55)
     head.emission_enabled = true
     head.emission = Color(1.0, 0.80, 0.52)
-    head.emission_energy_multiplier = 1.7
+    head.emission_energy_multiplier = 0.95
     head.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     # The simulation authored five pairs over 115 m of deck, which is one lamp
     # every 23 m per side -- correct for a real bridge but far short of what
@@ -2066,7 +2077,7 @@ func _bridge_wrecks() -> void:
     tail.albedo_color = Color(0.35, 0.03, 0.03)
     tail.emission_enabled = true
     tail.emission = Color(1.0, 0.07, 0.05)
-    tail.emission_energy_multiplier = 4.0
+    tail.emission_energy_multiplier = 1.05
     tail.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 
     var idx := 0
@@ -2183,7 +2194,7 @@ func _bridge_fires() -> void:
     flame.albedo_color = Color(1.0, 0.42, 0.10)
     flame.emission_enabled = true
     flame.emission = Color(1.0, 0.44, 0.12)
-    flame.emission_energy_multiplier = 3.0
+    flame.emission_energy_multiplier = 1.30
     flame.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     flame.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
 
@@ -2257,7 +2268,7 @@ func _bridge_skyline(w: float, h: float) -> void:
     win.albedo_color = Color(0.55, 0.50, 0.36)
     win.emission_enabled = true
     win.emission = Color(1.0, 0.86, 0.58)
-    win.emission_energy_multiplier = 1.8
+    win.emission_energy_multiplier = 0.92
     win.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     for side in [-1.0, 1.0]:
         var z: float = h * 0.5 + side * 260.0
@@ -2426,7 +2437,7 @@ func _bridge_helicopter(w: float, h: float) -> void:
         m.albedo_color = spec[1]
         m.emission_enabled = true
         m.emission = spec[1]
-        m.emission_energy_multiplier = 4.0
+        m.emission_energy_multiplier = 1.05
         m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
         var b := MeshInstance3D.new()
         var s := SphereMesh.new()
