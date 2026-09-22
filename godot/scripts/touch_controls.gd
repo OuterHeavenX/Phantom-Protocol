@@ -16,15 +16,20 @@ extends CanvasLayer
 ## because a thumb cannot reliably find a fixed circle it cannot see while
 ## looking at the middle of the screen.
 ##
-## The weapon is not on a button. The simulation acquires and fires on its own,
-## exactly as it does in the 2D game, so adding a trigger here would be adding
-## a mechanic rather than porting one.
+## The weapon is on a button. The 2D game fires on its own and this layer
+## originally followed it, on the reasoning that a trigger would be adding a
+## mechanic rather than porting one. In first person that reasoning is wrong:
+## watching hostiles fall over with no input of your own does not read as
+## shooting them, it reads as them dying by themselves.
 
 ## Fraction of the shorter screen edge. Sized in relative terms because the
 ## same build runs on a phone at 1170 px across and a desktop browser at 2560.
 const STICK_RADIUS := 0.135
 const STICK_DEADZONE := 0.16
 const BUTTON_RADIUS := 0.085
+## The trigger is bigger than the others and sits furthest into the corner,
+## because it is held rather than tapped and it is the one the thumb rests on.
+const FIRE_RADIUS := 0.115
 ## Radians per viewport pixel. A full swipe across the 1920-unit viewport turns
 ## about 290 degrees, which is roughly where a thumb wants it. The first value
 ## tried was 0.0042, which is nearly two full turns across one swipe.
@@ -65,11 +70,19 @@ func _unit() -> float:
 func _button_centres() -> Dictionary:
     var s := get_viewport().get_visible_rect().size
     var r := _unit() * BUTTON_RADIUS
+    var f := _unit() * FIRE_RADIUS
     var margin := r * 1.35
     return {
-        "dash": Vector2(s.x - margin, s.y - margin),
-        "ability": Vector2(s.x - margin * 2.9, s.y - margin * 0.75),
+        "fire": Vector2(s.x - f * 1.25, s.y - f * 1.2),
+        # Left of the trigger and level with it, not below. Sitting on the
+        # bottom edge put it under the home indicator on a rounded display.
+        "dash": Vector2(s.x - f * 3.0, s.y - f * 1.45),
+        "ability": Vector2(s.x - f * 1.45, s.y - f * 3.0),
     }
+
+## The trigger is the widest target; the rest are the standard size.
+func _radius_for(action: String) -> float:
+    return _unit() * (FIRE_RADIUS if action == "fire" else BUTTON_RADIUS)
 
 func _input(event: InputEvent) -> void:
     if event is InputEventScreenTouch:
@@ -88,9 +101,9 @@ var debug := false
 func _press(index: int, pos: Vector2) -> void:
     if debug:
         print("PRESS i=%d pos=%s view=%s" % [index, pos, get_viewport().get_visible_rect().size])
-    var r := _unit() * BUTTON_RADIUS
-    for action in _button_centres():
-        if pos.distance_to(_button_centres()[action]) <= r * 1.25:
+    var centres := _button_centres()
+    for action in centres:
+        if pos.distance_to(centres[action]) <= _radius_for(action) * 1.2:
             _button_touch[index] = action
             _held[action] = true
             Input.action_press(action)
@@ -172,7 +185,7 @@ func _apply_move() -> void:
 ## after the layer is removed.
 func release_all() -> void:
     for action in ["move_left", "move_right", "move_forward", "move_back",
-                   "dash", "ability"]:
+                   "dash", "ability", "fire"]:
         Input.action_release(action)
 
 func _exit_tree() -> void:
@@ -202,15 +215,16 @@ func _draw_surface() -> void:
         var rest := Vector2(s.x * 0.16, s.y * 0.76)
         c.draw_arc(rest, r * 0.8, 0, TAU, 48, Color(1, 1, 1, 0.07), unit * 0.005, true)
 
-    var br := unit * BUTTON_RADIUS
-    var labels := {"dash": "DASH", "ability": "ABIL"}
+    var labels := {"dash": "DASH", "ability": "ABIL", "fire": "FIRE"}
     var font := ThemeDB.fallback_font
     var size := int(unit * 0.032)
-    for action in _button_centres():
-        var at: Vector2 = _button_centres()[action]
+    var centres := _button_centres()
+    for action in centres:
+        var at: Vector2 = centres[action]
+        var br: float = _radius_for(action)
         var on: bool = _held.has(action)
-        c.draw_circle(at, br, Color(1, 1, 1, 0.16 if on else 0.07))
-        c.draw_arc(at, br, 0, TAU, 40, Color(1, 1, 1, 0.34 if on else 0.18),
+        c.draw_circle(at, br, Color(1, 1, 1, 0.20 if on else 0.09))
+        c.draw_arc(at, br, 0, TAU, 40, Color(1, 1, 1, 0.42 if on else 0.22),
             unit * 0.005, true)
         var text: String = labels[action]
         var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x

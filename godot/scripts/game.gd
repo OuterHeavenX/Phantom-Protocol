@@ -450,6 +450,8 @@ func _start_contract() -> void:
     _build_extraction_marker()
 
 func _process(delta: float) -> void:
+    if sim:
+        sim.fire_held = Input.is_action_pressed("fire")
     if sim == null or capture_path != "":
         return
     sim.player_pos = level.to_plan(player.global_position)
@@ -483,6 +485,11 @@ func _on_enemy_spawned(e: Dictionary) -> void:
 
 func _on_enemy_died(e: Dictionary) -> void:
     var node = e.get("node", null)
+    if node != null and is_instance_valid(node) and gunfeel:
+        # Something has to mark the kill. Without it a hostile simply stops
+        # existing between one frame and the next, which reads as the thing
+        # vanishing on its own rather than as having been shot.
+        gunfeel.kill_burst(node.global_position + Vector3(0.0, 1.0, 0.0))
     if node != null and is_instance_valid(node):
         _enemy_nodes.erase(node)
         node.queue_free()

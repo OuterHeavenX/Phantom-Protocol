@@ -53,13 +53,19 @@ PYEOF
 cat > "$OUT/_headers" <<'HDR'
 # No Content-Encoding rule here. Pages did not apply one, which is the whole
 # reason the engine is fetched and decompressed by the page instead.
+# Revalidate rather than immutable. These two carry fixed names, so a year of
+# immutable caching means a returning player keeps whatever they downloaded
+# first, forever -- which is exactly what happened: a phone that loaded the
+# build before it had any weapon audio went on being silent through every
+# deploy afterwards, because it never asked for the package again. Revalidating
+# costs one conditional request and returns 304 when nothing changed.
 /index.wasm.gz
   Content-Type: application/gzip
-  Cache-Control: public, max-age=31536000, immutable
+  Cache-Control: public, max-age=0, must-revalidate
 
 /index.pck
   Content-Type: application/octet-stream
-  Cache-Control: public, max-age=31536000, immutable
+  Cache-Control: public, max-age=0, must-revalidate
 
 # The shell is the one thing that must never be served stale, since it points
 # at everything else.

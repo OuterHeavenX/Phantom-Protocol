@@ -42,6 +42,8 @@ var _flash_timer := 0.0
 var _tracer: MeshInstance3D = null
 var _tracer_timer := 0.0
 var _rng := RandomNumberGenerator.new()
+var _burst: MeshInstance3D = null
+var _burst_timer := 0.0
 
 func setup(muzzle_node: Node3D, voice: String) -> void:
     muzzle = muzzle_node
@@ -50,6 +52,7 @@ func setup(muzzle_node: Node3D, voice: String) -> void:
     _load_samples()
     _build_flash()
     _build_tracer()
+    _build_burst()
 
 func _load_samples() -> void:
     for i in range(1, ROUNDS_PER_VOICE + 1):
@@ -142,7 +145,48 @@ func fire(from: Vector3, to: Vector3) -> void:
             _tracer.visible = true
             _tracer_timer = TRACER_LIFE
 
+## A short-lived puff where a hostile went down.
+const BURST_LIFE := 0.26
+
+func _build_burst() -> void:
+    var mesh := SphereMesh.new()
+    mesh.radius = 0.55
+    mesh.height = 1.1
+    mesh.radial_segments = 10
+    mesh.rings = 6
+    var m := StandardMaterial3D.new()
+    m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+    m.albedo_color = Color(1.0, 0.42, 0.30, 0.55)
+    m.disable_receive_shadows = true
+    _burst = MeshInstance3D.new()
+    _burst.mesh = mesh
+    _burst.material_override = m
+    _burst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    _burst.visible = false
+    add_child(_burst)
+
+func kill_burst(at: Vector3) -> void:
+    if _burst == null:
+        return
+    _burst.global_position = at
+    _burst.scale = Vector3.ONE * 0.5
+    _burst.visible = true
+    _burst_timer = BURST_LIFE
+
 func _process(delta: float) -> void:
+    if _burst_timer > 0.0:
+        _burst_timer -= delta
+        if _burst:
+            # Expands and thins as it goes, so it reads as a burst rather than
+            # a ball that blinks out.
+            var t: float = 1.0 - (_burst_timer / BURST_LIFE)
+            _burst.scale = Vector3.ONE * (0.5 + t * 1.5)
+            var mat: StandardMaterial3D = _burst.material_override
+            mat.albedo_color.a = 0.55 * (1.0 - t)
+            if _burst_timer <= 0.0:
+                _burst.visible = false
     if _flash_timer > 0.0:
         _flash_timer -= delta
         if _flash_timer <= 0.0 and _flash:

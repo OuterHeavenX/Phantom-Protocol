@@ -366,9 +366,22 @@ func _stat(key: String, base_default: float = 0.0) -> float:
         value += float(s) * float(levels)
     return value
 
+## Whether the trigger is down.
+##
+## The 2D game fires on its own and the port followed it, which turned out to
+## be the wrong call here: in first person, watching hostiles fall over with no
+## input of your own does not read as shooting them, it reads as them dying by
+## themselves. So the weapon waits for the trigger.
+##
+## It defaults to held, and nothing but the player's input ever clears it. That
+## keeps the headless contract replay honest -- simtest drives no input, so the
+## simulation behaves exactly as it always did and the run stays comparable
+## with every earlier one.
+var fire_held := true
+
 func _step_weapon(dt: float) -> void:
     weapon_cooldown = maxf(0.0, weapon_cooldown - dt)
-    if weapon_cooldown > 0.0 or enemies.is_empty():
+    if weapon_cooldown > 0.0 or enemies.is_empty() or not fire_held:
         return
     var target = _acquire_target()
     if target == null:

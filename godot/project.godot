@@ -32,6 +32,7 @@ move_left={"deadzone":0.2,"events":[{"resource_local_to_scene":false,"type":"Inp
 move_right={"deadzone":0.2,"events":[{"resource_local_to_scene":false,"type":"InputEventKey","physical_keycode":68}]}
 dash={"deadzone":0.2,"events":[{"resource_local_to_scene":false,"type":"InputEventKey","physical_keycode":32}]}
 ability={"deadzone":0.2,"events":[{"resource_local_to_scene":false,"type":"InputEventKey","physical_keycode":81}]}
+fire={"deadzone":0.2,"events":[{"resource_local_to_scene":false,"type":"InputEventMouseButton","button_index":1},{"resource_local_to_scene":false,"type":"InputEventKey","physical_keycode":4194325}]}
 
 [input_devices]
 
