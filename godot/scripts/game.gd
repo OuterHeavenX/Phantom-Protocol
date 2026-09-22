@@ -315,7 +315,14 @@ func _build_environment() -> void:
     # shadows read as stone and this build's read as holes cut in the frame.
     # This light is the only lever that lifts them without also lifting the
     # sky, the sunlit faces, or the highlights.
-    bounce.light_energy = 0.9
+    #
+    # It had gone too far the other way: at 0.9 the frame measured a mean
+    # luminance of 0.448 against a reference band topping out at 0.438, and a
+    # crushed-pixel share of 0.015% against 0.18 to 3.9 in the references --
+    # a sector with no deep shadow anywhere in it. 0.60 puts the mean at 0.416
+    # and, as a side effect, the sun-to-shade ratio at 18.2 against the
+    # references' 8 to 27, where before it sat under all three.
+    bounce.light_energy = 0.60
     bounce.shadow_enabled = false
     bounce.light_cull_mask = WORLD_LAYERS
     add_child(bounce)
