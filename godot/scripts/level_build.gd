@@ -1497,7 +1497,13 @@ func _tint(target: float, texture_mean: float) -> float:
 
 func _hue_of(c: Color) -> Color:
     var m: float = maxf(0.001, (c.r + c.g + c.b) / 3.0)
-    return Color(c.r / m, c.g / m, c.b / m)
+    # Half-way to neutral. At full chroma the palette's cast is fine on a
+    # near-black surface and far too strong once the albedo is realistic --
+    # saturation measured 0.417 against a 0.404 ceiling as the materials came
+    # up. Real wet concrete under sodium and cloud is only slightly blue.
+    const CHROMA := 0.5
+    return Color(lerpf(1.0, c.r / m, CHROMA), lerpf(1.0, c.g / m, CHROMA),
+        lerpf(1.0, c.b / m, CHROMA))
 
 func _bridge_mat(key: String) -> Material:
     if _bmat.has(key):
@@ -1615,7 +1621,20 @@ func _build_bridge() -> void:
 ## AMBIENT_DISABLED because the environment's ambient is the deck's main light
 ## on this map and a probe set to AMBIENT_ENVIRONMENT replaces it inside the
 ## box with its own captured version.
+## Off by default.
+##
+## Rebuilding it last and disabling its ambient recovered only 0.7 points of
+## crushed share, against the 14 the controlled experiment implied -- and the
+## experiment removed it entirely. The wet deck's look is carried by the
+## reflection streaks and by roughness, not by this, and the browser build
+## runs Compatibility where probe support is weaker anyway. Kept as code
+## because it is the right tool if the deck ever needs true reflections, and
+## gated so the reason is on the record rather than in a deleted diff.
+const USE_PROBE := false
+
 func _bridge_probe(w: float, h: float) -> void:
+    if not USE_PROBE:
+        return
     var probe := ReflectionProbe.new()
     probe.size = Vector3(w * 0.5, 40.0, h)
     probe.position = Vector3(w * 0.5, 9.0, h * 0.5)
