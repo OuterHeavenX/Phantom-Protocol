@@ -57,11 +57,11 @@ fi
 # progression, which decides which sector loads and what follows what, and
 # the save round-trip that makes it survive a reload.
 TESTS=$(timeout 120 godot --headless --path "$ROOT" --script res://tests/progression_test.gd 2>&1 || true)
-for marker in "PROGRESSION OK" "PERSISTENCE OK"; do
+for marker in "PROGRESSION OK" "PERSISTENCE OK" "BEARING OK"; do
   if ! echo "$TESTS" | grep -q "$marker"; then
     echo "$TESTS" | grep -E "Assertion|SCRIPT ERROR|  at: " | head -10
     echo "FAIL: $marker assertions"
     exit 1
   fi
 done
-echo "ok: all scripts compile, progression and persistence asserted"
+echo "ok: all scripts compile, progression, persistence and HUD bearings asserted"

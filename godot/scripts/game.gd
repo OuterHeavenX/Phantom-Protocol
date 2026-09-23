@@ -1269,6 +1269,8 @@ func _start_contract() -> void:
 
     hud = HudC.new()
     hud.sim = sim
+    hud.level = level
+    sim.player_hurt.connect(hud.on_player_hurt)
     var mdef: Dictionary = GameData.map_named(level.map_id)
     hud.theatre = String(mdef.get("name", level.map_id.to_upper()))
     hud.operation = "OP %d // %s" % [int(contract.get("index", 1)),
@@ -1316,6 +1318,8 @@ func _physics_process(delta: float) -> void:
         var flat := Vector2(fwd.x, fwd.z)
         if flat.length() > 0.001:
             sim.aim_dir = flat.normalized()
+    if hud != null:
+        hud.facing = sim.aim_dir
     sim.advance(delta)
     _sync_enemies()
     if sim.finished and _debrief == null:

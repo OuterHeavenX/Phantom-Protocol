@@ -46,7 +46,36 @@ func _init() -> void:
     _test_persistence()
     SaveGame.clear()
     print("PERSISTENCE OK: all assertions passed")
+    _test_threat_bearing()
+    print("BEARING OK: all assertions passed")
     quit()
+
+## Which way the threat arcs point.
+##
+## Pure trigonometry over two coordinate conventions -- plan space is (world
+## x, world z), and draw_arc measures from screen right -- so a sign error
+## puts every arrow on the wrong side of the screen and still looks plausible
+## in a screenshot.
+func _test_threat_bearing() -> void:
+    const TOP := -PI * 0.5
+    const RIGHT := 0.0
+    const BOTTOM := PI * 0.5
+    var near := func(a: float, b: float) -> bool:
+        return absf(wrapf(a - b, -PI, PI)) < 0.01
+    for look in [Vector2(1, 0), Vector2(0, 1), Vector2(-1, 0),
+            Vector2(0.6, -0.8).normalized()]:
+        # Straight ahead reads at the top of the ring.
+        assert(near.call(Bearing.threat(look, look), TOP),
+            "a threat dead ahead belongs at the top")
+        # Behind reads at the bottom.
+        assert(near.call(Bearing.threat(look, -look), BOTTOM),
+            "a threat behind belongs at the bottom")
+        # The operative's right in plan space, from forward x up in 3D.
+        var right := Vector2(-look.y, look.x)
+        assert(near.call(Bearing.threat(look, right), RIGHT),
+            "a threat to the right belongs at the right")
+        assert(near.call(Bearing.threat(look, -right), PI),
+            "a threat to the left belongs at the left")
 
 ## The save round-trip, which is what makes progress survive a reload.
 ##

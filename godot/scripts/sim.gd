@@ -102,7 +102,10 @@ signal enemy_died(e)
 ## the presentation can draw a tracer that agrees with the hit rather than
 ## guessing an endpoint from the direction and the weapon's range.
 signal weapon_fired(target_dir, target_pos)
-signal player_hurt(amount)
+## Carries where the hit came from, in plan space, so the HUD can point at
+## it. In the 2D game the player can see the whole arena and does not need to
+## be told; in first person they can see about seventy degrees of it.
+signal player_hurt(amount, from)
 signal level_gained(level)
 signal cache_recovered(index, total)
 
@@ -388,7 +391,7 @@ func _step_enemy(e: Dictionary, dt: float) -> void:
         e["contact_timer"] = maxf(0.0, float(e["contact_timer"]) - dt)
         if dist < float(e["radius"]) + 16.0 and float(e["contact_timer"]) <= 0.0:
             e["contact_timer"] = 0.75
-            _hurt_player(float(e["damage"]))
+            _hurt_player(float(e["damage"]), Vector2(e["pos"]))
 
 ## Substepped movement with rectangle depenetration, the same construction the
 ## 2D world uses: no step is longer than the body is wide, so nothing can pass
@@ -571,7 +574,11 @@ func _step_projectiles(dt: float) -> void:
         if not gone and level.overlaps_solid(p["pos"].x, p["pos"].y, 2.0):
             gone = true
         if not gone and (Vector2(p["pos"]) - player_pos).length() < 15.0:
-            _hurt_player(float(p["damage"]))
+            # Where the round came from, not where it is now: at the moment
+            # it lands it is on top of the operative, and an arrow pointing at
+            # your own feet says nothing.
+            _hurt_player(float(p["damage"]),
+                Vector2(p["pos"]) - Vector2(p["vel"]).normalized() * 200.0)
             gone = true
         if gone:
             enemy_projectiles.remove_at(i)
@@ -586,7 +593,7 @@ func _damage_enemy(e: Dictionary, amount: float) -> void:
         _gain_xp(float(e["xp"]))
         enemy_died.emit(e)
 
-func _hurt_player(amount: float) -> void:
+func _hurt_player(amount: float, from: Vector2 = Vector2.INF) -> void:
     if invuln > 0.0:
         return
     invuln = 0.35
@@ -594,7 +601,7 @@ func _hurt_player(amount: float) -> void:
     # swarm without ever making a hit free.
     var taken: float = maxf(amount * 0.25, amount - player_armor)
     player_hp = maxf(0.0, player_hp - taken)
-    player_hurt.emit(taken)
+    player_hurt.emit(taken, from)
     if player_hp <= 0.0:
         finished = true
         outcome = "down"

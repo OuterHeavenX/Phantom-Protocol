@@ -8,6 +8,22 @@ extends Control
 ## than built from a scene so it stays in one readable file.
 
 var sim: Sim
+## The sector, for the minimap. Set alongside `sim`.
+var level: Level
+## Which way the operative is facing, in plan space, set by the game each
+## frame: the HUD has no camera of its own.
+var facing := Vector2.RIGHT
+
+## Recent hits, as {dir: Vector2, life: float} in plan space.
+##
+## The 2D game draws threat indicators and a minimap as standard and has them
+## both on by default. A first-person build asks the player to fight the same
+## numbers seeing about seventy degrees of the sector instead of all of it,
+## and on a bridge -- a corridor with hostiles at both ends and an objective
+## that pins you in place for two seconds at a time -- that is most of what
+## makes the second contract harder than its difficulty number says.
+var _threats: Array = []
+const THREAT_LIFE := 2.2
 ## Set by the game once the level and the contract are known. Defaults keep a
 ## HUD drawn before either exists from showing an empty header.
 var theatre := "UNKNOWN THEATRE"
@@ -21,8 +37,21 @@ func _ready() -> void:
     set_anchors_preset(Control.PRESET_FULL_RECT)
     mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+    for i in range(_threats.size() - 1, -1, -1):
+        _threats[i]["life"] -= delta
+        if _threats[i]["life"] <= 0.0:
+            _threats.remove_at(i)
     queue_redraw()
+
+## Note a hit for the threat indicator. Connected to the simulation.
+func on_player_hurt(_amount: float, from: Vector2) -> void:
+    if from == Vector2.INF or sim == null:
+        return
+    var d: Vector2 = from - sim.player_pos
+    if d.length() < 0.001:
+        return
+    _threats.append({"dir": d.normalized(), "life": THREAT_LIFE})
 
 func _draw() -> void:
     if sim == null:
@@ -103,3 +132,80 @@ func _draw() -> void:
     draw_string(font, Vector2(pad, pad + 38), operation, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(INK, 0.55))
     draw_string(font, Vector2(pad, pad + 62), "HOSTILES %d" % sim.enemies.size(),
         HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(WARN, 0.85))
+
+    _draw_minimap(size, pad, font)
+    _draw_threats(c)
+
+## The sector from above, top-left, as the mockups place it.
+##
+## Aspect-correct rather than square: CROSSFALL is 3675 by 1092, and squashing
+## that into a square makes a bridge look like a room.
+func _draw_minimap(size: Vector2, pad: float, font: Font) -> void:
+    if level == null or level.width <= 0.0 or level.height <= 0.0:
+        return
+    var wide: float = minf(230.0, size.x * 0.17)
+    var scale: float = wide / level.width
+    var tall: float = level.height * scale
+    # A very flat sector would otherwise be a few pixels high to read.
+    if tall < 62.0:
+        tall = 62.0
+        scale = minf(wide / level.width, tall / level.height)
+        wide = level.width * scale
+    var org := Vector2(pad, pad + 86.0)
+    var box := Rect2(org, Vector2(wide, tall))
+    draw_rect(box, Color(0.012, 0.039, 0.055, 0.82))
+    draw_rect(box, Color(ACCENT, 0.30), false, 1.0)
+
+    var to_map := func(p: Vector2) -> Vector2:
+        return org + Vector2(p.x * scale, p.y * scale)
+
+    # Geometry, so the deck and its parapets read as a shape.
+    for wall in level.walls:
+        if String(wall.get("type", "")) == "perimeter":
+            continue
+        var w: float = float(wall["w"]) * scale
+        var h: float = float(wall["h"]) * scale
+        draw_rect(Rect2(to_map.call(Vector2(float(wall["x"]) - float(wall["w"]) * 0.5,
+            float(wall["y"]) - float(wall["h"]) * 0.5)),
+            Vector2(maxf(1.0, w), maxf(1.0, h))), Color(0.47, 0.67, 0.69, 0.40))
+    for cv in level.cover:
+        draw_rect(Rect2(to_map.call(Vector2(float(cv["x"]) - float(cv["w"]) * 0.5,
+            float(cv["y"]) - float(cv["h"]) * 0.5)),
+            Vector2(maxf(1.0, float(cv["w"]) * scale), maxf(1.0, float(cv["h"]) * scale))),
+            Color(0.47, 0.67, 0.69, 0.26))
+
+    # Objective first, so a hostile standing on it still shows.
+    for cache in sim.caches:
+        var lit: bool = cache["recovered"]
+        draw_circle(to_map.call(cache["pos"]), 3.0,
+            Color(0.45, 1.0, 0.62, 0.9) if lit else Color(0.56, 0.85, 1.0, 0.95))
+    if sim.extraction_active:
+        draw_circle(to_map.call(level.extraction_point), 4.0, Color(ACCENT, 0.95))
+
+    for e in sim.enemies:
+        draw_circle(to_map.call(Vector2(e["pos"])), 2.0, Color(WARN, 0.9))
+
+    # The operative, with the slice of sector actually on screen.
+    var me: Vector2 = to_map.call(sim.player_pos)
+    var half := deg_to_rad(35.0)
+    var look := facing.normalized() if facing.length() > 0.001 else Vector2.RIGHT
+    var cone := PackedVector2Array([me,
+        me + look.rotated(-half) * 15.0, me + look.rotated(half) * 15.0])
+    draw_colored_polygon(cone, Color(ACCENT, 0.22))
+    draw_circle(me, 2.6, Color(0.92, 0.96, 0.98, 1.0))
+
+## Where the last few hits came from, as arcs around the crosshair.
+func _draw_threats(centre: Vector2) -> void:
+    if _threats.is_empty():
+        return
+    var look := facing.normalized() if facing.length() > 0.001 else Vector2.RIGHT
+    for t in _threats:
+        var d: Vector2 = t["dir"]
+        # Signed angle from where the operative is looking to where it came
+        # from, so an arc at the top of the screen means straight ahead.
+        var ang: float = Bearing.threat(look, d)
+        var fade: float = clampf(float(t["life"]) / THREAT_LIFE, 0.0, 1.0)
+        var radius := 86.0
+        draw_arc(centre, radius, ang - 0.34, ang + 0.34,
+            16, Color(WARN, fade * 0.85), 4.0)
+
